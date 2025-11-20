@@ -68,9 +68,7 @@ Generates a report compliant with **ESRS 2 (General Disclosures)** and **Topical
 *   **Feature:** Includes a **GRI Content Index** table, mapping ESRS topics to GRI standards for interoperability.
 *   **Output:** A clean, formatted document ready for export to PDF.
 <img width="1440" height="697" alt="image" src="https://github.com/user-attachments/assets/1a9b799e-b641-4c55-9bc4-c236b76d7381" />
-<img width="1440" height="699" alt="image" src="https://github.com/user-attachments/assets/f3071a89-243e-4834-9e8f-b327b2f9ccd4" />
-
-<img width="1440" height="696" alt="image" src="https://github.com/user-attachments/assets/57c7c455-486e-4f60-8a03-dbe8e807dd07" />
+<img width="1440" height="699" alt="image" src="https://github.com/user-attachments/assets/11a8b0c1-8c0f-461a-a3ea-4426d4717457" />
 <img width="1440" height="701" alt="image" src="https://github.com/user-attachments/assets/5c1c3168-a773-48d8-b301-af11da7216e4" />
 
 ---
