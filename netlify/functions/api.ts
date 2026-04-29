@@ -11,7 +11,13 @@ const handler = async (event: any) => {
 
     if (!apiKey) {
         console.error("GEMINI_API_KEY is missing in environment variables.");
-        return { statusCode: 500, body: "Server Configuration Error" };
+        return {
+            statusCode: 503,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                error: "AI features are currently unavailable. The API key has not been configured on the server. Please contact the administrator."
+            }),
+        };
     }
 
     try {

@@ -13,17 +13,23 @@ async function callApi(action: string, params: any) {
     });
 
     if (!response.ok) {
-      throw new Error(`API request failed with status ${response.status}`);
+      let message = `Request failed (${response.status})`;
+      try {
+        const body = await response.json();
+        if (body?.error) message = body.error;
+      } catch {}
+      throw new Error(message);
     }
 
     return await response.json();
   } catch (error) {
     console.error(`Gemini API Error (${action}):`, error);
-    // Return null or appropriate default based on usage, but for now let's return null or empty to match previous behavior partially
-    // The previous implementation returned specific error objects or strings.
-    // We'll handle defaults in the wrapper functions if needed, or just return null and let caller handle.
     throw error;
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "An unexpected error occurred. Please try again.";
 }
 
 export const generateAssessmentSuggestions = async (
@@ -33,10 +39,8 @@ export const generateAssessmentSuggestions = async (
   try {
     return await callApi("generateAssessmentSuggestions", { companyDescription, topic });
   } catch (error) {
-    return {
-      impactSuggestion: "AI generation failed. Please input manually.",
-      financialSuggestion: "AI generation failed. Please input manually.",
-    };
+    const msg = errorMessage(error);
+    return { impactSuggestion: msg, financialSuggestion: msg };
   }
 };
 
@@ -48,7 +52,7 @@ export const generateCanvasSuggestion = async (
   try {
     return await callApi("generateCanvasSuggestion", { companyName, companyDescription, fieldLabel });
   } catch (error) {
-    return "Could not generate suggestion.";
+    return errorMessage(error);
   }
 };
 
@@ -59,7 +63,8 @@ export const generateSwotInternal = async (
   try {
     return await callApi("generateSwotInternal", { companyName, bmcData });
   } catch (error) {
-    return { strengths: "", weaknesses: "" };
+    const msg = errorMessage(error);
+    return { strengths: msg, weaknesses: msg };
   }
 };
 
@@ -71,7 +76,7 @@ export const generateSwotExternal = async (
   try {
     return await callApi("generateSwotExternal", { companyName, companyDescription, type });
   } catch (error) {
-    return `Could not generate ${type.toLowerCase()} based on external data.`;
+    return errorMessage(error);
   }
 };
 
