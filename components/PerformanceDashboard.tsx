@@ -2,9 +2,9 @@
 import React, { useState } from 'react';
 import { KPI, BSCPerspective, RACI } from '../types';
 import { generateKPISuggestions } from '../services/geminiService';
-import { 
-  TrendingUp, Users, Settings, BookOpen, Plus, MoreHorizontal, 
-  Target, Link, ArrowUpRight, Calendar, User, Loader2, Save, Trash2, ArrowDown
+import {
+  TrendingUp, Users, Settings, BookOpen, Plus,
+  Link, ArrowUpRight, User, Loader2, Save, Trash2
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 

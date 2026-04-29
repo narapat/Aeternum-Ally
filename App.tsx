@@ -12,6 +12,26 @@ import SustainabilityStatement from './components/SustainabilityStatement';
 import MaterialTopicsList from './components/MaterialTopicsList';
 import { Layout, Plus, FileText, BarChart3, User as UserIcon, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight } from 'lucide-react';
 
+// Persistent state helper — reads from localStorage on init, writes on every change
+function usePersistentState<T>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
+  const [state, setState] = useState<T>(() => {
+    try {
+      const saved = localStorage.getItem(key);
+      return saved ? (JSON.parse(saved) as T) : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, JSON.stringify(state));
+    } catch {}
+  }, [key, state]);
+
+  return [state, setState];
+}
+
 // Mock initial data
 const INITIAL_USER: User = {
   name: "Sarah Jenkins",
@@ -102,13 +122,13 @@ const INITIAL_KPIS: KPI[] = [
 const App: React.FC = () => {
   // 'overview' is the new landing page. 'profile' is the new company profile module.
   const [view, setView] = useState<'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report'>('overview');
-  const [assessments, setAssessments] = useState<AssessmentData[]>([]);
-  const [canvasData, setCanvasData] = useState<SustainabilityBusinessModel>(INITIAL_CANVAS);
-  const [swotData, setSwotData] = useState<SwotAnalysis>(INITIAL_SWOT);
-  const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(INITIAL_PROFILE);
-  const [kpis, setKpis] = useState<KPI[]>(INITIAL_KPIS);
+  const [assessments, setAssessments] = usePersistentState<AssessmentData[]>('aeternum_assessments', []);
+  const [canvasData, setCanvasData] = usePersistentState<SustainabilityBusinessModel>('aeternum_canvas', INITIAL_CANVAS);
+  const [swotData, setSwotData] = usePersistentState<SwotAnalysis>('aeternum_swot', INITIAL_SWOT);
+  const [companyProfile, setCompanyProfile] = usePersistentState<CompanyProfile>('aeternum_profile', INITIAL_PROFILE);
+  const [kpis, setKpis] = usePersistentState<KPI[]>('aeternum_kpis', INITIAL_KPIS);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = usePersistentState<boolean>('aeternum_darkmode', false);
   const [editingAssessment, setEditingAssessment] = useState<AssessmentData | null>(null);
   
   // Sidebar States

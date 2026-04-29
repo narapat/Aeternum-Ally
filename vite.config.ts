@@ -8,6 +8,13 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: '0.0.0.0',
+      proxy: {
+        // Forward Netlify function calls to the Netlify CLI dev server (default port 9999)
+        '/.netlify/functions': {
+          target: 'http://localhost:9999',
+          changeOrigin: true,
+        },
+      },
     },
     plugins: [react()],
     resolve: {

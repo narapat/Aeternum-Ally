@@ -133,8 +133,8 @@ const DataCompletenessDashboard: React.FC<Props> = ({ bmcData, swotData, assessm
                          <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{assessmentPercent}% Target</span>
                     </div>
                 </div>
-                <button 
-                    onClick={() => onNavigate('assess')}
+                <button
+                    onClick={() => onNavigate('dm_dashboard')}
                     className="px-5 py-2.5 bg-slate-900 dark:bg-slate-700 text-white rounded-lg text-sm font-medium hover:bg-slate-800 dark:hover:bg-slate-600 transition-colors flex items-center gap-2 w-full sm:w-auto justify-center"
                 >
                     Go to Dashboard <ArrowRight className="w-4 h-4" />
