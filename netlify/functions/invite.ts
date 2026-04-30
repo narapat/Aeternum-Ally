@@ -33,26 +33,34 @@ async function sendInviteEmail(
   inviteToken: string,
   companyName: string
 ): Promise<{ link: string | null }> {
-  const redirectTo = `${appUrl}?invite_token=${inviteToken}`;
+  // Path 1 uses the full token URL so new users land with the token in the URL.
+  // Paths 2 & 3 use the base URL only — auto-join is email-based so the token
+  // in the redirect URL is not required, and Supabase rejects URLs with query
+  // params that aren't explicitly listed in the allowed-redirects config.
+  const redirectWithToken = `${appUrl}?invite_token=${inviteToken}`;
+  const redirectBase = appUrl;
   const data = { company_name: companyName, app_name: "Aeternum Ally" };
 
   // Path 1: new users — creates account + sends invite email via Supabase template.
   try {
-    const { error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo, data });
+    const { error } = await admin.auth.admin.inviteUserByEmail(email, {
+      redirectTo: redirectWithToken,
+      data,
+    });
     if (!error) return { link: null };
     console.warn("inviteUserByEmail error:", error.message);
   } catch (e: any) {
     console.warn("inviteUserByEmail threw:", e?.message ?? e);
   }
 
-  // Path 2: existing users — sends a magic-link email that redirects to our app.
-  // signInWithOtp actually delivers an email, unlike generateLink which only
-  // returns a URL.
+  // Path 2: existing users — sends a magic-link email to their inbox.
+  // Use the base app URL (no query params) so it passes Supabase redirect validation.
+  // Auto-join matches the user by email after they authenticate, no token needed.
   try {
     const { error } = await admin.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: redirectTo,
+        emailRedirectTo: redirectBase,
         shouldCreateUser: false,
       },
     });
@@ -68,7 +76,7 @@ async function sendInviteEmail(
     const { data: linkData, error } = await admin.auth.admin.generateLink({
       type: "magiclink",
       email,
-      options: { redirectTo },
+      options: { redirectTo: redirectBase },
     });
     if (!error) return { link: linkData?.properties?.action_link ?? null };
   } catch (e: any) {
