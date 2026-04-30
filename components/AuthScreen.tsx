@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Layout, Mail, Lock, Loader2, AlertCircle } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Layout, Mail, Lock, Loader2, AlertCircle, Info } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 
 const AuthScreen: React.FC = () => {
@@ -11,6 +11,23 @@ const AuthScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+
+  // Detect Supabase OTP errors returned as URL hash fragments
+  // e.g. #error=access_denied&error_code=otp_expired
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash) return;
+    const params = new URLSearchParams(hash.slice(1));
+    const errorCode = params.get("error_code");
+    if (errorCode === "otp_expired" || errorCode === "otp_disabled") {
+      setInfo(
+        "Your invitation link has expired. Sign in below, then paste the invite token " +
+        "(the UUID from your invitation email) to join your team."
+      );
+      // Clean up the hash so it doesn't persist on refresh
+      window.history.replaceState({}, "", window.location.pathname + window.location.search);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,8 +99,9 @@ const AuthScreen: React.FC = () => {
             </div>
           )}
           {info && (
-            <div className="mb-4 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg text-sm text-emerald-700 dark:text-emerald-300">
-              {info}
+            <div className="mb-4 flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-800 dark:text-amber-300">
+              <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span>{info}</span>
             </div>
           )}
 

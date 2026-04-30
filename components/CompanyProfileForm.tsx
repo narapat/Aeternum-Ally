@@ -1,10 +1,11 @@
 
-import React, { useState } from 'react';
-import { CompanyProfile, OrgMember, OrgRole } from '../types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { CompanyProfile, OrgMember, OrgRole, OrgInvite } from '../types';
 import { INDUSTRY_SECTORS, ISIC_CODES_GROUPED } from '../constants';
 import {
   Building2, MapPin, Globe, Hash, Users, Wallet, Target, Layers, BookOpen,
-  UserPlus, Loader2, AlertCircle, Trash2, Copy, CheckCircle2, Sparkles
+  UserPlus, Loader2, AlertCircle, Trash2, Copy, CheckCircle2, Sparkles,
+  Clock, XCircle, ShieldOff, RefreshCw
 } from 'lucide-react';
 import SaveIndicator from './SaveIndicator';
 import type { SaveStatus } from '../hooks/useOrgData';
@@ -215,12 +216,30 @@ const ROLE_COLORS: Record<OrgRole, string> = {
 const TeamPanel: React.FC<TeamPanelProps> = ({
   organizationId, currentUserId, currentUserRole, members, canManage, onMembersChanged,
 }) => {
+  const isOwner = currentUserRole === 'Owner';
+
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<Exclude<OrgRole, 'Owner'>>('Manager');
   const [isInviting, setIsInviting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteToken, setInviteToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const [pendingInvites, setPendingInvites] = useState<OrgInvite[]>([]);
+  const [invitesLoading, setInvitesLoading] = useState(false);
+
+  const fetchPendingInvites = useCallback(async () => {
+    setInvitesLoading(true);
+    const { data } = await supabase
+      .from('organization_invites')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('created_at', { ascending: false });
+    setPendingInvites((data ?? []) as OrgInvite[]);
+    setInvitesLoading(false);
+  }, [organizationId]);
+
+  useEffect(() => { fetchPendingInvites(); }, [fetchPendingInvites]);
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -234,22 +253,15 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
 
       const resp = await fetch('/.netlify/functions/invite', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          email: inviteEmail.trim(),
-          role: inviteRole,
-          organization_id: organizationId,
-        }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole, organization_id: organizationId }),
       });
       const body = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(body.error ?? 'Failed to send invitation.');
 
       setInviteToken(body.invite_token ?? null);
       setInviteEmail('');
-      await onMembersChanged();
+      await Promise.all([onMembersChanged(), fetchPendingInvites()]);
     } catch (err: any) {
       setInviteError(err?.message ?? 'Failed to send invitation.');
     } finally {
@@ -257,25 +269,46 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
     }
   };
 
-  const handleRemove = async (memberId: string) => {
-    if (!window.confirm('Remove this team member? They will lose access immediately.')) return;
+  const handleDeactivate = async (memberId: string, email: string | null) => {
+    if (!window.confirm(`Deactivate access for ${email ?? 'this member'}? They will lose access immediately.`)) return;
     const { error } = await supabase.from('organization_members').delete().eq('id', memberId);
-    if (error) {
-      alert(`Failed to remove member: ${error.message}`);
-      return;
-    }
+    if (error) { alert(`Failed to deactivate: ${error.message}`); return; }
     await onMembersChanged();
   };
 
-  const handleRoleChange = async (memberId: string, newRole: OrgRole) => {
-    const { error } = await supabase
-      .from('organization_members')
-      .update({ role: newRole })
-      .eq('id', memberId);
-    if (error) {
-      alert(`Failed to update role: ${error.message}`);
-      return;
+  const handleCancelInvite = async (inviteId: string, email: string) => {
+    if (!window.confirm(`Cancel invitation for ${email}?`)) return;
+    const { error } = await supabase.from('organization_invites').delete().eq('id', inviteId);
+    if (error) { alert(`Failed to cancel invitation: ${error.message}`); return; }
+    await fetchPendingInvites();
+  };
+
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const handleResendInvite = async (inviteId: string, email: string) => {
+    setResendingId(inviteId);
+    try {
+      const sessionResp = await supabase.auth.getSession();
+      const accessToken = sessionResp.data.session?.access_token;
+      if (!accessToken) throw new Error('Not signed in.');
+
+      const resp = await fetch('/.netlify/functions/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ action: 'resend', invite_id: inviteId, email, organization_id: organizationId }),
+      });
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(body.error ?? 'Failed to resend invitation.');
+      alert(`Invitation resent to ${email}. The new link is valid for 24 hours.`);
+    } catch (err: any) {
+      alert(err?.message ?? 'Failed to resend invitation.');
+    } finally {
+      setResendingId(null);
     }
+  };
+
+  const handleRoleChange = async (memberId: string, newRole: OrgRole) => {
+    const { error } = await supabase.from('organization_members').update({ role: newRole }).eq('id', memberId);
+    if (error) { alert(`Failed to update role: ${error.message}`); return; }
     await onMembersChanged();
   };
 
@@ -286,9 +319,12 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
     });
   };
 
+  const isExpired = (expiresAt: string) => new Date(expiresAt) < new Date();
+
   return (
     <div className="space-y-8">
-      {/* Invite form */}
+
+      {/* ── Invite form ────────────────────────────────────────────── */}
       {canManage && (
         <div className="p-5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700">
           <h3 className="font-bold text-slate-800 dark:text-white mb-1 flex items-center gap-2">
@@ -306,9 +342,7 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
 
           <form onSubmit={handleInvite} className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2">
             <input
-              type="email"
-              required
-              value={inviteEmail}
+              type="email" required value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
               placeholder="teammate@company.com"
               className="p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
@@ -323,8 +357,7 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
               <option value="Consultant">Consultant (read-only)</option>
             </select>
             <button
-              type="submit"
-              disabled={isInviting}
+              type="submit" disabled={isInviting}
               className="flex items-center justify-center gap-2 bg-esg-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-esg-700 transition-colors disabled:opacity-50"
             >
               {isInviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
@@ -335,15 +368,14 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
           {inviteToken && (
             <div className="mt-4 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg">
               <p className="text-xs text-emerald-700 dark:text-emerald-300 mb-2">
-                ✓ Invitation sent. If the email doesn't arrive, share this token directly:
+                ✓ Invitation sent. If the email doesn't arrive, share this link directly:
               </p>
               <div className="flex items-center gap-2">
                 <code className="flex-1 text-xs font-mono bg-white dark:bg-slate-950 p-2 rounded border border-emerald-200 dark:border-emerald-800 text-slate-700 dark:text-slate-300 break-all">
                   {inviteToken}
                 </code>
                 <button
-                  type="button"
-                  onClick={() => copyToken(inviteToken)}
+                  type="button" onClick={() => copyToken(inviteToken)}
                   className="p-2 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 rounded text-emerald-700 dark:text-emerald-300"
                   title="Copy token"
                 >
@@ -355,10 +387,93 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
         </div>
       )}
 
-      {/* Member list */}
+      {/* ── Pending invitations ────────────────────────────────────── */}
+      {canManage && (
+        <div>
+          <h3 className="font-bold text-slate-800 dark:text-white mb-1 flex items-center gap-2">
+            <Clock className="w-4 h-4 text-amber-500" /> Pending Invitations
+          </h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
+            Invitations that have been sent but not yet accepted.
+          </p>
+
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300">
+                <tr>
+                  <th className="text-left p-3 font-semibold">Email</th>
+                  <th className="text-left p-3 font-semibold">Role</th>
+                  <th className="text-left p-3 font-semibold">Expires</th>
+                  {isOwner && <th className="p-3"></th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700 bg-white dark:bg-slate-800">
+                {invitesLoading ? (
+                  <tr>
+                    <td colSpan={isOwner ? 4 : 3} className="p-6 text-center text-slate-400">
+                      <Loader2 className="w-4 h-4 animate-spin inline-block mr-2" />Loading…
+                    </td>
+                  </tr>
+                ) : pendingInvites.length === 0 ? (
+                  <tr>
+                    <td colSpan={isOwner ? 4 : 3} className="p-6 text-center text-slate-400 italic">
+                      No pending invitations.
+                    </td>
+                  </tr>
+                ) : pendingInvites.map((inv) => {
+                  const expired = isExpired(inv.expires_at);
+                  return (
+                    <tr key={inv.id} className={expired ? 'opacity-50' : ''}>
+                      <td className="p-3 font-medium text-slate-800 dark:text-white">{inv.email}</td>
+                      <td className="p-3">
+                        <span className={`text-xs font-semibold px-2 py-1 rounded border ${ROLE_COLORS[inv.role]}`}>
+                          {inv.role}
+                        </span>
+                      </td>
+                      <td className="p-3 text-xs text-slate-500 dark:text-slate-400">
+                        {expired
+                          ? <span className="text-red-500 font-medium">Expired</span>
+                          : new Date(inv.expires_at).toLocaleDateString()}
+                      </td>
+                      {isOwner && (
+                        <td className="p-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleResendInvite(inv.id, inv.email)}
+                              disabled={resendingId === inv.id}
+                              className="flex items-center gap-1 text-xs px-2 py-1 text-slate-500 hover:text-esg-600 hover:bg-esg-50 dark:hover:bg-esg-900/20 rounded transition-colors disabled:opacity-50"
+                              title="Resend invitation email (new 24-hour link)"
+                            >
+                              {resendingId === inv.id
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <RefreshCw className="w-3.5 h-3.5" />}
+                              Resend
+                            </button>
+                            <button
+                              onClick={() => handleCancelInvite(inv.id, inv.email)}
+                              className="flex items-center gap-1 text-xs px-2 py-1 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                              title="Cancel invitation"
+                            >
+                              <XCircle className="w-3.5 h-3.5" /> Cancel
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Active members ─────────────────────────────────────────── */}
       <div>
-        <h3 className="font-bold text-slate-800 dark:text-white mb-1">Team members</h3>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+        <h3 className="font-bold text-slate-800 dark:text-white mb-1 flex items-center gap-2">
+          <Users className="w-4 h-4" /> Team Members
+        </h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
           {members.length} {members.length === 1 ? 'person has' : 'people have'} access to this workspace.
         </p>
 
@@ -369,14 +484,14 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
                 <th className="text-left p-3 font-semibold">Email</th>
                 <th className="text-left p-3 font-semibold">Role</th>
                 <th className="text-left p-3 font-semibold">Joined</th>
-                {canManage && <th className="p-3"></th>}
+                {isOwner && <th className="p-3"></th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700 bg-white dark:bg-slate-800">
               {members.map((m) => {
                 const isSelf = m.user_id === currentUserId;
-                const isOwner = m.role === 'Owner';
-                const canEditThisRow = canManage && !isOwner && !isSelf;
+                const isMemberOwner = m.role === 'Owner';
+                const canEditThisRow = canManage && !isMemberOwner && !isSelf;
                 return (
                   <tr key={m.id}>
                     <td className="p-3 font-medium text-slate-800 dark:text-white">
@@ -402,15 +517,15 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
                     <td className="p-3 text-slate-500 dark:text-slate-400 text-xs">
                       {new Date(m.joined_at).toLocaleDateString()}
                     </td>
-                    {canManage && (
+                    {isOwner && (
                       <td className="p-3 text-right">
-                        {canEditThisRow && (
+                        {!isMemberOwner && !isSelf && (
                           <button
-                            onClick={() => handleRemove(m.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-                            title="Remove member"
+                            onClick={() => handleDeactivate(m.id, m.email)}
+                            className="flex items-center gap-1 text-xs px-2 py-1 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                            title="Deactivate access"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <ShieldOff className="w-3.5 h-3.5" /> Deactivate
                           </button>
                         )}
                       </td>
@@ -420,7 +535,7 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
               })}
               {members.length === 0 && (
                 <tr>
-                  <td colSpan={canManage ? 4 : 3} className="p-6 text-center text-slate-400 italic">
+                  <td colSpan={isOwner ? 4 : 3} className="p-6 text-center text-slate-400 italic">
                     No team members yet.
                   </td>
                 </tr>
@@ -431,7 +546,7 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
 
         {!canManage && (
           <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-            Only Owners and Admins can invite or remove team members.
+            Only Owners and Admins can invite team members. Only Owners can deactivate access.
           </p>
         )}
       </div>

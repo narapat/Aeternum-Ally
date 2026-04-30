@@ -44,12 +44,9 @@ const handler = async (event: any) => {
     return json(400, { error: "Invalid request body." });
   }
 
-  const { email, role, organization_id } = body || {};
-  if (!email || !role || !organization_id) {
-    return json(400, { error: "Missing required fields: email, role, organization_id." });
-  }
-  if (!["Admin", "Manager", "Consultant"].includes(role)) {
-    return json(400, { error: "Invalid role. Must be Admin, Manager, or Consultant." });
+  const { email, role, organization_id, action, invite_id } = body || {};
+  if (!email || !organization_id) {
+    return json(400, { error: "Missing required fields: email, organization_id." });
   }
 
   // Check inviter is Owner/Admin of the org
@@ -64,6 +61,38 @@ const handler = async (event: any) => {
     return json(403, { error: "Only Owners and Admins can invite team members." });
   }
 
+  // ── RESEND: re-fire the email for an existing invite record ──────────────
+  if (action === "resend") {
+    if (!invite_id) return json(400, { error: "Missing invite_id for resend." });
+
+    const { data: existingInvite } = await admin
+      .from("organization_invites")
+      .select("id, email")
+      .eq("id", invite_id)
+      .eq("organization_id", organization_id)
+      .maybeSingle();
+
+    if (!existingInvite) {
+      return json(404, { error: "Invitation not found." });
+    }
+
+    try {
+      await admin.auth.admin.inviteUserByEmail(existingInvite.email, {
+        redirectTo: `${appUrl}?invite_token=${existingInvite.id}`,
+      });
+    } catch (e) {
+      console.warn("inviteUserByEmail (resend) failed:", e);
+    }
+
+    return json(200, { success: true, invite_token: existingInvite.id });
+  }
+
+  // ── NEW INVITE ────────────────────────────────────────────────────────────
+  if (!role) return json(400, { error: "Missing required field: role." });
+  if (!["Admin", "Manager", "Consultant"].includes(role)) {
+    return json(400, { error: "Invalid role. Must be Admin, Manager, or Consultant." });
+  }
+
   // Block re-invites if the email already belongs to a member of this org
   const { data: existingMember } = await admin
     .from("organization_members")
@@ -73,6 +102,17 @@ const handler = async (event: any) => {
     .maybeSingle();
   if (existingMember) {
     return json(409, { error: "This person is already a member of your team." });
+  }
+
+  // Block duplicate pending invites
+  const { data: existingInvite } = await admin
+    .from("organization_invites")
+    .select("id")
+    .eq("organization_id", organization_id)
+    .eq("email", email)
+    .maybeSingle();
+  if (existingInvite) {
+    return json(409, { error: "An invitation has already been sent to this email. Use Resend to send a new link." });
   }
 
   // Insert invite row (its UUID is the token)
@@ -85,15 +125,13 @@ const handler = async (event: any) => {
     return json(500, { error: insertErr?.message ?? "Failed to create invitation." });
   }
 
-  // Send the email via Supabase Auth admin API (uses Supabase's email templates).
-  // If the user already exists, this still sends a magic-link-style email pointing at our app.
+  // Send the email via Supabase Auth admin API.
   try {
     await admin.auth.admin.inviteUserByEmail(email, {
       redirectTo: `${appUrl}?invite_token=${invite.id}`,
     });
   } catch (e) {
-    // Don't fail the whole request if email delivery is unavailable — admin can copy the token.
-    // eslint-disable-next-line no-console
+    // Don't fail — admin can copy the token manually.
     console.warn("inviteUserByEmail failed:", e);
   }
 
