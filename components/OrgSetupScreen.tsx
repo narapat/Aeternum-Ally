@@ -16,12 +16,26 @@ const OrgSetupScreen: React.FC<Props> = ({ userEmail, onComplete, onSignOut }) =
   const [error, setError] = useState<string | null>(null);
 
   // Auto-detect invite token in URL (?invite_token=...)
+  // Also detect Supabase OTP expiry errors in the URL hash (#error_code=otp_expired)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("invite_token");
     if (token) {
       setInviteToken(token);
       setMode("join");
+    }
+
+    const hash = window.location.hash;
+    if (hash) {
+      const hashParams = new URLSearchParams(hash.slice(1));
+      const errorCode = hashParams.get("error_code");
+      if (errorCode === "otp_expired" || errorCode === "otp_disabled") {
+        setError(
+          "Your invitation link has expired. Paste the invite token (the UUID from your invitation email) below to join your team."
+        );
+        setMode("join");
+        window.history.replaceState({}, "", window.location.pathname + window.location.search);
+      }
     }
   }, []);
 
