@@ -66,6 +66,14 @@ const handler = async (event: any) => {
     });
   }
 
+  // Fetch company name for the welcome message (best-effort)
+  const { data: profile } = await admin
+    .from("company_profiles")
+    .select("name")
+    .eq("organization_id", invite.organization_id)
+    .maybeSingle();
+  const companyName: string = profile?.name || "";
+
   // Add to org
   const { error: memberErr } = await admin.from("organization_members").insert({
     organization_id: invite.organization_id,
@@ -78,7 +86,7 @@ const handler = async (event: any) => {
     if (memberErr.code === "23505") {
       // already a member — clean up the invite anyway
       await admin.from("organization_invites").delete().eq("id", invite_token);
-      return json(200, { success: true, organization_id: invite.organization_id });
+      return json(200, { success: true, organization_id: invite.organization_id, company_name: companyName });
     }
     return json(500, { error: memberErr.message });
   }
@@ -86,7 +94,7 @@ const handler = async (event: any) => {
   // Burn the invite
   await admin.from("organization_invites").delete().eq("id", invite_token);
 
-  return json(200, { success: true, organization_id: invite.organization_id });
+  return json(200, { success: true, organization_id: invite.organization_id, company_name: companyName });
 };
 
 export { handler };
