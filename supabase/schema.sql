@@ -248,3 +248,43 @@ $$;
 -- User preferences: each user owns their own row
 CREATE POLICY "user_owns_prefs" ON user_preferences
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- ============================================================
+-- ATOMIC ORG CREATION RPC
+-- Bypasses RLS only for this scoped flow: a signed-in user
+-- creates an org, becomes its Owner, and gets an empty profile.
+-- ============================================================
+CREATE OR REPLACE FUNCTION create_organization_with_owner(
+  p_company_name text DEFAULT ''
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_org_id  uuid;
+  v_user_id uuid;
+  v_email   text;
+BEGIN
+  v_user_id := auth.uid();
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  SELECT email INTO v_email FROM auth.users WHERE id = v_user_id;
+
+  INSERT INTO organizations DEFAULT VALUES
+    RETURNING id INTO v_org_id;
+
+  INSERT INTO organization_members (organization_id, user_id, role, email)
+    VALUES (v_org_id, v_user_id, 'Owner', v_email);
+
+  INSERT INTO company_profiles (organization_id, name)
+    VALUES (v_org_id, COALESCE(NULLIF(p_company_name, ''), ''));
+
+  RETURN v_org_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION create_organization_with_owner(text) TO authenticated;

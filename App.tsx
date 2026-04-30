@@ -181,7 +181,6 @@ const App: React.FC = () => {
   if (!organization) {
     return (
       <OrgSetupScreen
-        userId={user.id}
         userEmail={user.email ?? ''}
         onComplete={() => refetchOrg()}
         onSignOut={signOut}

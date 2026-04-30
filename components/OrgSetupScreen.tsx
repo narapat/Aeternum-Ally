@@ -3,13 +3,12 @@ import { Building2, Users, Loader2, AlertCircle, CheckCircle2, ArrowLeft } from 
 import { supabase } from "../lib/supabaseClient";
 
 interface Props {
-  userId: string;
   userEmail: string;
   onComplete: () => void;
   onSignOut: () => void;
 }
 
-const OrgSetupScreen: React.FC<Props> = ({ userId, userEmail, onComplete, onSignOut }) => {
+const OrgSetupScreen: React.FC<Props> = ({ userEmail, onComplete, onSignOut }) => {
   const [mode, setMode] = useState<"choice" | "create" | "join">("choice");
   const [companyName, setCompanyName] = useState("");
   const [inviteToken, setInviteToken] = useState("");
@@ -36,29 +35,11 @@ const OrgSetupScreen: React.FC<Props> = ({ userId, userEmail, onComplete, onSign
     setError(null);
 
     try {
-      // 1. Create organization
-      const { data: org, error: orgErr } = await supabase
-        .from("organizations")
-        .insert({})
-        .select()
-        .single();
-      if (orgErr) throw orgErr;
-
-      // 2. Add owner membership
-      const { error: memErr } = await supabase.from("organization_members").insert({
-        organization_id: org.id,
-        user_id: userId,
-        role: "Owner",
-        email: userEmail,
+      // Atomic create-org-with-owner via SQL function (bypasses RLS chicken-and-egg).
+      const { error: rpcErr } = await supabase.rpc("create_organization_with_owner", {
+        p_company_name: companyName.trim(),
       });
-      if (memErr) throw memErr;
-
-      // 3. Seed an empty company profile with the company name
-      await supabase.from("company_profiles").insert({
-        organization_id: org.id,
-        name: companyName.trim(),
-      });
-
+      if (rpcErr) throw rpcErr;
       onComplete();
     } catch (e: any) {
       setError(e?.message ?? "Failed to create organization. Please try again.");
