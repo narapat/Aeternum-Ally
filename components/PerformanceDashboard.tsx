@@ -2,15 +2,16 @@
 import React, { useState } from 'react';
 import { KPI, BSCPerspective, RACI } from '../types';
 import { generateKPISuggestions } from '../services/geminiService';
-import { 
-  TrendingUp, Users, Settings, BookOpen, Plus, MoreHorizontal, 
-  Target, Link, ArrowUpRight, Calendar, User, Loader2, Save, Trash2, ArrowDown
+import {
+  TrendingUp, Users, Settings, BookOpen, Plus,
+  Link, ArrowUpRight, User, Loader2, Save, Trash2
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
 interface Props {
   kpis: KPI[];
-  setKpis: React.Dispatch<React.SetStateAction<KPI[]>>;
+  onSaveKpi: (kpi: KPI) => Promise<void>;
+  onDeleteKpi: (id: string) => Promise<void>;
   companyDescription: string;
 }
 
@@ -21,13 +22,13 @@ const PERSPECTIVE_CONFIG = {
   [BSCPerspective.LEARNING]: { color: 'bg-purple-100 text-purple-800', border: 'border-purple-200', icon: <BookOpen className="w-5 h-5" /> },
 };
 
-const PerformanceDashboard: React.FC<Props> = ({ kpis, setKpis, companyDescription }) => {
+const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, companyDescription }) => {
   const [viewMode, setViewMode] = useState<'map' | 'tracking'>('map');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
 
-  const handleDelete = (id: string) => {
-    setKpis(prev => prev.filter(k => k.id !== id));
+  const handleDelete = async (id: string) => {
+    await onDeleteKpi(id);
   };
 
   return (
@@ -62,15 +63,11 @@ const PerformanceDashboard: React.FC<Props> = ({ kpis, setKpis, companyDescripti
       </div>
 
       {isFormOpen && (
-        <KPIForm 
-            initialData={editingKpi} 
-            onClose={() => setIsFormOpen(false)} 
-            onSave={(kpi) => {
-                if (editingKpi) {
-                    setKpis(prev => prev.map(k => k.id === kpi.id ? kpi : k));
-                } else {
-                    setKpis(prev => [...prev, kpi]);
-                }
+        <KPIForm
+            initialData={editingKpi}
+            onClose={() => setIsFormOpen(false)}
+            onSave={async (kpi) => {
+                await onSaveKpi(kpi);
                 setIsFormOpen(false);
             }}
             companyDescription={companyDescription}
@@ -224,7 +221,7 @@ const TrackingList: React.FC<{ kpis: KPI[], onEdit: (k: KPI) => void, onDelete: 
 interface KPIFormProps {
   initialData: KPI | null;
   onClose: () => void;
-  onSave: (kpi: KPI) => void;
+  onSave: (kpi: KPI) => Promise<void> | void;
   companyDescription: string;
   allKpis: KPI[];
 }
@@ -263,11 +260,11 @@ const KPIForm: React.FC<KPIFormProps> = ({ initialData, onClose, onSave, company
         setLoadingAi(false);
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        onSave({
+        await onSave({
             ...formData,
-            id: formData.id || Math.random().toString(36).substr(2, 9),
+            id: formData.id || '',
             history: formData.history.length ? formData.history : [{ date: new Date().toISOString().split('T')[0], value: formData.currentValue }]
         });
     };

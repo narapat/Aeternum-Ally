@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { CompanyProfile, AssessmentData, SustainabilityBusinessModel } from '../types';
 import { GRI_MAPPING } from '../constants';
 import { generateSustainabilityStatement, GeneratedStatement } from '../services/geminiService';
-import { FileText, Download, Loader2, Book, RefreshCw, ShieldCheck, Table2 } from 'lucide-react';
+import { FileText, Download, Loader2, Book, RefreshCw, ShieldCheck, AlertCircle } from 'lucide-react';
 
 interface Props {
   profile: CompanyProfile;
@@ -14,14 +14,21 @@ interface Props {
 const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas }) => {
   const [generatedContent, setGeneratedContent] = useState<GeneratedStatement | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const materialTopics = assessments.filter(a => a.isMaterial);
 
   const handleGenerate = async () => {
     setLoading(true);
-    const result = await generateSustainabilityStatement(profile, materialTopics);
-    setGeneratedContent(result);
-    setLoading(false);
+    setError(null);
+    try {
+      const result = await generateSustainabilityStatement(profile, materialTopics);
+      setGeneratedContent(result);
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to generate the report. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (materialTopics.length === 0) {
@@ -40,6 +47,16 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500">
+      {error && (
+        <div className="flex items-start gap-2 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300 print:hidden">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold mb-1">Couldn't generate report</p>
+            <p>{error}</p>
+          </div>
+        </div>
+      )}
+
       {/* Header Actions */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 print:hidden">
         <div>

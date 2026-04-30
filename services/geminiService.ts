@@ -1,29 +1,58 @@
 import { ESRSTopic, SustainabilityBusinessModel, BSCPerspective, AssessmentData, CompanyProfile } from "../types";
+import { supabase } from "../lib/supabaseClient";
 
 const API_ENDPOINT = "/.netlify/functions/api";
 
+// ------------------------------------------------------------------
+// Org context — set by App.tsx when an organization loads.
+// All AI calls require this; without it the request is rejected
+// before hitting the network so the user gets a clear message.
+// ------------------------------------------------------------------
+let currentOrgId: string | null = null;
+export const setOrganizationContext = (orgId: string | null) => {
+  currentOrgId = orgId;
+};
+
 async function callApi(action: string, params: any) {
+  if (!currentOrgId) {
+    throw new Error("AI features need an organization context. Please refresh and try again.");
+  }
+
+  const sessionResp = await supabase.auth.getSession();
+  const accessToken = sessionResp.data.session?.access_token;
+  if (!accessToken) {
+    throw new Error("You must be signed in to use AI features.");
+  }
+
   try {
     const response = await fetch(API_ENDPOINT, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ action, ...params }),
+      body: JSON.stringify({ action, organization_id: currentOrgId, ...params }),
     });
 
     if (!response.ok) {
-      throw new Error(`API request failed with status ${response.status}`);
+      let message = `Request failed (${response.status})`;
+      try {
+        const body = await response.json();
+        if (body?.error) message = body.error;
+      } catch {}
+      throw new Error(message);
     }
 
     return await response.json();
   } catch (error) {
+    // eslint-disable-next-line no-console
     console.error(`Gemini API Error (${action}):`, error);
-    // Return null or appropriate default based on usage, but for now let's return null or empty to match previous behavior partially
-    // The previous implementation returned specific error objects or strings.
-    // We'll handle defaults in the wrapper functions if needed, or just return null and let caller handle.
     throw error;
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "An unexpected error occurred. Please try again.";
 }
 
 export const generateAssessmentSuggestions = async (
@@ -33,10 +62,8 @@ export const generateAssessmentSuggestions = async (
   try {
     return await callApi("generateAssessmentSuggestions", { companyDescription, topic });
   } catch (error) {
-    return {
-      impactSuggestion: "AI generation failed. Please input manually.",
-      financialSuggestion: "AI generation failed. Please input manually.",
-    };
+    const msg = errorMessage(error);
+    return { impactSuggestion: msg, financialSuggestion: msg };
   }
 };
 
@@ -48,7 +75,7 @@ export const generateCanvasSuggestion = async (
   try {
     return await callApi("generateCanvasSuggestion", { companyName, companyDescription, fieldLabel });
   } catch (error) {
-    return "Could not generate suggestion.";
+    return errorMessage(error);
   }
 };
 
@@ -59,19 +86,20 @@ export const generateSwotInternal = async (
   try {
     return await callApi("generateSwotInternal", { companyName, bmcData });
   } catch (error) {
-    return { strengths: "", weaknesses: "" };
+    const msg = errorMessage(error);
+    return { strengths: msg, weaknesses: msg };
   }
 };
 
 export const generateSwotExternal = async (
   companyName: string,
   companyDescription: string,
-  type: 'OPPORTUNITIES' | 'THREATS'
+  type: "OPPORTUNITIES" | "THREATS"
 ) => {
   try {
     return await callApi("generateSwotExternal", { companyName, companyDescription, type });
   } catch (error) {
-    return `Could not generate ${type.toLowerCase()} based on external data.`;
+    return errorMessage(error);
   }
 };
 
@@ -92,17 +120,14 @@ export interface GeneratedStatement {
   topics: {
     topicId: string;
     topicName: string;
-    disclosureContent: string; // Policies, Actions, Targets text
+    disclosureContent: string;
   }[];
 }
 
 export const generateSustainabilityStatement = async (
   profile: CompanyProfile,
   materialAssessments: AssessmentData[]
-) => {
-  try {
-    return await callApi("generateSustainabilityStatement", { profile, materialAssessments });
-  } catch (error) {
-    return null;
-  }
+): Promise<GeneratedStatement> => {
+  // Re-throws so the caller can show a real error message instead of a silent null.
+  return await callApi("generateSustainabilityStatement", { profile, materialAssessments });
 };
