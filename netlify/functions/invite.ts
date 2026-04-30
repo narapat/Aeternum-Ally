@@ -21,13 +21,15 @@ const json = (statusCode: number, body: unknown) => ({
 async function sendInviteEmail(
   admin: any,
   email: string,
-  inviteToken: string
+  inviteToken: string,
+  companyName: string
 ): Promise<{ link: string | null }> {
   const redirectTo = `${appUrl}?invite_token=${inviteToken}`;
+  const data = { company_name: companyName, app_name: "Aeternum Ally" };
 
   // First attempt: works for new users and usually for existing ones too.
   try {
-    await admin.auth.admin.inviteUserByEmail(email, { redirectTo });
+    await admin.auth.admin.inviteUserByEmail(email, { redirectTo, data });
     return { link: null }; // email sent via Supabase template
   } catch (e) {
     console.warn("inviteUserByEmail failed, falling back to generateLink:", e);
@@ -35,15 +37,15 @@ async function sendInviteEmail(
 
   // Fallback: generate a magic-link for existing users.
   try {
-    const { data, error } = await admin.auth.admin.generateLink({
+    const { data: linkData, error } = await admin.auth.admin.generateLink({
       type: "magiclink",
       email,
-      options: { redirectTo },
+      options: { redirectTo, data },
     });
     if (error) throw error;
     // generateLink does NOT send an email itself — return the link so the admin
     // can copy-paste it and share directly with the invitee.
-    return { link: (data as any)?.properties?.action_link ?? null };
+    return { link: linkData?.properties?.action_link ?? null };
   } catch (e) {
     console.warn("generateLink also failed:", e);
     return { link: null };
@@ -82,7 +84,7 @@ const handler = async (event: any) => {
 
     const { data: invite } = await admin
       .from("organization_invites")
-      .select("id, email")
+      .select("id, email, organization_id")
       .eq("email", email.trim().toLowerCase())
       .gt("expires_at", new Date().toISOString())
       .order("created_at", { ascending: false })
@@ -90,9 +92,13 @@ const handler = async (event: any) => {
       .maybeSingle();
 
     if (invite) {
-      const { link } = await sendInviteEmail(admin, invite.email, invite.id);
-      // link is non-null only when email delivery isn't available — we don't
-      // surface it here because the user is unauthenticated.
+      const { data: profile } = await admin
+        .from("company_profiles")
+        .select("name")
+        .eq("organization_id", invite.organization_id)
+        .maybeSingle();
+      const companyName = profile?.name ?? "your team";
+      const { link } = await sendInviteEmail(admin, invite.email, invite.id, companyName);
       void link;
     }
 
@@ -145,7 +151,14 @@ const handler = async (event: any) => {
 
     if (!existingInvite) return json(404, { error: "Invitation not found." });
 
-    const { link } = await sendInviteEmail(admin, existingInvite.email, existingInvite.id);
+    const { data: profile } = await admin
+      .from("company_profiles")
+      .select("name")
+      .eq("organization_id", organization_id)
+      .maybeSingle();
+    const companyName = profile?.name ?? "your team";
+
+    const { link } = await sendInviteEmail(admin, existingInvite.email, existingInvite.id, companyName);
 
     return json(200, {
       success: true,
@@ -191,7 +204,14 @@ const handler = async (event: any) => {
     return json(500, { error: insertErr?.message ?? "Failed to create invitation." });
   }
 
-  const { link } = await sendInviteEmail(admin, email, invite.id);
+  const { data: profile } = await admin
+    .from("company_profiles")
+    .select("name")
+    .eq("organization_id", organization_id)
+    .maybeSingle();
+  const companyName = profile?.name ?? "your team";
+
+  const { link } = await sendInviteEmail(admin, email, invite.id, companyName);
 
   return json(200, {
     success: true,
