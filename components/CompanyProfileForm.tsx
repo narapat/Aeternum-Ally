@@ -284,8 +284,11 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
   };
 
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [fallbackLink, setFallbackLink] = useState<{ inviteId: string; link: string } | null>(null);
+
   const handleResendInvite = async (inviteId: string, email: string) => {
     setResendingId(inviteId);
+    setFallbackLink(null);
     try {
       const sessionResp = await supabase.auth.getSession();
       const accessToken = sessionResp.data.session?.access_token;
@@ -298,7 +301,13 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
       });
       const body = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(body.error ?? 'Failed to resend invitation.');
-      alert(`Invitation resent to ${email}. The new link is valid for 24 hours.`);
+
+      if (body.fallback_link) {
+        // Email delivery unavailable for existing users — surface the link directly
+        setFallbackLink({ inviteId, link: body.fallback_link });
+      } else {
+        alert(`Invitation resent to ${email}. The new link is valid for 1 hour.`);
+      }
     } catch (err: any) {
       alert(err?.message ?? 'Failed to resend invitation.');
     } finally {
@@ -464,6 +473,30 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Fallback link banner (shown when Supabase can't email an existing user) */}
+      {fallbackLink && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-sm">
+          <p className="font-semibold text-amber-800 dark:text-amber-200 mb-1">
+            Email delivery unavailable — share this link directly:
+          </p>
+          <p className="text-amber-700 dark:text-amber-300 text-xs mb-2">
+            Copy and send this link to the invitee. It expires in 1 hour.
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-xs font-mono bg-white dark:bg-slate-950 p-2 rounded border border-amber-200 dark:border-amber-700 text-slate-700 dark:text-slate-300 break-all">
+              {fallbackLink.link}
+            </code>
+            <button
+              onClick={() => { navigator.clipboard.writeText(fallbackLink.link); copyToken(fallbackLink.link); }}
+              className="p-2 hover:bg-amber-100 dark:hover:bg-amber-900/40 rounded text-amber-700 dark:text-amber-300"
+              title="Copy link"
+            >
+              {copied ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            </button>
           </div>
         </div>
       )}

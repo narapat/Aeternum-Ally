@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Layout, Mail, Lock, Loader2, AlertCircle, Info } from "lucide-react";
+import { Layout, Mail, Lock, Loader2, AlertCircle, Info, Send } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 
 const AuthScreen: React.FC = () => {
@@ -12,6 +12,12 @@ const AuthScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
+  // Expired invite link state
+  const [showResendForm, setShowResendForm] = useState(false);
+  const [resendEmail, setResendEmail] = useState("");
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendDone, setResendDone] = useState(false);
+
   // Detect Supabase OTP errors returned as URL hash fragments
   // e.g. #error=access_denied&error_code=otp_expired
   useEffect(() => {
@@ -20,14 +26,24 @@ const AuthScreen: React.FC = () => {
     const params = new URLSearchParams(hash.slice(1));
     const errorCode = params.get("error_code");
     if (errorCode === "otp_expired" || errorCode === "otp_disabled") {
-      setInfo(
-        "Your invitation link has expired. Sign in below, then paste the invite token " +
-        "(the UUID from your invitation email) to join your team."
-      );
-      // Clean up the hash so it doesn't persist on refresh
+      setShowResendForm(true);
       window.history.replaceState({}, "", window.location.pathname + window.location.search);
     }
   }, []);
+
+  const handleResendRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResendLoading(true);
+    try {
+      await fetch("/.netlify/functions/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "request_resend", email: resendEmail.trim() }),
+      });
+    } catch {}
+    setResendLoading(false);
+    setResendDone(true);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,6 +107,45 @@ const AuthScreen: React.FC = () => {
                 : "Start managing your ESG reporting today."}
             </p>
           </div>
+
+          {/* Expired invite link — self-service resend */}
+          {showResendForm && (
+            <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-sm text-amber-800 dark:text-amber-200">
+              <div className="flex items-start gap-2 mb-3">
+                <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" />
+                <p className="font-semibold">Your invite link has expired.</p>
+              </div>
+              {resendDone ? (
+                <p className="text-emerald-700 dark:text-emerald-300 font-medium">
+                  ✓ If a pending invitation exists for that email, a new link has been sent. Check your inbox.
+                </p>
+              ) : (
+                <>
+                  <p className="mb-3 text-amber-700 dark:text-amber-300">
+                    Enter your email below to receive a fresh invite link.
+                  </p>
+                  <form onSubmit={handleResendRequest} className="flex gap-2">
+                    <input
+                      type="email"
+                      required
+                      value={resendEmail}
+                      onChange={(e) => setResendEmail(e.target.value)}
+                      placeholder="you@company.com"
+                      className="flex-1 px-3 py-2 rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                    <button
+                      type="submit"
+                      disabled={resendLoading}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {resendLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                      Send
+                    </button>
+                  </form>
+                </>
+              )}
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
