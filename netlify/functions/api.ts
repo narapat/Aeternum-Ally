@@ -413,29 +413,38 @@ async function generateSustainabilityStatement(
     };
   }
 
+  // Build a numbered list so the AI can mirror it back unambiguously
   const materialList = materialAssessments
-    .map((a: any) => `${a.topic} (Impact: ${a.impactDescription}, Financial: ${a.financialDescription})`)
-    .join("; ");
+    .map((a: any, i: number) => {
+      const topicCode = String(a.topic).split(" ")[0]; // "E1", "S1", "G1" etc.
+      return `${i + 1}. topicId="${topicCode}", topicName="${a.topic}", impact="${a.impactDescription}", financial="${a.financialDescription}"`;
+    })
+    .join("\n");
 
   const prompt = `
     Act as a Sustainability Reporting Officer drafting a "Sustainability Statement" in alignment with ESRS (European Sustainability Reporting Standards) and GRI Standards.
 
     Company: ${profile.name} (${profile.industry})
     Mission: ${profile.mission}
-    Material Topics Identified: ${materialList}
+
+    Material topics identified (one entry per line, exact format to mirror back):
+    ${materialList}
 
     Task: Generate narrative content for the report in JSON format.
 
-    1. generalDisclosure: Draft a "Basis of Preparation" (ESRS 2 BP-1, BP-2). Explain that this report uses a Double Materiality approach, considering both impact materiality (GRI-aligned) and financial materiality.
-    2. strategyDisclosure: Draft a "Strategy" section (ESRS 2 SBM-3). Summarize how the company's business model interacts with these material impacts and risks.
-    3. topics: For EACH material topic provided, generate a structured "Disclosure Requirement" text. This text should briefly suggest Policies, Actions, and Metrics (ESRS MDR-P, MDR-A, MDR-M) relevant to the topic. Mention specific GRI standard numbers where applicable (e.g., for Climate Change, mention GRI 305).
+    1. generalDisclosure: Draft a "Basis of Preparation" (ESRS 2 BP-1, BP-2). Explain that this report uses a Double Materiality approach, considering both impact materiality (GRI-aligned) and financial materiality. ~120 words.
+    2. strategyDisclosure: Draft a "Strategy" section (ESRS 2 SBM-3). Summarize how the company's business model interacts with these material impacts and risks. ~150 words.
+    3. topics: Return EXACTLY one entry for EACH material topic listed above, in the same order. For each:
+       - "topicId" MUST be the short code only (e.g. "E1", "S1", "G1") — NEVER the full name.
+       - "topicName" MUST be the full topic string (e.g. "E1 Climate Change").
+       - "disclosureContent" MUST be a multi-paragraph narrative covering Policies (ESRS MDR-P), Actions (MDR-A), and Metrics & Targets (MDR-M). Reference relevant GRI standard numbers (e.g. GRI 305 for climate). 200-300 words minimum per topic. Use plain text with line breaks; no markdown.
 
     Output JSON structure:
     {
       "generalDisclosure": "string",
       "strategyDisclosure": "string",
       "topics": [
-        { "topicId": "E1", "topicName": "E1 Climate Change", "disclosureContent": "string" }
+        { "topicId": "E1", "topicName": "E1 Climate Change", "disclosureContent": "..." }
       ]
     }
   `;
