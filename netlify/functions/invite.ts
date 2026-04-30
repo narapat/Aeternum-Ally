@@ -11,12 +11,21 @@ const json = (statusCode: number, body: unknown) => ({
 });
 
 /**
- * Send (or resend) an invite email for an existing invite record.
- * - New users  → inviteUserByEmail creates their account + sends the email.
- * - Existing users → inviteUserByEmail may throw; fall back to generateLink
- *   (magic-link type) which works for any user and returns a direct URL we
- *   surface to the admin as a copy-able fallback link.
- * Returns { link } when email delivery is uncertain so the caller can display it.
+ * Send (or resend) an invite email.
+ *
+ * Strategy:
+ * 1. inviteUserByEmail  — creates the Supabase Auth user (if new) AND sends the
+ *    branded invite email. Works perfectly for first-time invitees.
+ * 2. signInWithOtp      — for users already registered in Supabase Auth,
+ *    inviteUserByEmail throws "User already registered". signInWithOtp sends
+ *    a magic-link email to any existing user and honours the same redirectTo.
+ *    shouldCreateUser: false ensures we don't accidentally create duplicates.
+ *
+ * generateLink is intentionally NOT used as a fallback because it only returns
+ * a URL — it does not deliver any email.
+ *
+ * Returns { link: null } when an email was dispatched, or { link: string } as
+ * a last-resort copy-able URL if both email paths fail.
  */
 async function sendInviteEmail(
   admin: any,
@@ -27,29 +36,46 @@ async function sendInviteEmail(
   const redirectTo = `${appUrl}?invite_token=${inviteToken}`;
   const data = { company_name: companyName, app_name: "Aeternum Ally" };
 
-  // First attempt: works for new users and usually for existing ones too.
+  // Path 1: new users — creates account + sends invite email via Supabase template.
   try {
-    await admin.auth.admin.inviteUserByEmail(email, { redirectTo, data });
-    return { link: null }; // email sent via Supabase template
-  } catch (e) {
-    console.warn("inviteUserByEmail failed, falling back to generateLink:", e);
+    const { error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo, data });
+    if (!error) return { link: null };
+    console.warn("inviteUserByEmail error:", error.message);
+  } catch (e: any) {
+    console.warn("inviteUserByEmail threw:", e?.message ?? e);
   }
 
-  // Fallback: generate a magic-link for existing users.
+  // Path 2: existing users — sends a magic-link email that redirects to our app.
+  // signInWithOtp actually delivers an email, unlike generateLink which only
+  // returns a URL.
+  try {
+    const { error } = await admin.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: redirectTo,
+        shouldCreateUser: false,
+      },
+    });
+    if (!error) return { link: null };
+    console.warn("signInWithOtp error:", error.message);
+  } catch (e: any) {
+    console.warn("signInWithOtp threw:", e?.message ?? e);
+  }
+
+  // Last resort: generate a link the admin can copy and share manually.
+  // This does NOT send an email.
   try {
     const { data: linkData, error } = await admin.auth.admin.generateLink({
       type: "magiclink",
       email,
-      options: { redirectTo, data },
+      options: { redirectTo },
     });
-    if (error) throw error;
-    // generateLink does NOT send an email itself — return the link so the admin
-    // can copy-paste it and share directly with the invitee.
-    return { link: linkData?.properties?.action_link ?? null };
-  } catch (e) {
-    console.warn("generateLink also failed:", e);
-    return { link: null };
+    if (!error) return { link: linkData?.properties?.action_link ?? null };
+  } catch (e: any) {
+    console.warn("generateLink threw:", e?.message ?? e);
   }
+
+  return { link: null };
 }
 
 const handler = async (event: any) => {
