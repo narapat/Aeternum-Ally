@@ -1,14 +1,20 @@
 
 import React, { useState } from 'react';
 import { SustainabilityBusinessModel } from '../types';
-import { Save, Info, Wand2, ArrowRight, ArrowLeft, Grid, List, Check, Loader2, PlayCircle } from 'lucide-react';
+import { Info, Wand2, ArrowRight, ArrowLeft, Grid, Check, Loader2, PlayCircle } from 'lucide-react';
 import { generateCanvasSuggestion } from '../services/geminiService';
+import SaveIndicator from './SaveIndicator';
+import type { SaveStatus } from '../hooks/useOrgData';
 
 interface Props {
   data: SustainabilityBusinessModel;
   onChange: (data: SustainabilityBusinessModel) => void;
   companyName: string;
   companyDescription: string;
+  saveStatus: SaveStatus;
+  isDirty: boolean;
+  onSave: () => void;
+  saveError?: string | null;
 }
 
 type CanvasField = keyof SustainabilityBusinessModel;
@@ -69,7 +75,7 @@ const WIZARD_STEPS: Step[] = [
   }
 ];
 
-const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, companyName, companyDescription }) => {
+const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, companyName, companyDescription, saveStatus, isDirty, onSave, saveError }) => {
   const [mode, setMode] = useState<'grid' | 'wizard'>('wizard');
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [loadingField, setLoadingField] = useState<string | null>(null);
@@ -329,10 +335,7 @@ const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, companyName, com
                     <Grid className="w-4 h-4" /> <span className="hidden sm:inline">Canvas</span>
                 </button>
              </div>
-             <button className="flex items-center gap-2 bg-esg-600 text-white px-4 py-2 rounded-lg hover:bg-esg-700 transition-colors text-sm font-medium shadow-sm">
-                <Save className="w-4 h-4" />
-                Save
-            </button>
+             <SaveIndicator status={saveStatus} isDirty={isDirty} onSave={onSave} errorMessage={saveError} />
         </div>
       </div>
 

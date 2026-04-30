@@ -38,9 +38,39 @@ export interface AssessmentData {
 
 export interface User {
   name: string;
-  role: 'Admin' | 'Manager' | 'Consultant';
+  role: 'Owner' | 'Admin' | 'Manager' | 'Consultant';
   companyName: string;
   companyDescription: string;
+}
+
+// --- Multi-tenant types ---
+
+export type OrgRole = 'Owner' | 'Admin' | 'Manager' | 'Consultant';
+
+export interface Organization {
+  id: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface OrgMember {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  role: OrgRole;
+  email: string | null;
+  invited_by: string | null;
+  joined_at: string;
+}
+
+export interface OrgInvite {
+  id: string;            // also serves as the invite token
+  organization_id: string;
+  email: string;
+  role: Exclude<OrgRole, 'Owner'>;
+  invited_by: string;
+  expires_at: string;
+  created_at: string;
 }
 
 export interface CompanyProfile {

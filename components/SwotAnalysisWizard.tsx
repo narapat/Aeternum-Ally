@@ -2,7 +2,9 @@
 import React, { useState } from 'react';
 import { SwotAnalysis, SustainabilityBusinessModel } from '../types';
 import { generateSwotInternal, generateSwotExternal } from '../services/geminiService';
-import { ArrowRight, ArrowLeft, Save, Check, Loader2, Globe, ShieldAlert, TrendingUp, Zap, AlertTriangle } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Loader2, Globe, ShieldAlert, TrendingUp, Zap, AlertTriangle } from 'lucide-react';
+import SaveIndicator from './SaveIndicator';
+import type { SaveStatus } from '../hooks/useOrgData';
 
 interface Props {
   data: SwotAnalysis;
@@ -10,9 +12,13 @@ interface Props {
   companyName: string;
   companyDescription: string;
   bmcData: SustainabilityBusinessModel;
+  saveStatus: SaveStatus;
+  isDirty: boolean;
+  onSave: () => void;
+  saveError?: string | null;
 }
 
-const SwotAnalysisWizard: React.FC<Props> = ({ data, onChange, companyName, companyDescription, bmcData }) => {
+const SwotAnalysisWizard: React.FC<Props> = ({ data, onChange, companyName, companyDescription, bmcData, saveStatus, isDirty, onSave, saveError }) => {
   const [step, setStep] = useState<number>(0);
   const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});
 
@@ -229,9 +235,7 @@ const SwotAnalysisWizard: React.FC<Props> = ({ data, onChange, companyName, comp
                  Next Step <ArrowRight className="w-4 h-4" />
                </button>
             ) : (
-                <button className="flex items-center gap-2 bg-esg-600 text-white px-6 py-2 md:px-8 md:py-3 rounded-lg font-bold hover:bg-esg-700 transition-colors shadow-lg">
-                    <Save className="w-4 h-4" /> Save Analysis
-                </button>
+                <SaveIndicator status={saveStatus} isDirty={isDirty} onSave={onSave} errorMessage={saveError} />
             )}
         </div>
     </div>
