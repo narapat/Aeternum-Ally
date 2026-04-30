@@ -5,7 +5,7 @@ import { INDUSTRY_SECTORS, ISIC_CODES_GROUPED } from '../constants';
 import {
   Building2, MapPin, Globe, Hash, Users, Wallet, Target, Layers, BookOpen,
   UserPlus, Loader2, AlertCircle, Trash2, Copy, CheckCircle2, Sparkles,
-  Clock, XCircle, ShieldOff
+  Clock, XCircle, ShieldOff, RefreshCw
 } from 'lucide-react';
 import SaveIndicator from './SaveIndicator';
 import type { SaveStatus } from '../hooks/useOrgData';
@@ -283,6 +283,29 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
     await fetchPendingInvites();
   };
 
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const handleResendInvite = async (inviteId: string, email: string) => {
+    setResendingId(inviteId);
+    try {
+      const sessionResp = await supabase.auth.getSession();
+      const accessToken = sessionResp.data.session?.access_token;
+      if (!accessToken) throw new Error('Not signed in.');
+
+      const resp = await fetch('/.netlify/functions/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ action: 'resend', invite_id: inviteId, email, organization_id: organizationId }),
+      });
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(body.error ?? 'Failed to resend invitation.');
+      alert(`Invitation resent to ${email}. The new link is valid for 24 hours.`);
+    } catch (err: any) {
+      alert(err?.message ?? 'Failed to resend invitation.');
+    } finally {
+      setResendingId(null);
+    }
+  };
+
   const handleRoleChange = async (memberId: string, newRole: OrgRole) => {
     const { error } = await supabase.from('organization_members').update({ role: newRole }).eq('id', memberId);
     if (error) { alert(`Failed to update role: ${error.message}`); return; }
@@ -414,13 +437,26 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
                       </td>
                       {isOwner && (
                         <td className="p-3 text-right">
-                          <button
-                            onClick={() => handleCancelInvite(inv.id, inv.email)}
-                            className="flex items-center gap-1 text-xs px-2 py-1 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                            title="Cancel invitation"
-                          >
-                            <XCircle className="w-3.5 h-3.5" /> Cancel
-                          </button>
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleResendInvite(inv.id, inv.email)}
+                              disabled={resendingId === inv.id}
+                              className="flex items-center gap-1 text-xs px-2 py-1 text-slate-500 hover:text-esg-600 hover:bg-esg-50 dark:hover:bg-esg-900/20 rounded transition-colors disabled:opacity-50"
+                              title="Resend invitation email (new 24-hour link)"
+                            >
+                              {resendingId === inv.id
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <RefreshCw className="w-3.5 h-3.5" />}
+                              Resend
+                            </button>
+                            <button
+                              onClick={() => handleCancelInvite(inv.id, inv.email)}
+                              className="flex items-center gap-1 text-xs px-2 py-1 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                              title="Cancel invitation"
+                            >
+                              <XCircle className="w-3.5 h-3.5" /> Cancel
+                            </button>
+                          </div>
                         </td>
                       )}
                     </tr>
