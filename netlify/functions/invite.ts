@@ -222,11 +222,15 @@ const handler = async (event: any) => {
     return json(400, { error: "Invalid role. Must be Admin, Manager, or Consultant." });
   }
 
+  // Always normalise to lowercase so the OrgSetupScreen lookup (case-sensitive
+  // .eq) matches the stored value, and the RLS policy (which uses lower()) stays consistent.
+  const normalizedEmail = email.trim().toLowerCase();
+
   const { data: existingMember } = await admin
     .from("organization_members")
     .select("id")
     .eq("organization_id", organization_id)
-    .eq("email", email)
+    .eq("email", normalizedEmail)
     .maybeSingle();
   if (existingMember) {
     return json(409, { error: "This person is already a member of your team." });
@@ -236,7 +240,7 @@ const handler = async (event: any) => {
     .from("organization_invites")
     .select("id")
     .eq("organization_id", organization_id)
-    .eq("email", email)
+    .eq("email", normalizedEmail)
     .maybeSingle();
   if (existingInvite) {
     return json(409, { error: "An invitation has already been sent to this email. Use Resend to send a new link." });
@@ -244,7 +248,7 @@ const handler = async (event: any) => {
 
   const { data: invite, error: insertErr } = await admin
     .from("organization_invites")
-    .insert({ organization_id, email, role, invited_by: inviter.id })
+    .insert({ organization_id, email: normalizedEmail, role, invited_by: inviter.id })
     .select()
     .single();
   if (insertErr || !invite) {
@@ -258,7 +262,7 @@ const handler = async (event: any) => {
     .maybeSingle();
   const companyName = profile?.name ?? "your team";
 
-  const { link } = await sendInviteEmail(admin, email, invite.id, companyName);
+  const { link } = await sendInviteEmail(admin, normalizedEmail, invite.id, companyName);
 
   return json(200, {
     success: true,
