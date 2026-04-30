@@ -10,6 +10,48 @@ const json = (statusCode: number, body: unknown) => ({
   body: JSON.stringify(body),
 });
 
+/**
+ * Send (or resend) an invite email for an existing invite record.
+ * - New users  → inviteUserByEmail creates their account + sends the email.
+ * - Existing users → inviteUserByEmail may throw; fall back to generateLink
+ *   (magic-link type) which works for any user and returns a direct URL we
+ *   surface to the admin as a copy-able fallback link.
+ * Returns { link } when email delivery is uncertain so the caller can display it.
+ */
+async function sendInviteEmail(
+  admin: any,
+  email: string,
+  inviteToken: string,
+  companyName: string
+): Promise<{ link: string | null }> {
+  const redirectTo = `${appUrl}?invite_token=${inviteToken}`;
+  const data = { company_name: companyName, app_name: "Aeternum Ally" };
+
+  // First attempt: works for new users and usually for existing ones too.
+  try {
+    await admin.auth.admin.inviteUserByEmail(email, { redirectTo, data });
+    return { link: null }; // email sent via Supabase template
+  } catch (e) {
+    console.warn("inviteUserByEmail failed, falling back to generateLink:", e);
+  }
+
+  // Fallback: generate a magic-link for existing users.
+  try {
+    const { data: linkData, error } = await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email,
+      options: { redirectTo, data },
+    });
+    if (error) throw error;
+    // generateLink does NOT send an email itself — return the link so the admin
+    // can copy-paste it and share directly with the invitee.
+    return { link: linkData?.properties?.action_link ?? null };
+  } catch (e) {
+    console.warn("generateLink also failed:", e);
+    return { link: null };
+  }
+}
+
 const handler = async (event: any) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
@@ -22,20 +64,7 @@ const handler = async (event: any) => {
     });
   }
 
-  const authHeader = event.headers.authorization || event.headers.Authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return json(401, { error: "You must be signed in to invite team members." });
-  }
-  const accessToken = authHeader.slice("Bearer ".length);
-
   const admin = createClient(supabaseUrl, serviceKey);
-
-  // Verify the inviter
-  const { data: userResp, error: userErr } = await admin.auth.getUser(accessToken);
-  if (userErr || !userResp?.user) {
-    return json(401, { error: "Your session has expired. Please sign in again." });
-  }
-  const inviter = userResp.user;
 
   let body: any;
   try {
@@ -44,7 +73,55 @@ const handler = async (event: any) => {
     return json(400, { error: "Invalid request body." });
   }
 
-  const { email, role, organization_id, action, invite_id } = body || {};
+  const { action, email, role, organization_id, invite_id } = body || {};
+
+  // ── REQUEST_RESEND (unauthenticated) ──────────────────────────────────────
+  // Called from the sign-in page when a user's invite link has expired.
+  // Looks up any pending invite for the email and fires a fresh link.
+  // Always returns 200 (no email enumeration).
+  if (action === "request_resend") {
+    if (!email) return json(400, { error: "Missing email." });
+
+    const { data: invite } = await admin
+      .from("organization_invites")
+      .select("id, email, organization_id")
+      .eq("email", email.trim().toLowerCase())
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (invite) {
+      const { data: profile } = await admin
+        .from("company_profiles")
+        .select("name")
+        .eq("organization_id", invite.organization_id)
+        .maybeSingle();
+      const companyName = profile?.name ?? "your team";
+      const { link } = await sendInviteEmail(admin, invite.email, invite.id, companyName);
+      void link;
+    }
+
+    // Always return the same message to prevent email enumeration.
+    return json(200, {
+      success: true,
+      message: "If a pending invitation exists for this email, a new link has been sent. Check your inbox.",
+    });
+  }
+
+  // All other actions require authentication.
+  const authHeader = event.headers.authorization || event.headers.Authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return json(401, { error: "You must be signed in to invite team members." });
+  }
+  const accessToken = authHeader.slice("Bearer ".length);
+
+  const { data: userResp, error: userErr } = await admin.auth.getUser(accessToken);
+  if (userErr || !userResp?.user) {
+    return json(401, { error: "Your session has expired. Please sign in again." });
+  }
+  const inviter = userResp.user;
+
   if (!email || !organization_id) {
     return json(400, { error: "Missing required fields: email, organization_id." });
   }
@@ -61,7 +138,7 @@ const handler = async (event: any) => {
     return json(403, { error: "Only Owners and Admins can invite team members." });
   }
 
-  // ── RESEND: re-fire the email for an existing invite record ──────────────
+  // ── RESEND (authenticated, Owner/Admin only) ──────────────────────────────
   if (action === "resend") {
     if (!invite_id) return json(400, { error: "Missing invite_id for resend." });
 
@@ -72,19 +149,24 @@ const handler = async (event: any) => {
       .eq("organization_id", organization_id)
       .maybeSingle();
 
-    if (!existingInvite) {
-      return json(404, { error: "Invitation not found." });
-    }
+    if (!existingInvite) return json(404, { error: "Invitation not found." });
 
-    try {
-      await admin.auth.admin.inviteUserByEmail(existingInvite.email, {
-        redirectTo: `${appUrl}?invite_token=${existingInvite.id}`,
-      });
-    } catch (e) {
-      console.warn("inviteUserByEmail (resend) failed:", e);
-    }
+    const { data: profile } = await admin
+      .from("company_profiles")
+      .select("name")
+      .eq("organization_id", organization_id)
+      .maybeSingle();
+    const companyName = profile?.name ?? "your team";
 
-    return json(200, { success: true, invite_token: existingInvite.id });
+    const { link } = await sendInviteEmail(admin, existingInvite.email, existingInvite.id, companyName);
+
+    return json(200, {
+      success: true,
+      invite_token: existingInvite.id,
+      // link is non-null only when Supabase couldn't send the email itself
+      // (existing-user fallback). Show it in the UI so the admin can copy it.
+      fallback_link: link,
+    });
   }
 
   // ── NEW INVITE ────────────────────────────────────────────────────────────
@@ -93,7 +175,6 @@ const handler = async (event: any) => {
     return json(400, { error: "Invalid role. Must be Admin, Manager, or Consultant." });
   }
 
-  // Block re-invites if the email already belongs to a member of this org
   const { data: existingMember } = await admin
     .from("organization_members")
     .select("id")
@@ -104,7 +185,6 @@ const handler = async (event: any) => {
     return json(409, { error: "This person is already a member of your team." });
   }
 
-  // Block duplicate pending invites
   const { data: existingInvite } = await admin
     .from("organization_invites")
     .select("id")
@@ -115,7 +195,6 @@ const handler = async (event: any) => {
     return json(409, { error: "An invitation has already been sent to this email. Use Resend to send a new link." });
   }
 
-  // Insert invite row (its UUID is the token)
   const { data: invite, error: insertErr } = await admin
     .from("organization_invites")
     .insert({ organization_id, email, role, invited_by: inviter.id })
@@ -125,20 +204,20 @@ const handler = async (event: any) => {
     return json(500, { error: insertErr?.message ?? "Failed to create invitation." });
   }
 
-  // Send the email via Supabase Auth admin API.
-  try {
-    await admin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${appUrl}?invite_token=${invite.id}`,
-    });
-  } catch (e) {
-    // Don't fail — admin can copy the token manually.
-    console.warn("inviteUserByEmail failed:", e);
-  }
+  const { data: profile } = await admin
+    .from("company_profiles")
+    .select("name")
+    .eq("organization_id", organization_id)
+    .maybeSingle();
+  const companyName = profile?.name ?? "your team";
+
+  const { link } = await sendInviteEmail(admin, email, invite.id, companyName);
 
   return json(200, {
     success: true,
     invite_token: invite.id,
     expires_at: invite.expires_at,
+    fallback_link: link,
   });
 };
 
