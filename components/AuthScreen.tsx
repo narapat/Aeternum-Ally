@@ -50,10 +50,10 @@ const AuthScreen: React.FC = () => {
         </div>
         <div className="my-12">
           <h1 className="text-3xl lg:text-5xl font-serif font-bold mb-6 leading-tight">
-            Sustainability reporting,<br />powered by your expertise.
+            Turn Sustainability Compliance into Business Strategy with AI
           </h1>
           <p className="text-lg opacity-90 max-w-lg">
-            AI-assisted ESRS &amp; CSRD compliance for SMEs. Built for consultants and ESG teams to deliver structured sustainability statements — faster, and grounded in the business model.
+            SaaS platform that helps SMEs manage CSRD and ESRS reporting easily, quickly, and cost-effectively with Generative AI.
           </p>
         </div>
         <div className="text-sm opacity-70">
