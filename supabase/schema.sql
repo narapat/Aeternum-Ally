@@ -223,6 +223,13 @@ CREATE POLICY "admins_manage_invites" ON organization_invites
     AND user_org_role(organization_id) IN ('Owner', 'Admin')
   );
 
+-- Invites: an authenticated user can read their OWN pending invite
+-- (needed for auto-join on sign-in before they are a member of any org)
+CREATE POLICY "invitee_read_own_invite" ON organization_invites
+  FOR SELECT USING (
+    lower(email) = lower((SELECT email FROM auth.users WHERE id = auth.uid()))
+  );
+
 -- Data tables: all members can read; Owner/Admin/Manager can write
 DO $$
 DECLARE tbl text;

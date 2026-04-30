@@ -54,13 +54,8 @@ const OrgSetupScreen: React.FC<Props> = ({ userEmail, onComplete, onSignOut }) =
         .maybeSingle();
 
       if (invite) {
-        // Fetch company name for the friendly "Joining X..." message
-        const { data: profile } = await supabase
-          .from("company_profiles")
-          .select("name")
-          .eq("organization_id", invite.organization_id)
-          .maybeSingle();
-        setJoiningCompany(profile?.name ?? "your team");
+        // Company name is returned by accept-invite (service role can read it).
+        // Don't query company_profiles here — RLS blocks it for non-members.
         await autoAccept(invite.id);
         return;
       }
