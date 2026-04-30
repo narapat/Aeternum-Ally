@@ -56,11 +56,31 @@ const handler = async (event: any) => {
                 "Content-Type": "application/json",
             },
         };
-    } catch (error) {
+    } catch (error: any) {
         console.error("API Error:", error);
+
+        // Surface upstream Gemini errors with their original status + message
+        // (e.g. 503 "high demand", 429 "rate limit"). Falls back to 500 otherwise.
+        const upstreamStatus =
+            (typeof error?.status === "number" && error.status) ||
+            (typeof error?.error?.code === "number" && error.error.code) ||
+            null;
+
+        const upstreamMessage =
+            error?.error?.message ||
+            (error instanceof Error ? error.message : String(error));
+
+        const friendly =
+            upstreamStatus === 503
+                ? "The AI service is temporarily overloaded. Please try again in a moment."
+                : upstreamStatus === 429
+                ? "AI rate limit reached. Please wait a minute and try again."
+                : upstreamMessage || "Something went wrong while contacting the AI service.";
+
         return {
-            statusCode: 500,
-            body: JSON.stringify({ error: "Internal Server Error", details: error instanceof Error ? error.message : String(error) }),
+            statusCode: upstreamStatus && upstreamStatus >= 400 && upstreamStatus < 600 ? upstreamStatus : 500,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ error: friendly }),
         };
     }
 };
