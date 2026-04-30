@@ -250,9 +250,55 @@ CREATE POLICY "user_owns_prefs" ON user_preferences
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 -- ============================================================
+-- AI SETTINGS (1 row per org) + USAGE LOG
+-- ============================================================
+CREATE TABLE organization_ai_settings (
+  organization_id uuid PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+  provider        text NOT NULL DEFAULT 'gemini' CHECK (provider IN ('gemini')),
+  model           text NOT NULL DEFAULT 'gemini-2.5-flash'
+                  CHECK (model IN ('gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro')),
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE TRIGGER trg_ai_settings_updated_at
+  BEFORE UPDATE ON organization_ai_settings FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+ALTER TABLE organization_ai_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "members_read_ai_settings" ON organization_ai_settings
+  FOR SELECT USING (is_org_member(organization_id));
+CREATE POLICY "admins_insert_ai_settings" ON organization_ai_settings
+  FOR INSERT WITH CHECK (user_org_role(organization_id) IN ('Owner','Admin'));
+CREATE POLICY "admins_update_ai_settings" ON organization_ai_settings
+  FOR UPDATE USING (user_org_role(organization_id) IN ('Owner','Admin'));
+
+CREATE TABLE ai_usage_log (
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  user_id             uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  user_email          text,
+  action              text NOT NULL,
+  provider            text NOT NULL DEFAULT 'gemini',
+  model               text NOT NULL,
+  input_tokens        int,
+  output_tokens       int,
+  duration_ms         int,
+  success             boolean NOT NULL DEFAULT true,
+  error_message       text,
+  estimated_cost_usd  numeric(12, 6),
+  created_at          timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_ai_usage_org_date   ON ai_usage_log (organization_id, created_at DESC);
+CREATE INDEX idx_ai_usage_org_action ON ai_usage_log (organization_id, action);
+
+ALTER TABLE ai_usage_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "members_read_usage" ON ai_usage_log
+  FOR SELECT USING (is_org_member(organization_id));
+-- (No INSERT/UPDATE/DELETE policies — only the server's service role can write)
+
+-- ============================================================
 -- ATOMIC ORG CREATION RPC
 -- Bypasses RLS only for this scoped flow: a signed-in user
--- creates an org, becomes its Owner, and gets an empty profile.
+-- creates an org, becomes its Owner, gets an empty profile,
+-- and gets default AI settings.
 -- ============================================================
 CREATE OR REPLACE FUNCTION create_organization_with_owner(
   p_company_name text DEFAULT ''
@@ -282,6 +328,8 @@ BEGIN
 
   INSERT INTO company_profiles (organization_id, name)
     VALUES (v_org_id, COALESCE(NULLIF(p_company_name, ''), ''));
+
+  INSERT INTO organization_ai_settings (organization_id) VALUES (v_org_id);
 
   RETURN v_org_id;
 END;

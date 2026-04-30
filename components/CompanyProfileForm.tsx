@@ -4,11 +4,12 @@ import { CompanyProfile, OrgMember, OrgRole } from '../types';
 import { INDUSTRY_SECTORS, ISIC_CODES_GROUPED } from '../constants';
 import {
   Building2, MapPin, Globe, Hash, Users, Wallet, Target, Layers, BookOpen,
-  UserPlus, Loader2, AlertCircle, Trash2, Copy, CheckCircle2
+  UserPlus, Loader2, AlertCircle, Trash2, Copy, CheckCircle2, Sparkles
 } from 'lucide-react';
 import SaveIndicator from './SaveIndicator';
 import type { SaveStatus } from '../hooks/useOrgData';
 import { supabase } from '../lib/supabaseClient';
+import AIUsagePanel from './AIUsagePanel';
 
 interface Props {
   data: CompanyProfile;
@@ -30,7 +31,7 @@ const CompanyProfileForm: React.FC<Props> = ({
   data, onChange, onSave, saveStatus, isDirty, saveError,
   organizationId, currentUserId, currentUserRole, members, onMembersChanged,
 }) => {
-  const [activeTab, setActiveTab] = useState<'general' | 'details' | 'strategy' | 'team'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'details' | 'strategy' | 'team' | 'ai'>('general');
 
   const handleChange = (field: keyof CompanyProfile, value: string) => {
     onChange({ ...data, [field]: value });
@@ -64,6 +65,9 @@ const CompanyProfileForm: React.FC<Props> = ({
           <TabButton
             active={activeTab === 'team'} onClick={() => setActiveTab('team')}
             icon={<Users className="w-4 h-4 flex-shrink-0" />} label="Team" />
+          <TabButton
+            active={activeTab === 'ai'} onClick={() => setActiveTab('ai')}
+            icon={<Sparkles className="w-4 h-4 flex-shrink-0" />} label="AI & Usage" />
         </div>
 
         <div className="p-4 md:p-8">
@@ -173,6 +177,13 @@ const CompanyProfileForm: React.FC<Props> = ({
               members={members}
               canManage={canManageTeam}
               onMembersChanged={onMembersChanged}
+            />
+          )}
+
+          {activeTab === 'ai' && (
+            <AIUsagePanel
+              organizationId={organizationId}
+              currentUserRole={currentUserRole}
             />
           )}
         </div>

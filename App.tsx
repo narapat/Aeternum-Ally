@@ -21,6 +21,7 @@ import {
   fetchAssessments, upsertAssessment, deleteAssessment,
   fetchKpis, upsertKpi, deleteKpi,
 } from './services/dbService';
+import { setOrganizationContext } from './services/geminiService';
 import { Layout, Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2 } from 'lucide-react';
 
 const DEFAULT_PROFILE: CompanyProfile = {
@@ -107,6 +108,9 @@ const App: React.FC = () => {
 
   // Close mobile sidebar on route change
   useEffect(() => { setIsMobileSidebarOpen(false); }, [view]);
+
+  // Tell the AI service which organization is active so requests carry the org_id.
+  useEffect(() => { setOrganizationContext(orgId); }, [orgId]);
 
   const handleSaveAssessment = async (data: AssessmentData) => {
     if (!orgId) return;

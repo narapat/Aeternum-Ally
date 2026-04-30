@@ -1,15 +1,37 @@
 import { ESRSTopic, SustainabilityBusinessModel, BSCPerspective, AssessmentData, CompanyProfile } from "../types";
+import { supabase } from "../lib/supabaseClient";
 
 const API_ENDPOINT = "/.netlify/functions/api";
 
+// ------------------------------------------------------------------
+// Org context — set by App.tsx when an organization loads.
+// All AI calls require this; without it the request is rejected
+// before hitting the network so the user gets a clear message.
+// ------------------------------------------------------------------
+let currentOrgId: string | null = null;
+export const setOrganizationContext = (orgId: string | null) => {
+  currentOrgId = orgId;
+};
+
 async function callApi(action: string, params: any) {
+  if (!currentOrgId) {
+    throw new Error("AI features need an organization context. Please refresh and try again.");
+  }
+
+  const sessionResp = await supabase.auth.getSession();
+  const accessToken = sessionResp.data.session?.access_token;
+  if (!accessToken) {
+    throw new Error("You must be signed in to use AI features.");
+  }
+
   try {
     const response = await fetch(API_ENDPOINT, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ action, ...params }),
+      body: JSON.stringify({ action, organization_id: currentOrgId, ...params }),
     });
 
     if (!response.ok) {
@@ -23,6 +45,7 @@ async function callApi(action: string, params: any) {
 
     return await response.json();
   } catch (error) {
+    // eslint-disable-next-line no-console
     console.error(`Gemini API Error (${action}):`, error);
     throw error;
   }
@@ -71,7 +94,7 @@ export const generateSwotInternal = async (
 export const generateSwotExternal = async (
   companyName: string,
   companyDescription: string,
-  type: 'OPPORTUNITIES' | 'THREATS'
+  type: "OPPORTUNITIES" | "THREATS"
 ) => {
   try {
     return await callApi("generateSwotExternal", { companyName, companyDescription, type });
@@ -97,7 +120,7 @@ export interface GeneratedStatement {
   topics: {
     topicId: string;
     topicName: string;
-    disclosureContent: string; // Policies, Actions, Targets text
+    disclosureContent: string;
   }[];
 }
 
