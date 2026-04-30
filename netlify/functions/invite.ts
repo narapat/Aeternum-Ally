@@ -148,8 +148,8 @@ const handler = async (event: any) => {
   }
   const inviter = userResp.user;
 
-  if (!email || !organization_id) {
-    return json(400, { error: "Missing required fields: email, organization_id." });
+  if (!organization_id) {
+    return json(400, { error: "Missing required field: organization_id." });
   }
 
   // Check inviter is Owner/Admin of the org
@@ -161,7 +161,19 @@ const handler = async (event: any) => {
     .maybeSingle();
 
   if (!membership || !["Owner", "Admin"].includes(membership.role)) {
-    return json(403, { error: "Only Owners and Admins can invite team members." });
+    return json(403, { error: "Only Owners and Admins can manage invitations." });
+  }
+
+  // ── LIST PENDING INVITES (authenticated, Owner/Admin only) ────────────────
+  if (action === "list") {
+    const { data: invites, error: listErr } = await admin
+      .from("organization_invites")
+      .select("id, email, role, expires_at, created_at, invited_by")
+      .eq("organization_id", organization_id)
+      .order("created_at", { ascending: false });
+
+    if (listErr) return json(500, { error: listErr.message });
+    return json(200, { invites: invites ?? [] });
   }
 
   // ── RESEND (authenticated, Owner/Admin only) ──────────────────────────────
@@ -196,6 +208,7 @@ const handler = async (event: any) => {
   }
 
   // ── NEW INVITE ────────────────────────────────────────────────────────────
+  if (!email) return json(400, { error: "Missing required field: email." });
   if (!role) return json(400, { error: "Missing required field: role." });
   if (!["Admin", "Manager", "Consultant"].includes(role)) {
     return json(400, { error: "Invalid role. Must be Admin, Manager, or Consultant." });

@@ -227,16 +227,29 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
 
   const [pendingInvites, setPendingInvites] = useState<OrgInvite[]>([]);
   const [invitesLoading, setInvitesLoading] = useState(false);
+  const [invitesError, setInvitesError] = useState<string | null>(null);
 
   const fetchPendingInvites = useCallback(async () => {
     setInvitesLoading(true);
-    const { data } = await supabase
-      .from('organization_invites')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .order('created_at', { ascending: false });
-    setPendingInvites((data ?? []) as OrgInvite[]);
-    setInvitesLoading(false);
+    setInvitesError(null);
+    try {
+      const sessionResp = await supabase.auth.getSession();
+      const accessToken = sessionResp.data.session?.access_token;
+      if (!accessToken) throw new Error('Not signed in.');
+
+      const resp = await fetch('/.netlify/functions/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ action: 'list', organization_id: organizationId }),
+      });
+      const body = await resp.json();
+      if (!resp.ok) throw new Error(body.error ?? 'Failed to load invitations.');
+      setPendingInvites((body.invites ?? []) as OrgInvite[]);
+    } catch (e: any) {
+      setInvitesError(e?.message ?? 'Failed to load invitations.');
+    } finally {
+      setInvitesLoading(false);
+    }
   }, [organizationId]);
 
   useEffect(() => { fetchPendingInvites(); }, [fetchPendingInvites]);
@@ -421,6 +434,12 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
                   <tr>
                     <td colSpan={isOwner ? 4 : 3} className="p-6 text-center text-slate-400">
                       <Loader2 className="w-4 h-4 animate-spin inline-block mr-2" />Loading…
+                    </td>
+                  </tr>
+                ) : invitesError ? (
+                  <tr>
+                    <td colSpan={isOwner ? 4 : 3} className="p-6 text-center text-red-500 text-sm">
+                      <AlertCircle className="w-4 h-4 inline-block mr-1 mb-0.5" />{invitesError}
                     </td>
                   </tr>
                 ) : pendingInvites.length === 0 ? (
