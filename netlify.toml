@@ -3,6 +3,11 @@
   publish = "dist"
   functions = "netlify/functions"
 
+[functions]
+  # Maximum allowed for synchronous functions on Netlify (paid plans).
+  # Keeps local dev from hitting the 30 s lambda-local default too.
+  timeout = 26
+
 [dev]
   command = "npm run dev"
   port = 8888

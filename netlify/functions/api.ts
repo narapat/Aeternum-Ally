@@ -413,71 +413,99 @@ async function generateSustainabilityStatement(
     };
   }
 
-  // Build a numbered list so the AI can mirror it back unambiguously
-  const materialList = materialAssessments
-    .map((a: any, i: number) => {
-      const topicCode = String(a.topic).split(" ")[0]; // "E1", "S1", "G1" etc.
-      return `${i + 1}. topicId="${topicCode}", topicName="${a.topic}", impact="${a.impactDescription}", financial="${a.financialDescription}"`;
-    })
+  const topicSummary = materialAssessments
+    .map((a: any) => `- ${a.topic}: impact: ${a.impactDescription}; financial: ${a.financialDescription}`)
     .join("\n");
 
-  const prompt = `
-    Act as a Sustainability Reporting Officer drafting a "Sustainability Statement" in alignment with ESRS (European Sustainability Reporting Standards) and GRI Standards.
+  // ── Call 1: Header sections (fast — no per-topic content) ──────────────────
+  const headerPrompt = `
+    Act as a Sustainability Reporting Officer drafting a "Sustainability Statement" aligned with ESRS and GRI Standards.
 
     Company: ${profile.name} (${profile.industry})
     Mission: ${profile.mission}
+    Material topics identified:
+    ${topicSummary}
 
-    Material topics identified (one entry per line, exact format to mirror back):
-    ${materialList}
+    Generate ONLY the two header sections below as JSON.
 
-    Task: Generate narrative content for the report in JSON format.
-
-    1. generalDisclosure: Draft a "Basis of Preparation" (ESRS 2 BP-1, BP-2). Explain that this report uses a Double Materiality approach, considering both impact materiality (GRI-aligned) and financial materiality. ~120 words.
-    2. strategyDisclosure: Draft a "Strategy" section (ESRS 2 SBM-3). Summarize how the company's business model interacts with these material impacts and risks. ~150 words.
-    3. topics: Return EXACTLY one entry for EACH material topic listed above, in the same order. For each:
-       - "topicId" MUST be the short code only (e.g. "E1", "S1", "G1") — NEVER the full name.
-       - "topicName" MUST be the full topic string (e.g. "E1 Climate Change").
-       - "disclosureContent" MUST be a multi-paragraph narrative covering Policies (ESRS MDR-P), Actions (MDR-A), and Metrics & Targets (MDR-M). Reference relevant GRI standard numbers (e.g. GRI 305 for climate). 200-300 words minimum per topic. Use plain text with line breaks; no markdown.
-
-    Output JSON structure:
-    {
-      "generalDisclosure": "string",
-      "strategyDisclosure": "string",
-      "topics": [
-        { "topicId": "E1", "topicName": "E1 Climate Change", "disclosureContent": "..." }
-      ]
-    }
+    1. generalDisclosure: "Basis of Preparation" (ESRS 2 BP-1/BP-2). Explain the Double Materiality approach (impact materiality + financial materiality). ~120 words.
+    2. strategyDisclosure: "Strategy & Business Model" (ESRS 2 SBM-3). Summarise how the business model interacts with these material impacts and risks. ~150 words.
   `;
 
-  const response = await ai.models.generateContent({
-    model,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          generalDisclosure: { type: Type.STRING },
-          strategyDisclosure: { type: Type.STRING },
-          topics: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                topicId: { type: Type.STRING },
-                topicName: { type: Type.STRING },
-                disclosureContent: { type: Type.STRING },
-              },
-            },
+  // ── Calls 2…N: One call per topic (run in parallel) ────────────────────────
+  const topicPrompts = materialAssessments.map((a: any) => {
+    const topicCode = String(a.topic).split(" ")[0];
+    return `
+      Act as a Sustainability Reporting Officer drafting topical disclosures aligned with ESRS and GRI Standards.
+
+      Company: ${profile.name} (${profile.industry})
+      Topic: ${a.topic} (code: "${topicCode}")
+      Impact description: ${a.impactDescription}
+      Financial description: ${a.financialDescription}
+
+      Write a structured narrative disclosure for this single topic as JSON with:
+      - topicId: the short code only — "${topicCode}"
+      - topicName: the full string — "${a.topic}"
+      - disclosureContent: 200-300 word multi-paragraph narrative covering:
+          • Policies (ESRS MDR-P)
+          • Actions & Resources (MDR-A)
+          • Metrics & Targets (MDR-M)
+        Reference the relevant GRI Standard number (e.g. GRI 305 for climate, GRI 303 for water).
+        Use plain text with line breaks between paragraphs; no markdown.
+    `;
+  });
+
+  // Fire all calls in parallel
+  const [headerResp, ...topicResps] = await Promise.all([
+    ai.models.generateContent({
+      model,
+      contents: headerPrompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            generalDisclosure: { type: Type.STRING },
+            strategyDisclosure: { type: Type.STRING },
           },
         },
       },
-    },
-  });
+    }),
+    ...topicPrompts.map((prompt: string) =>
+      ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              topicId: { type: Type.STRING },
+              topicName: { type: Type.STRING },
+              disclosureContent: { type: Type.STRING },
+            },
+          },
+        },
+      })
+    ),
+  ]);
+
+  const header = JSON.parse(headerResp.text || "{}");
+  const topics = topicResps.map((r: any) => JSON.parse(r.text || "{}"));
+
+  // Sum token usage across all calls
+  const allResps = [headerResp, ...topicResps];
+  const inputTokens = allResps.reduce((sum: number, r: any) => sum + Number(r.usageMetadata?.promptTokenCount ?? 0), 0);
+  const outputTokens = allResps.reduce((sum: number, r: any) => sum + Number(r.usageMetadata?.candidatesTokenCount ?? r.usageMetadata?.responseTokenCount ?? 0), 0);
 
   return {
-    result: JSON.parse(response.text || "{}"),
-    ...extractTokens(response),
+    result: {
+      generalDisclosure: header.generalDisclosure ?? "",
+      strategyDisclosure: header.strategyDisclosure ?? "",
+      topics,
+    },
+    inputTokens,
+    outputTokens,
   };
 }
 
