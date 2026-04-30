@@ -127,10 +127,7 @@ export interface GeneratedStatement {
 export const generateSustainabilityStatement = async (
   profile: CompanyProfile,
   materialAssessments: AssessmentData[]
-) => {
-  try {
-    return await callApi("generateSustainabilityStatement", { profile, materialAssessments });
-  } catch (error) {
-    return null;
-  }
+): Promise<GeneratedStatement> => {
+  // Re-throws so the caller can show a real error message instead of a silent null.
+  return await callApi("generateSustainabilityStatement", { profile, materialAssessments });
 };
