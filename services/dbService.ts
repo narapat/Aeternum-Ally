@@ -7,7 +7,173 @@ import type {
   ESRSTopic,
   KPI,
   BSCPerspective,
+  Organization,
+  OrgMember,
+  OrgRole,
 } from "../types";
+
+// =================================================================
+// GENERIC SINGLETON  (one row per org — used by useOrgData hook)
+// =================================================================
+
+export async function fetchSingleton<T>(
+  table: string,
+  orgId: string,
+  fromDb: (row: any) => T
+): Promise<T | null> {
+  const { data, error } = await supabase
+    .from(table)
+    .select("*")
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? fromDb(data) : null;
+}
+
+export async function upsertSingleton(
+  table: string,
+  orgId: string,
+  payload: Record<string, any>
+): Promise<void> {
+  const { error } = await supabase
+    .from(table)
+    .upsert({ ...payload, organization_id: orgId }, { onConflict: "organization_id" });
+  if (error) throw error;
+}
+
+// =================================================================
+// ORGANIZATION & MEMBERSHIP
+// =================================================================
+
+export async function fetchMembership(
+  userId: string
+): Promise<{ organization_id: string; role: OrgRole } | null> {
+  const { data, error } = await supabase
+    .from("organization_members")
+    .select("organization_id, role")
+    .eq("user_id", userId)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data as { organization_id: string; role: OrgRole } | null;
+}
+
+export async function fetchOrganization(orgId: string): Promise<Organization> {
+  const { data, error } = await supabase
+    .from("organizations")
+    .select("*")
+    .eq("id", orgId)
+    .single();
+  if (error) throw error;
+  return data as Organization;
+}
+
+export async function fetchOrgMembers(orgId: string): Promise<OrgMember[]> {
+  const { data, error } = await supabase
+    .from("organization_members")
+    .select("*")
+    .eq("organization_id", orgId)
+    .order("joined_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as OrgMember[];
+}
+
+export async function removeMember(memberId: string): Promise<void> {
+  const { error } = await supabase
+    .from("organization_members")
+    .delete()
+    .eq("id", memberId);
+  if (error) throw error;
+}
+
+export async function updateMemberRole(memberId: string, role: OrgRole): Promise<void> {
+  const { error } = await supabase
+    .from("organization_members")
+    .update({ role })
+    .eq("id", memberId);
+  if (error) throw error;
+}
+
+export async function createOrganizationWithOwner(companyName: string): Promise<void> {
+  const { error } = await supabase.rpc("create_organization_with_owner", {
+    p_company_name: companyName,
+  });
+  if (error) throw error;
+}
+
+export async function lookupPendingInvite(
+  email: string
+): Promise<{ id: string; organization_id: string } | null> {
+  const { data, error } = await supabase
+    .from("organization_invites")
+    .select("id, organization_id")
+    .eq("email", email.toLowerCase())
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data as { id: string; organization_id: string } | null;
+}
+
+export async function cancelInvite(inviteId: string): Promise<void> {
+  const { error } = await supabase
+    .from("organization_invites")
+    .delete()
+    .eq("id", inviteId);
+  if (error) throw error;
+}
+
+// =================================================================
+// AI SETTINGS & USAGE LOG
+// =================================================================
+
+export interface AiUsageRow {
+  id: string;
+  user_email: string | null;
+  action: string;
+  provider: string;
+  model: string;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  duration_ms: number | null;
+  success: boolean;
+  estimated_cost_usd: number | null;
+  created_at: string;
+}
+
+export async function fetchAiSettings(
+  orgId: string
+): Promise<{ model: string } | null> {
+  const { data, error } = await supabase
+    .from("organization_ai_settings")
+    .select("model")
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (error) throw error;
+  return data as { model: string } | null;
+}
+
+export async function upsertAiSettings(orgId: string, model: string): Promise<void> {
+  const { error } = await supabase
+    .from("organization_ai_settings")
+    .upsert({ organization_id: orgId, model }, { onConflict: "organization_id" });
+  if (error) throw error;
+}
+
+export async function fetchAiUsageLog(
+  orgId: string,
+  limit = 500
+): Promise<AiUsageRow[]> {
+  const { data, error } = await supabase
+    .from("ai_usage_log")
+    .select("*")
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as AiUsageRow[];
+}
 
 // =================================================================
 // COMPANY PROFILE  (1 row per org)

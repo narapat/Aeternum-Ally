@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
+import { fetchSingleton, upsertSingleton } from "../services/dbService";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -62,22 +62,17 @@ export function useOrgData<T>({
     let cancelled = false;
     setIsLoading(true);
 
-    supabase
-      .from(table)
-      .select("*")
-      .eq("organization_id", orgId)
-      .maybeSingle()
-      .then(({ data: row, error }) => {
+    fetchSingleton(table, orgId, fromDb)
+      .then((value) => {
         if (cancelled) return;
-        if (error) {
-          setErrorMessage(error.message);
-        } else if (row) {
-          setLocalData(fromDb(row));
-        } else {
-          // no row yet — keep defaultValue
-        }
+        if (value !== null) setLocalData(value);
         setIsDirty(false);
         setSaveStatus("idle");
+        setIsLoading(false);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setErrorMessage(error.message);
         setIsLoading(false);
       });
 
@@ -100,12 +95,9 @@ export function useOrgData<T>({
     setSaveStatus("saving");
     setErrorMessage(null);
 
-    const payload = { ...toDb(dataRef.current), organization_id: currentOrgId };
-    const { error } = await supabase
-      .from(table)
-      .upsert(payload, { onConflict: "organization_id" });
-
-    if (error) {
+    try {
+      await upsertSingleton(table, currentOrgId, toDb(dataRef.current));
+    } catch (error: any) {
       setSaveStatus("error");
       setErrorMessage(error.message);
       return;

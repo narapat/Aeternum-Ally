@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Building2, Users, Loader2, AlertCircle, CheckCircle2, ArrowLeft } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import { lookupPendingInvite, createOrganizationWithOwner } from "../services/dbService";
 
 interface Props {
   userEmail: string;
@@ -44,18 +45,11 @@ const OrgSetupScreen: React.FC<Props> = ({ userEmail, onComplete, onSignOut }) =
       }
 
       // Auto-lookup: find a pending invite matching this email
-      const { data: invite, error: lookupErr } = await supabase
-        .from("organization_invites")
-        .select("id, organization_id")
-        .eq("email", userEmail.toLowerCase())
-        .gt("expires_at", new Date().toISOString())
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (lookupErr) {
+      let invite: { id: string; organization_id: string } | null = null;
+      try {
+        invite = await lookupPendingInvite(userEmail);
+      } catch (lookupErr: any) {
         console.error("Invite lookup error:", lookupErr);
-        // Surface the error so the user sees it instead of a confusing choice screen
         setError(`Could not check your invitation: ${lookupErr.message}`);
         setMode("join");
         return;
@@ -118,10 +112,7 @@ const OrgSetupScreen: React.FC<Props> = ({ userEmail, onComplete, onSignOut }) =
     setIsLoading(true);
     setError(null);
     try {
-      const { error: rpcErr } = await supabase.rpc("create_organization_with_owner", {
-        p_company_name: companyName.trim(),
-      });
-      if (rpcErr) throw rpcErr;
+      await createOrganizationWithOwner(companyName.trim());
       onComplete();
     } catch (e: any) {
       setError(e?.message ?? "Failed to create organization. Please try again.");

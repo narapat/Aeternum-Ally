@@ -4,7 +4,7 @@ import {
   TrendingUp, DollarSign, Hash,
 } from "lucide-react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
-import { supabase } from "../lib/supabaseClient";
+import { fetchAiSettings, upsertAiSettings, fetchAiUsageLog, type AiUsageRow } from "../services/dbService";
 import type { OrgRole } from "../types";
 
 interface Props {
@@ -12,19 +12,6 @@ interface Props {
   currentUserRole: OrgRole | null;
 }
 
-interface UsageRow {
-  id: string;
-  user_email: string | null;
-  action: string;
-  provider: string;
-  model: string;
-  input_tokens: number | null;
-  output_tokens: number | null;
-  duration_ms: number | null;
-  success: boolean;
-  estimated_cost_usd: number | null;
-  created_at: string;
-}
 
 const MODELS: { id: string; label: string; tagline: string; icon: React.ReactNode }[] = [
   {
@@ -74,7 +61,7 @@ const AIUsagePanel: React.FC<Props> = ({ organizationId, currentUserRole }) => {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saved">("idle");
 
-  const [usage, setUsage] = useState<UsageRow[]>([]);
+  const [usage, setUsage] = useState<AiUsageRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Fetch settings + recent usage on mount
@@ -83,27 +70,18 @@ const AIUsagePanel: React.FC<Props> = ({ organizationId, currentUserRole }) => {
     setIsLoading(true);
 
     Promise.all([
-      supabase
-        .from("organization_ai_settings")
-        .select("model")
-        .eq("organization_id", organizationId)
-        .maybeSingle(),
-      supabase
-        .from("ai_usage_log")
-        .select("*")
-        .eq("organization_id", organizationId)
-        .order("created_at", { ascending: false })
-        .limit(500), // last 500 calls is plenty for a 30-day chart + table
-    ]).then(([settingsResp, usageResp]) => {
+      fetchAiSettings(organizationId),
+      fetchAiUsageLog(organizationId, 500),
+    ]).then(([settings, log]) => {
       if (cancelled) return;
-      if (settingsResp.data?.model) {
-        setModel(settingsResp.data.model);
-        setSavedModel(settingsResp.data.model);
+      if (settings?.model) {
+        setModel(settings.model);
+        setSavedModel(settings.model);
       }
-      if (usageResp.data) {
-        setUsage(usageResp.data as UsageRow[]);
-      }
+      setUsage(log);
       setIsLoading(false);
+    }).catch(() => {
+      if (!cancelled) setIsLoading(false);
     });
 
     return () => {
@@ -116,22 +94,16 @@ const AIUsagePanel: React.FC<Props> = ({ organizationId, currentUserRole }) => {
   const handleSaveModel = async () => {
     setIsSaving(true);
     setSaveError(null);
-
-    const { error } = await supabase
-      .from("organization_ai_settings")
-      .upsert(
-        { organization_id: organizationId, model },
-        { onConflict: "organization_id" }
-      );
-
-    setIsSaving(false);
-    if (error) {
+    try {
+      await upsertAiSettings(organizationId, model);
+      setSavedModel(model);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    } catch (error: any) {
       setSaveError(error.message);
-      return;
+    } finally {
+      setIsSaving(false);
     }
-    setSavedModel(model);
-    setSaveStatus("saved");
-    setTimeout(() => setSaveStatus("idle"), 3000);
   };
 
   // Derived stats
