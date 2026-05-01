@@ -1,4 +1,4 @@
-<!-- Version: 1.0.0 — Last updated: 2026-05-01 -->
+<!-- Version: 1.1.0 — Last updated: 2026-05-01 -->
 
 # Tech Stack & Deployment
 
@@ -21,7 +21,7 @@
         └─
 ```
 
-The browser talks to Supabase directly for most reads/writes (RLS enforces tenant isolation). Netlify Functions are used only for operations that require the **service role** (bypassing RLS): invitations, accepting invites, and proxying Gemini calls so the API key never reaches the client.
+The browser talks to Supabase for most reads/writes (RLS enforces tenant isolation). All database access from the frontend goes through `services/dbService.ts` — components and hooks never call the Supabase client directly. Netlify Functions are used only for operations that require the **service role** (bypassing RLS): invitations, accepting invites, and proxying Gemini calls so the API key never reaches the client.
 
 ---
 
@@ -45,10 +45,12 @@ components/    React UI components (one per feature screen)
 hooks/         Auth + per-org data hooks
                - useAuth          — Supabase session + sign-in/out
                - useOrganization  — current-org context, role, switch
-               - useOrgData       — loads & mutates all org-scoped tables
-                                    (canvas, SWOT, assessments, KPIs, profile)
-lib/           Supabase client singleton
-services/      dbService (CRUD wrappers), geminiService (AI call helpers)
+               - useOrgData       — loads & mutates all org-scoped singleton tables
+lib/           Supabase client singleton (imported only by dbService and auth hooks)
+services/      dbService  — single source of all DB access: CRUD wrappers,
+                            data mappers (fromDb/toDb), org/member/AI helpers.
+                            No component or hook calls supabase.from() directly.
+               geminiService — AI call helpers (proxied via Netlify Functions)
 ```
 
 ---
