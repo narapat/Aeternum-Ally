@@ -44,7 +44,7 @@ const OrgSetupScreen: React.FC<Props> = ({ userEmail, onComplete, onSignOut }) =
       }
 
       // Auto-lookup: find a pending invite matching this email
-      const { data: invite } = await supabase
+      const { data: invite, error: lookupErr } = await supabase
         .from("organization_invites")
         .select("id, organization_id")
         .eq("email", userEmail.toLowerCase())
@@ -52,6 +52,14 @@ const OrgSetupScreen: React.FC<Props> = ({ userEmail, onComplete, onSignOut }) =
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+
+      if (lookupErr) {
+        console.error("Invite lookup error:", lookupErr);
+        // Surface the error so the user sees it instead of a confusing choice screen
+        setError(`Could not check your invitation: ${lookupErr.message}`);
+        setMode("join");
+        return;
+      }
 
       if (invite) {
         // Company name is returned by accept-invite (service role can read it).

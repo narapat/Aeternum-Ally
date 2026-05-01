@@ -33,26 +33,34 @@ async function sendInviteEmail(
   inviteToken: string,
   companyName: string
 ): Promise<{ link: string | null }> {
-  const redirectTo = `${appUrl}?invite_token=${inviteToken}`;
+  // Path 1 uses the full token URL so new users land with the token in the URL.
+  // Paths 2 & 3 use the base URL only — auto-join is email-based so the token
+  // in the redirect URL is not required, and Supabase rejects URLs with query
+  // params that aren't explicitly listed in the allowed-redirects config.
+  const redirectWithToken = `${appUrl}?invite_token=${inviteToken}`;
+  const redirectBase = appUrl;
   const data = { company_name: companyName, app_name: "Aeternum Ally" };
 
   // Path 1: new users — creates account + sends invite email via Supabase template.
   try {
-    const { error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo, data });
+    const { error } = await admin.auth.admin.inviteUserByEmail(email, {
+      redirectTo: redirectWithToken,
+      data,
+    });
     if (!error) return { link: null };
     console.warn("inviteUserByEmail error:", error.message);
   } catch (e: any) {
     console.warn("inviteUserByEmail threw:", e?.message ?? e);
   }
 
-  // Path 2: existing users — sends a magic-link email that redirects to our app.
-  // signInWithOtp actually delivers an email, unlike generateLink which only
-  // returns a URL.
+  // Path 2: existing users — sends a magic-link email to their inbox.
+  // Use the base app URL (no query params) so it passes Supabase redirect validation.
+  // Auto-join matches the user by email after they authenticate, no token needed.
   try {
     const { error } = await admin.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: redirectTo,
+        emailRedirectTo: redirectBase,
         shouldCreateUser: false,
       },
     });
@@ -68,7 +76,7 @@ async function sendInviteEmail(
     const { data: linkData, error } = await admin.auth.admin.generateLink({
       type: "magiclink",
       email,
-      options: { redirectTo },
+      options: { redirectTo: redirectBase },
     });
     if (!error) return { link: linkData?.properties?.action_link ?? null };
   } catch (e: any) {
@@ -214,11 +222,15 @@ const handler = async (event: any) => {
     return json(400, { error: "Invalid role. Must be Admin, Manager, or Consultant." });
   }
 
+  // Always normalise to lowercase so the OrgSetupScreen lookup (case-sensitive
+  // .eq) matches the stored value, and the RLS policy (which uses lower()) stays consistent.
+  const normalizedEmail = email.trim().toLowerCase();
+
   const { data: existingMember } = await admin
     .from("organization_members")
     .select("id")
     .eq("organization_id", organization_id)
-    .eq("email", email)
+    .eq("email", normalizedEmail)
     .maybeSingle();
   if (existingMember) {
     return json(409, { error: "This person is already a member of your team." });
@@ -228,7 +240,7 @@ const handler = async (event: any) => {
     .from("organization_invites")
     .select("id")
     .eq("organization_id", organization_id)
-    .eq("email", email)
+    .eq("email", normalizedEmail)
     .maybeSingle();
   if (existingInvite) {
     return json(409, { error: "An invitation has already been sent to this email. Use Resend to send a new link." });
@@ -236,7 +248,7 @@ const handler = async (event: any) => {
 
   const { data: invite, error: insertErr } = await admin
     .from("organization_invites")
-    .insert({ organization_id, email, role, invited_by: inviter.id })
+    .insert({ organization_id, email: normalizedEmail, role, invited_by: inviter.id })
     .select()
     .single();
   if (insertErr || !invite) {
@@ -250,7 +262,7 @@ const handler = async (event: any) => {
     .maybeSingle();
   const companyName = profile?.name ?? "your team";
 
-  const { link } = await sendInviteEmail(admin, email, invite.id, companyName);
+  const { link } = await sendInviteEmail(admin, normalizedEmail, invite.id, companyName);
 
   return json(200, {
     success: true,

@@ -224,10 +224,12 @@ CREATE POLICY "admins_manage_invites" ON organization_invites
   );
 
 -- Invites: an authenticated user can read their OWN pending invite
--- (needed for auto-join on sign-in before they are a member of any org)
+-- (needed for auto-join on sign-in before they are a member of any org).
+-- Uses auth.jwt() to read email from the JWT — querying auth.users directly
+-- fails because the `authenticated` role has no SELECT on auth.users.
 CREATE POLICY "invitee_read_own_invite" ON organization_invites
   FOR SELECT USING (
-    lower(email) = lower((SELECT email FROM auth.users WHERE id = auth.uid()))
+    lower(email) = lower(auth.jwt() ->> 'email')
   );
 
 -- Data tables: all members can read; Owner/Admin/Manager can write
