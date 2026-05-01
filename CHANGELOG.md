@@ -19,6 +19,7 @@ This project does not yet use semantic versioning. Entries are dated.
   `createOrganizationWithOwner`, `lookupPendingInvite`, `fetchAiSettings`,
   `upsertAiSettings`, `fetchAiUsageLog`. `AiUsageRow` type moved from
   `AIUsagePanel.tsx` to `dbService.ts`.
+Changes merged to `main` but not yet tagged for a release.
 
 ---
 
