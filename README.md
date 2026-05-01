@@ -73,17 +73,10 @@ Generates a report compliant with **ESRS 2 (General Disclosures)** and **Topical
 
 ---
 
-## 🛠 Tech Stack
-*   **Frontend:** React 19, TypeScript, Tailwind CSS
-*   **AI Engine:** Google Gemini 2.5 Flash (via `@google/genai` SDK)
-*   **Visualizations:** Recharts
-*   **Icons:** Lucide React
+## 📚 Documentation
 
-## 📦 Setup
-1.  Clone the repository.
-2.  Install dependencies: `npm install`
-3.  Set your API Key: `export API_KEY="your_gemini_api_key"`
-4.  Run the app: `npm start`
+*   **[Tech Stack](./docs/TECH_STACK.md)** — Architecture, frontend/backend stack, database schema, RLS, security model
+*   **[Deployment](./docs/DEPLOYMENT.md)** — Setup, environment variables, deploy flow, schema migrations, local development, troubleshooting
 
 ---
 
