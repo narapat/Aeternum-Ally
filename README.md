@@ -1,3 +1,5 @@
+<!-- Version: 1.0.0 — Last updated: 2026-05-01 -->
+
 # Aeternum Ally 🌿
 > **AI-Powered Sustainability Management & Reporting for SMEs**
 
@@ -73,11 +75,26 @@ Generates a report compliant with **ESRS 2 (General Disclosures)** and **Topical
 
 ---
 
+## 🛠️ Quick start
+
+Prerequisites: **Node 20+**, **npm**, a **Supabase** project, a **Google Gemini API key**.
+
+```bash
+git clone <this-repo>
+cd Aeternum-Ally
+cp .env.example .env          # then fill in the 5 required vars
+npm install
+npm run dev:netlify           # Vite + Netlify Functions on http://localhost:8888
+```
+
+Full setup (Supabase project, schema, migrations, Netlify deploy) is in [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md).
+
+> ⚠️ Always use `npm run dev:netlify` (not `npm run dev`) when working on API code — the latter does not expose `/.netlify/functions/*`.
+
+---
+
 ## 📚 Documentation
 
 *   **[Tech Stack](./docs/TECH_STACK.md)** — Architecture, frontend/backend stack, database schema, RLS, security model
 *   **[Deployment](./docs/DEPLOYMENT.md)** — Setup, environment variables, deploy flow, schema migrations, local development, troubleshooting
 
----
-
-*Built for the Google Gemini Developer Competition.*
