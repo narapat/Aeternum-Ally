@@ -1,3 +1,5 @@
+<!-- Version: 1.0.0 — Last updated: 2026-05-01 -->
+
 # Deployment Guide
 
 Step-by-step guide for deploying Aeternum Ally. See [`TECH_STACK.md`](./TECH_STACK.md) for architecture context.
@@ -22,7 +24,7 @@ Step-by-step guide for deploying Aeternum Ally. See [`TECH_STACK.md`](./TECH_STA
 | Env | Frontend URL | Branch | Netlify site | Supabase project |
 |---|---|---|---|---|
 | Production | _(your prod domain)_ | `main` | Production site | Production project |
-| Demo / Test | `demo.aeternumally.com` | `main` (separate site) | Demo site | Test project (`tlyuhlyrkztypqdgixze`) |
+| Demo / Test | `demo.aeternumally.com` | `main` (separate site) | Demo site | _(separate Supabase project — ID stored in Netlify env vars only)_ |
 
 Branch / preview deploys inherit env vars from their parent site.
 
@@ -126,6 +128,18 @@ For each PR that touches `supabase/schema.sql` or adds a `supabase/migrations/*.
 
 > ⚠️ Run schema migrations **before** merging the code PR if the new code depends on the schema change. Otherwise the deploy will fail at runtime.
 
+#### Rollback procedure
+
+There is no automatic rollback. If a migration breaks production:
+
+1. **Revert the code** first — push a revert PR so the new app no longer expects the new schema.
+2. **Write a hand-rolled rollback SQL** (e.g. `migrations/00X_rollback_<thing>.sql`) that undoes the failed change. Examples: `DROP POLICY`, `DROP COLUMN`, restore the previous function body.
+3. Run the rollback SQL via Supabase Dashboard → SQL Editor.
+4. Verify the schema matches the prior known-good state and the app is healthy.
+5. Restore from a Supabase backup only as a last resort — it loses all data written since the snapshot.
+
+Always test migrations on the demo/test environment before applying them to production.
+
 ### Env-var changes
 
 After updating env vars in Netlify, you must **redeploy** for them to take effect:
@@ -144,6 +158,8 @@ npm run dev:netlify     # runs Vite + Netlify Functions on port 8888
 ```
 
 `npm run dev` (Vite alone) **won't** expose `/.netlify/functions/*` — always use `dev:netlify` when developing API-touching code.
+
+> ℹ️ The `[dev]` block in `netlify.toml` declares `command = "npm run dev"` because Netlify CLI runs Vite as a child process and proxies it on port 8888. The script you invoke from your shell is still `npm run dev:netlify` (which is `netlify dev` under the hood). Don't run `npm run dev` directly when developing functions.
 
 To test the invite flow locally, the Supabase project's **Site URL / Redirect URLs** must include `http://localhost:8888`.
 
@@ -183,18 +199,40 @@ Netlify Functions have a hard 30s timeout. If a Gemini call exceeds it:
 ### Build fails with "Configuration property functions.timeout must be an object"
 The `[functions] timeout = N` syntax is invalid in `netlify.toml`. Remove it — function timeouts can only be configured by upgrading the Netlify plan.
 
+### Supabase email quota suddenly exhausted / abuse on `request_resend`
+The unauthenticated `request_resend` action on `invite.ts` has **no rate limit** in the current build. If you see a spike in Supabase email sends or quota errors:
+1. Temporarily disable the action by short-circuiting the `if (action === "request_resend")` block to return 200 without sending.
+2. Add a Netlify edge rate-limit rule on `/.netlify/functions/invite` keyed on IP.
+3. Track the long-term fix in the [hardening backlog](./TECH_STACK.md#known-gaps--hardening-backlog).
+
 ---
 
 ## Production hardening checklist
 
-Before opening to real customers:
+Before opening to real customers, work through this list. See [`TECH_STACK.md`](./TECH_STACK.md#known-gaps--hardening-backlog) for the threat-model rationale behind the security items.
 
+### Infrastructure
 - [ ] SMTP configured in Supabase for branded, reliable email delivery
-- [ ] Tailwind installed as a PostCSS plugin (currently CDN — see browser console warning)
 - [ ] Custom domain with HTTPS (Netlify auto-provisions Let's Encrypt)
 - [ ] Supabase project on a paid tier (free tier pauses after inactivity)
-- [ ] Database backups enabled in Supabase
-- [ ] Open Dependabot alerts triaged (currently 3 moderate, all in dev/transitive deps)
+- [ ] Database backups enabled and **restore tested** at least once
 - [ ] Error monitoring (Sentry / similar) wired up
 - [ ] Analytics (PostHog / Plausible / GA) added
 - [ ] Privacy policy + Terms of Service linked from the app
+
+### Security (functions)
+- [ ] **CORS:** add `Access-Control-Allow-Origin` (allowlist `VITE_APP_URL` only) + `OPTIONS` pre-flight on all three Netlify Functions
+- [ ] **Rate limit `request_resend`** (Netlify edge rule or in-function token bucket) to prevent email-quota drain
+- [ ] **HTTP method guard** on `invite.ts` (currently missing — `accept-invite.ts` has it)
+- [ ] **AI model allowlist** — validate `organization_ai_settings.model` server-side against the `PRICING` map in `api.ts` before calling Gemini
+- [ ] **Prompt-injection hardening** — wrap user-supplied fields (company description, topic names) in delimited sections in `api.ts` prompt templates
+
+### Security (frontend / Supabase)
+- [ ] Tailwind installed as a PostCSS plugin (currently CDN — runtime third-party dependency, no SRI)
+- [ ] CSP header configured via Netlify `_headers` file
+- [ ] Supabase Auth password policy reviewed (min length, MFA where applicable)
+- [ ] Session token lifetime tuned to your risk tolerance (Supabase Auth → Settings)
+- [ ] **Key rotation runbook** documented for `GEMINI_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY`
+
+### Dependencies
+- [ ] Dependabot / `npm audit` alerts triaged — record the resolution in the PR that closes them (don't leave specifics in this checklist)
