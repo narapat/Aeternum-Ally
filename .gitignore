@@ -27,3 +27,6 @@ dist-ssr
 *.sln
 *.sw?
 .netlify/
+
+# Claude Code local settings
+.claude/
