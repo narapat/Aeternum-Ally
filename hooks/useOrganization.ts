@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
+import { fetchMembership, fetchOrganization, fetchOrgMembers } from "../services/dbService";
 import type { Organization, OrgMember, OrgRole } from "../types";
 
 interface UseOrganizationResult {
@@ -31,15 +31,7 @@ export function useOrganization(userId: string | undefined): UseOrganizationResu
     setError(null);
 
     try {
-      // 1. Get the user's first membership (MVP: one user = one org)
-      const { data: membership, error: memErr } = await supabase
-        .from("organization_members")
-        .select("organization_id, role")
-        .eq("user_id", userId)
-        .limit(1)
-        .maybeSingle();
-
-      if (memErr) throw memErr;
+      const membership = await fetchMembership(userId);
 
       if (!membership) {
         // user has no org yet — OrgSetupScreen will handle this
@@ -50,25 +42,14 @@ export function useOrganization(userId: string | undefined): UseOrganizationResu
         return;
       }
 
-      // 2. Org details
-      const { data: org, error: orgErr } = await supabase
-        .from("organizations")
-        .select("*")
-        .eq("id", membership.organization_id)
-        .single();
-      if (orgErr) throw orgErr;
+      const [org, allMembers] = await Promise.all([
+        fetchOrganization(membership.organization_id),
+        fetchOrgMembers(membership.organization_id),
+      ]);
 
-      // 3. All members of that org
-      const { data: allMembers, error: membersErr } = await supabase
-        .from("organization_members")
-        .select("*")
-        .eq("organization_id", membership.organization_id)
-        .order("joined_at", { ascending: true });
-      if (membersErr) throw membersErr;
-
-      setOrganization(org as Organization);
-      setCurrentUserRole(membership.role as OrgRole);
-      setMembers((allMembers ?? []) as OrgMember[]);
+      setOrganization(org);
+      setCurrentUserRole(membership.role);
+      setMembers(allMembers);
     } catch (e: any) {
       setError(e?.message ?? "Failed to load organization");
     } finally {

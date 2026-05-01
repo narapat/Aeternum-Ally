@@ -10,6 +10,7 @@ import {
 import SaveIndicator from './SaveIndicator';
 import type { SaveStatus } from '../hooks/useOrgData';
 import { supabase } from '../lib/supabaseClient';
+import { removeMember, updateMemberRole, cancelInvite } from '../services/dbService';
 import AIUsagePanel from './AIUsagePanel';
 
 interface Props {
@@ -284,15 +285,17 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
 
   const handleDeactivate = async (memberId: string, email: string | null) => {
     if (!window.confirm(`Deactivate access for ${email ?? 'this member'}? They will lose access immediately.`)) return;
-    const { error } = await supabase.from('organization_members').delete().eq('id', memberId);
-    if (error) { alert(`Failed to deactivate: ${error.message}`); return; }
+    try {
+      await removeMember(memberId);
+    } catch (error: any) { alert(`Failed to deactivate: ${error.message}`); return; }
     await onMembersChanged();
   };
 
   const handleCancelInvite = async (inviteId: string, email: string) => {
     if (!window.confirm(`Cancel invitation for ${email}?`)) return;
-    const { error } = await supabase.from('organization_invites').delete().eq('id', inviteId);
-    if (error) { alert(`Failed to cancel invitation: ${error.message}`); return; }
+    try {
+      await cancelInvite(inviteId);
+    } catch (error: any) { alert(`Failed to cancel invitation: ${error.message}`); return; }
     await fetchPendingInvites();
   };
 
@@ -329,8 +332,9 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
   };
 
   const handleRoleChange = async (memberId: string, newRole: OrgRole) => {
-    const { error } = await supabase.from('organization_members').update({ role: newRole }).eq('id', memberId);
-    if (error) { alert(`Failed to update role: ${error.message}`); return; }
+    try {
+      await updateMemberRole(memberId, newRole);
+    } catch (error: any) { alert(`Failed to update role: ${error.message}`); return; }
     await onMembersChanged();
   };
 

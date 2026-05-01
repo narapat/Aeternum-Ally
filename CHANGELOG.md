@@ -9,6 +9,16 @@ This project does not yet use semantic versioning. Entries are dated.
 
 ## [Unreleased]
 
+### Changed
+
+- **DB access consolidated into `dbService.ts`** — all `supabase.from()` calls are now
+  routed exclusively through `services/dbService.ts`. Components and hooks no longer
+  import the Supabase client for data operations. New functions added:
+  `fetchSingleton`, `upsertSingleton`, `fetchMembership`, `fetchOrganization`,
+  `fetchOrgMembers`, `removeMember`, `updateMemberRole`, `cancelInvite`,
+  `createOrganizationWithOwner`, `lookupPendingInvite`, `fetchAiSettings`,
+  `upsertAiSettings`, `fetchAiUsageLog`. `AiUsageRow` type moved from
+  `AIUsagePanel.tsx` to `dbService.ts`.
 Changes merged to `main` but not yet tagged for a release.
 
 ---
