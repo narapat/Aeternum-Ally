@@ -70,7 +70,9 @@ Generates a report compliant with **ESRS 2 (General Disclosures)** and **Topical
 *   **Feature:** Includes a **GRI Content Index** table, mapping ESRS topics to GRI standards for interoperability.
 *   **Output:** A clean, formatted document ready for export to PDF.
 <img width="1440" height="697" alt="image" src="https://github.com/user-attachments/assets/1a9b799e-b641-4c55-9bc4-c236b76d7381" />
+
 <img width="1440" height="699" alt="image" src="https://github.com/user-attachments/assets/11a8b0c1-8c0f-461a-a3ea-4426d4717457" />
+
 <img width="1440" height="701" alt="image" src="https://github.com/user-attachments/assets/5c1c3168-a773-48d8-b301-af11da7216e4" />
 
 ---
@@ -99,10 +101,19 @@ Full setup (Supabase project, schema, migrations, Netlify deploy) is in [`docs/D
 *   **[Deployment](./docs/DEPLOYMENT.md)** — Setup, environment variables, deploy flow, schema migrations, local development, troubleshooting
 
 ---
+## Live Demo
+You can try the live version of AeternumAlly at: [demo.aeternumally.com](https://demo.aeternumally.com)
+
+> **Note on AI Usage:** As this is a prototype, we currently have a limited AI quota. If the system is unresponsive or returns a quota error, it might be due to high traffic. We appreciate your patience.
+
+---
+## ⚠️ Known Limitations
+- **AI Quota:** The live demo uses a shared API quota. During peak times, you may encounter rate limiting.
+- **Self-Hosting:** For heavy usage, we recommend self-hosting AeternumAlly and providing your own API keys (refer to [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md).).
+
+---
 
 ## 📄 License
-
-## License
 
 This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. 
 
