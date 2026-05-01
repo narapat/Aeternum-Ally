@@ -98,3 +98,21 @@ Full setup (Supabase project, schema, migrations, Netlify deploy) is in [`docs/D
 *   **[Tech Stack](./docs/TECH_STACK.md)** — Architecture, frontend/backend stack, database schema, RLS, security model
 *   **[Deployment](./docs/DEPLOYMENT.md)** — Setup, environment variables, deploy flow, schema migrations, local development, troubleshooting
 
+---
+
+## 📄 License
+
+Aeternum Ally is **source-available** under the [Business Source License 1.1](./LICENSE).
+
+**You may:**
+- Self-host it for your own organisation's internal use.
+- Run a single-tenant deployment on behalf of one identifiable end client (e.g. a consulting engagement).
+- Read, modify, and contribute back to the source.
+
+**You may not:**
+- Operate Aeternum Ally as a multi-tenant hosted service.
+- Provide automated provisioning of Aeternum Ally instances to third parties.
+- Otherwise offer the software as a competing SaaS product.
+
+Each release automatically converts to **Apache License 2.0** four years after its publication date. See [LICENSE](./LICENSE) for the precise terms.
+
