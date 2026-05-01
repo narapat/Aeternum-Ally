@@ -102,17 +102,13 @@ Full setup (Supabase project, schema, migrations, Netlify deploy) is in [`docs/D
 
 ## 📄 License
 
-Aeternum Ally is **source-available** under the [Business Source License 1.1](./LICENSE).
+## License
 
-**You may:**
-- Self-host it for your own organisation's internal use.
-- Run a single-tenant deployment on behalf of one identifiable end client (e.g. a consulting engagement).
-- Read, modify, and contribute back to the source.
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. 
 
-**You may not:**
-- Operate Aeternum Ally as a multi-tenant hosted service.
-- Provide automated provisioning of Aeternum Ally instances to third parties.
-- Otherwise offer the software as a competing SaaS product.
+### Why AGPL?
+We believe in open collaboration. If you use this software to provide a network service (SaaS), you must contribute back by making your source code available under the same license. 
 
-Each release automatically converts to **Apache License 2.0** four years after its publication date. See [LICENSE](./LICENSE) for the precise terms.
+For commercial inquiries or alternative licensing, please contact us at [aeternumally.com](https://aeternumally.com).
+See [LICENSE](./LICENSE) for the precise terms.
 
