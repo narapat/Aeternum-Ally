@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Building2, Users, Loader2, AlertCircle, CheckCircle2, ArrowLeft } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { lookupPendingInvite, createOrganizationWithOwner } from "../services/dbService";
+import { logError } from "../services/errorLogService";
 
 interface Props {
   userEmail: string;
@@ -101,6 +102,7 @@ const OrgSetupScreen: React.FC<Props> = ({ userEmail, onComplete, onSignOut }) =
     } catch (e: any) {
       setError(e?.message ?? "Failed to accept invitation.");
       setMode("join");
+      logError({ context: "accept-invite", action: "accept_invite", error: e, metadata: { invite_token: token } });
     } finally {
       setIsLoading(false);
     }
@@ -116,6 +118,7 @@ const OrgSetupScreen: React.FC<Props> = ({ userEmail, onComplete, onSignOut }) =
       onComplete();
     } catch (e: any) {
       setError(e?.message ?? "Failed to create organization. Please try again.");
+      logError({ context: "org-setup", action: "create_org", error: e, metadata: { company_name: companyName.trim() } });
     } finally {
       setIsLoading(false);
     }

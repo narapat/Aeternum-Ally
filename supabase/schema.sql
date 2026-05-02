@@ -305,6 +305,32 @@ CREATE POLICY "members_read_usage" ON ai_usage_log
   FOR SELECT USING (is_org_member(organization_id));
 -- (No INSERT/UPDATE/DELETE policies — only the server's service role can write)
 
+CREATE TABLE error_log (
+  id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid        REFERENCES organizations(id) ON DELETE SET NULL,
+  user_id         uuid        REFERENCES auth.users(id)   ON DELETE SET NULL,
+  user_email      text,
+  source          text        NOT NULL CHECK (source IN ('server', 'client')),
+  context         text        NOT NULL,
+  action          text,
+  error_message   text        NOT NULL,
+  http_status     int,
+  metadata        jsonb,
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_error_log_org_date    ON error_log (organization_id, created_at DESC);
+CREATE INDEX idx_error_log_context     ON error_log (context, action);
+CREATE INDEX idx_error_log_created_at  ON error_log (created_at DESC);
+
+ALTER TABLE error_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "admins_read_errors" ON error_log
+  FOR SELECT USING (
+    organization_id IS NOT NULL
+    AND user_org_role(organization_id) IN ('Owner', 'Admin')
+  );
+CREATE POLICY "users_insert_errors" ON error_log
+  FOR INSERT WITH CHECK (user_id = auth.uid() OR user_id IS NULL);
+
 -- ============================================================
 -- ATOMIC ORG CREATION RPC
 -- Bypasses RLS only for this scoped flow: a signed-in user

@@ -9,6 +9,26 @@ const json = (statusCode: number, body: unknown) => ({
   body: JSON.stringify(body),
 });
 
+async function logServerError(
+  admin: any,
+  entry: {
+    organization_id?: string | null;
+    user_id?: string | null;
+    user_email?: string | null;
+    context: string;
+    action: string;
+    error_message: string;
+    http_status?: number | null;
+    metadata?: Record<string, unknown> | null;
+  }
+) {
+  try {
+    await admin.from("error_log").insert({ source: "server", ...entry });
+  } catch {
+    // best-effort
+  }
+}
+
 const handler = async (event: any) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
@@ -88,6 +108,15 @@ const handler = async (event: any) => {
       await admin.from("organization_invites").delete().eq("id", invite_token);
       return json(200, { success: true, organization_id: invite.organization_id, company_name: companyName });
     }
+    await logServerError(admin, {
+      organization_id: invite.organization_id,
+      user_id: user.id,
+      user_email: user.email,
+      context: "accept-invite",
+      action: "add_member",
+      error_message: memberErr.message,
+      metadata: { invite_token, role: invite.role },
+    });
     return json(500, { error: memberErr.message });
   }
 

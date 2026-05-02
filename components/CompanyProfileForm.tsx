@@ -11,6 +11,7 @@ import SaveIndicator from './SaveIndicator';
 import type { SaveStatus } from '../hooks/useOrgData';
 import { supabase } from '../lib/supabaseClient';
 import { removeMember, updateMemberRole, cancelInvite } from '../services/dbService';
+import { logError } from '../services/errorLogService';
 import AIUsagePanel from './AIUsagePanel';
 
 interface Props {
@@ -229,6 +230,7 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
   const [pendingInvites, setPendingInvites] = useState<OrgInvite[]>([]);
   const [invitesLoading, setInvitesLoading] = useState(false);
   const [invitesError, setInvitesError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const fetchPendingInvites = useCallback(async () => {
     setInvitesLoading(true);
@@ -285,17 +287,27 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
 
   const handleDeactivate = async (memberId: string, email: string | null) => {
     if (!window.confirm(`Deactivate access for ${email ?? 'this member'}? They will lose access immediately.`)) return;
+    setActionError(null);
     try {
       await removeMember(memberId);
-    } catch (error: any) { alert(`Failed to deactivate: ${error.message}`); return; }
+    } catch (error: any) {
+      setActionError(`Failed to deactivate: ${error.message}`);
+      logError({ context: "member-management", action: "deactivate_member", error, organizationId });
+      return;
+    }
     await onMembersChanged();
   };
 
   const handleCancelInvite = async (inviteId: string, email: string) => {
     if (!window.confirm(`Cancel invitation for ${email}?`)) return;
+    setActionError(null);
     try {
       await cancelInvite(inviteId);
-    } catch (error: any) { alert(`Failed to cancel invitation: ${error.message}`); return; }
+    } catch (error: any) {
+      setActionError(`Failed to cancel invitation: ${error.message}`);
+      logError({ context: "member-management", action: "cancel_invite", error, organizationId });
+      return;
+    }
     await fetchPendingInvites();
   };
 
@@ -325,16 +337,22 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
         alert(`Invitation resent to ${email}. The new link is valid for 1 hour.`);
       }
     } catch (err: any) {
-      alert(err?.message ?? 'Failed to resend invitation.');
+      setActionError(err?.message ?? 'Failed to resend invitation.');
+      logError({ context: "member-management", action: "resend_invite", error: err, organizationId });
     } finally {
       setResendingId(null);
     }
   };
 
   const handleRoleChange = async (memberId: string, newRole: OrgRole) => {
+    setActionError(null);
     try {
       await updateMemberRole(memberId, newRole);
-    } catch (error: any) { alert(`Failed to update role: ${error.message}`); return; }
+    } catch (error: any) {
+      setActionError(`Failed to update role: ${error.message}`);
+      logError({ context: "member-management", action: "update_role", error, organizationId });
+      return;
+    }
     await onMembersChanged();
   };
 
@@ -349,6 +367,12 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
 
   return (
     <div className="space-y-8">
+
+      {actionError && (
+        <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-700 dark:text-red-300">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /> {actionError}
+        </div>
+      )}
 
       {/* ── Invite form ────────────────────────────────────────────── */}
       {canManage && (
