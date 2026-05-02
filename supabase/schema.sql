@@ -292,11 +292,13 @@ CREATE TABLE ai_usage_log (
   duration_ms         int,
   success             boolean NOT NULL DEFAULT true,
   error_message       text,
+  http_status         int,
   estimated_cost_usd  numeric(12, 6),
   created_at          timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_ai_usage_org_date   ON ai_usage_log (organization_id, created_at DESC);
 CREATE INDEX idx_ai_usage_org_action ON ai_usage_log (organization_id, action);
+CREATE INDEX idx_ai_usage_status     ON ai_usage_log (http_status) WHERE http_status IS NOT NULL;
 
 ALTER TABLE ai_usage_log ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "members_read_usage" ON ai_usage_log

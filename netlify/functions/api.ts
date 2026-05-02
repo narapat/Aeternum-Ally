@@ -155,6 +155,7 @@ const handler = async (event: any) => {
       duration_ms: durationMs,
       success,
       error_message: success ? null : errorMessage,
+      http_status: success ? null : upstreamStatus,
       estimated_cost_usd: success ? Number(estimateCost(model, inputTokens, outputTokens).toFixed(6)) : 0,
     });
   } catch (logErr) {
