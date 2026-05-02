@@ -190,7 +190,7 @@ const SwotAnalysisWizard: React.FC<Props> = ({ data, onChange, profile, bmcData,
   );
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
         {/* Responsive Stepper */}
         <div className="mb-8 flex items-center justify-center">
             <div className={`flex items-center ${step >= 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`}>

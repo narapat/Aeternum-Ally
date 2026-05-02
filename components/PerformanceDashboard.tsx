@@ -116,7 +116,7 @@ const StrategyMap: React.FC<{ kpis: KPI[], onEdit: (k: KPI) => void }> = ({ kpis
                                         No KPIs defined yet.
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
                                         {pKpis.map(kpi => (
                                             <StrategyCard key={kpi.id} kpi={kpi} allKpis={kpis} onClick={() => onEdit(kpi)} />
                                         ))}

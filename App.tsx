@@ -420,7 +420,7 @@ const App: React.FC = () => {
                         <button onClick={() => { setIsFormOpen(true); setEditingAssessment(null); }} className="bg-esg-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-esg-700 transition-colors shadow-lg shadow-esg-900/20 w-full sm:w-auto">
                           New Assessment
                         </button>
-                        <div className="mt-12 text-left max-w-5xl mx-auto">
+                        <div className="mt-12 text-left w-full">
                           <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-4 mb-4">
                             <h3 className="font-bold text-slate-800 dark:text-white">Assessment History</h3>
                           </div>
@@ -434,7 +434,7 @@ const App: React.FC = () => {
                         </div>
                       </div>
                     ) : (
-                      <div className="max-w-3xl mx-auto">
+                      <div className="max-w-4xl mx-auto">
                         <AssessmentForm
                           profile={profile.data}
                           onSave={handleSaveAssessment}

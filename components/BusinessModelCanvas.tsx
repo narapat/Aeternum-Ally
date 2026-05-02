@@ -101,7 +101,7 @@ const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, profile, saveSta
 
   // --- Render: Wizard View ---
   const renderWizard = () => (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-5xl mx-auto">
       {/* Progress Bar */}
       <div className="mb-8">
         <div className="flex items-center justify-between text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">

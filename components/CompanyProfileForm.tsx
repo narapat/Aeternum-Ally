@@ -43,7 +43,7 @@ const CompanyProfileForm: React.FC<Props> = ({
   const canManageTeam = currentUserRole === 'Owner' || currentUserRole === 'Admin';
 
   return (
-    <div className="max-w-5xl mx-auto animate-in fade-in duration-500">
+    <div className="w-full animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row justify-between items-start mb-8 gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Company Profile</h2>
