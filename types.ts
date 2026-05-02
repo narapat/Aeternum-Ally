@@ -80,7 +80,15 @@ export interface CompanyProfile {
   isicCode: string; // Standard Industry Classification
   foundingYear: string;
   website: string;
-  address: string;
+  // Structured address (replaces free-text address field)
+  addressStreet: string;
+  addressCity: string;
+  addressState: string;
+  addressPostalCode: string;
+  addressCountry: string;
+  // Contact
+  contactEmail: string;
+  contactPhone: string;
   employeeCount: string; // Micro, Small, Medium
   revenueRange: string;
   description: string; // General Description

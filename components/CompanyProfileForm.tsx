@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { CompanyProfile, OrgMember, OrgRole, OrgInvite } from '../types';
-import { INDUSTRY_SECTORS, ISIC_CODES_GROUPED } from '../constants';
+import { INDUSTRY_SECTORS, ISIC_CODES_GROUPED, COUNTRIES } from '../constants';
 import {
   Building2, MapPin, Globe, Hash, Users, Wallet, Target, Layers, BookOpen,
   UserPlus, Loader2, AlertCircle, Trash2, Copy, CheckCircle2, Sparkles,
-  Clock, XCircle, ShieldOff, RefreshCw
+  Clock, XCircle, ShieldOff, RefreshCw, Mail, Phone
 } from 'lucide-react';
 import SaveIndicator from './SaveIndicator';
 import type { SaveStatus } from '../hooks/useOrgData';
@@ -35,9 +35,23 @@ const CompanyProfileForm: React.FC<Props> = ({
   organizationId, currentUserId, currentUserRole, members, onMembersChanged,
 }) => {
   const [activeTab, setActiveTab] = useState<'general' | 'details' | 'strategy' | 'team' | 'ai'>('general');
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   const handleChange = (field: keyof CompanyProfile, value: string) => {
     onChange({ ...data, [field]: value });
+  };
+
+  const handleEmailChange = (value: string) => {
+    handleChange('contactEmail', value);
+    if (emailError && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) setEmailError(null);
+  };
+
+  const handleEmailBlur = (value: string) => {
+    if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      setEmailError('Please enter a valid email address.');
+    } else {
+      setEmailError(null);
+    }
   };
 
   const canManageTeam = currentUserRole === 'Owner' || currentUserRole === 'Admin';
@@ -79,17 +93,61 @@ const CompanyProfileForm: React.FC<Props> = ({
               <InputField label="Company Name (Registered)" value={data.name} onChange={(v) => handleChange('name', v)} placeholder="e.g. EcoTech Solutions Ltd." fullWidth />
               <InputField label="Registration No. / Tax ID" value={data.taxId} onChange={(v) => handleChange('taxId', v)} placeholder="e.g. 01055640XXXXX" icon={<Hash className="w-4 h-4 text-slate-400" />} />
               <InputField label="Founding Year" value={data.foundingYear} onChange={(v) => handleChange('foundingYear', v)} placeholder="e.g. 2018" type="number" />
+
+              {/* ── Registered Address ── */}
               <div className="md:col-span-2">
-                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Registered Address</label>
-                <div className="relative">
-                  <MapPin className="absolute top-3 left-3 w-5 h-5 text-slate-400" />
-                  <textarea
-                    className="w-full pl-10 p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:ring-2 focus:ring-esg-500 h-24 resize-none"
-                    value={data.address} onChange={(e) => handleChange('address', e.target.value)}
-                    placeholder="Headquarters address..." />
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-slate-400" /> Registered Address
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Street Address</label>
+                    <input className="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:ring-2 focus:ring-esg-500 text-sm"
+                      value={data.addressStreet} onChange={(e) => handleChange('addressStreet', e.target.value)} placeholder="e.g. 555 Green Park Road" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">City</label>
+                    <input className="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:ring-2 focus:ring-esg-500 text-sm"
+                      value={data.addressCity} onChange={(e) => handleChange('addressCity', e.target.value)} placeholder="e.g. Bangkok" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">State / Province</label>
+                    <input className="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:ring-2 focus:ring-esg-500 text-sm"
+                      value={data.addressState} onChange={(e) => handleChange('addressState', e.target.value)} placeholder="e.g. Bangkok" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Postal Code</label>
+                    <input className="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:ring-2 focus:ring-esg-500 text-sm"
+                      value={data.addressPostalCode} onChange={(e) => handleChange('addressPostalCode', e.target.value)} placeholder="e.g. 10140" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Country</label>
+                    <select className="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:ring-2 focus:ring-esg-500 text-sm"
+                      value={data.addressCountry} onChange={(e) => handleChange('addressCountry', e.target.value)}>
+                      <option value="">— Select country —</option>
+                      {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+                    </select>
+                  </div>
                 </div>
               </div>
+
               <InputField label="Website URL" value={data.website} onChange={(v) => handleChange('website', v)} placeholder="https://..." icon={<Globe className="w-4 h-4 text-slate-400" />} fullWidth />
+
+              {/* ── Contact ── */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Contact Email</label>
+                <div className="relative">
+                  <Mail className="absolute top-3 left-3 w-4 h-4 text-slate-400" />
+                  <input type="email"
+                    className={`w-full pl-10 p-2.5 border rounded-lg bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:ring-2 focus:ring-esg-500 ${emailError ? 'border-red-400 dark:border-red-500' : 'border-slate-300 dark:border-slate-600'}`}
+                    value={data.contactEmail}
+                    onChange={(e) => handleEmailChange(e.target.value)}
+                    onBlur={(e) => handleEmailBlur(e.target.value)}
+                    placeholder="e.g. contact@company.com" />
+                </div>
+                {emailError && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{emailError}</p>}
+              </div>
+              <InputField label="Contact Phone" value={data.contactPhone} onChange={(v) => handleChange('contactPhone', v)} placeholder="e.g. +66 2 123 4567" icon={<Phone className="w-4 h-4 text-slate-400" />} />
             </div>
           )}
 
