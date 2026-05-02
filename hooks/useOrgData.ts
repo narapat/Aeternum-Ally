@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchSingleton, upsertSingleton } from "../services/dbService";
+import { logError } from "../services/errorLogService";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -74,6 +75,7 @@ export function useOrgData<T>({
         if (cancelled) return;
         setErrorMessage(error.message);
         setIsLoading(false);
+        logError({ context: "db-load", action: `load_${table}`, error, organizationId: orgId });
       });
 
     return () => {
@@ -100,6 +102,7 @@ export function useOrgData<T>({
     } catch (error: any) {
       setSaveStatus("error");
       setErrorMessage(error.message);
+      logError({ context: "db-save", action: `save_${table}`, error, organizationId: currentOrgId });
       return;
     }
 

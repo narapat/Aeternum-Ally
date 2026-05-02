@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { KPI, BSCPerspective, RACI } from '../types';
+import { KPI, BSCPerspective, RACI, CompanyProfile } from '../types';
 import { generateKPISuggestions } from '../services/geminiService';
 import {
   TrendingUp, Users, Settings, BookOpen, Plus,
@@ -12,7 +12,7 @@ interface Props {
   kpis: KPI[];
   onSaveKpi: (kpi: KPI) => Promise<void>;
   onDeleteKpi: (id: string) => Promise<void>;
-  companyDescription: string;
+  profile: CompanyProfile;
 }
 
 const PERSPECTIVE_CONFIG = {
@@ -22,7 +22,7 @@ const PERSPECTIVE_CONFIG = {
   [BSCPerspective.LEARNING]: { color: 'bg-purple-100 text-purple-800', border: 'border-purple-200', icon: <BookOpen className="w-5 h-5" /> },
 };
 
-const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, companyDescription }) => {
+const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, profile }) => {
   const [viewMode, setViewMode] = useState<'map' | 'tracking'>('map');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
@@ -70,7 +70,7 @@ const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, c
                 await onSaveKpi(kpi);
                 setIsFormOpen(false);
             }}
-            companyDescription={companyDescription}
+            profile={profile}
             allKpis={kpis}
         />
       )}
@@ -222,12 +222,12 @@ interface KPIFormProps {
   initialData: KPI | null;
   onClose: () => void;
   onSave: (kpi: KPI) => Promise<void> | void;
-  companyDescription: string;
+  profile: CompanyProfile;
   allKpis: KPI[];
 }
 
 // --- Sub-Component: KPI Form (Modal) ---
-const KPIForm: React.FC<KPIFormProps> = ({ initialData, onClose, onSave, companyDescription, allKpis }) => {
+const KPIForm: React.FC<KPIFormProps> = ({ initialData, onClose, onSave, profile, allKpis }) => {
     const [formData, setFormData] = useState<KPI>(initialData || {
         id: '',
         name: '',
@@ -242,22 +242,30 @@ const KPIForm: React.FC<KPIFormProps> = ({ initialData, onClose, onSave, company
         history: []
     });
     const [loadingAi, setLoadingAi] = useState(false);
+    const [aiError, setAiError] = useState<string | null>(null);
 
     const handleAiSuggest = async () => {
         setLoadingAi(true);
-        const suggestions = await generateKPISuggestions(companyDescription, formData.perspective);
-        if (suggestions && suggestions.length > 0) {
-            // Take the first one or ask user (Simplified: Take first)
-            const s = suggestions[0];
-            setFormData(prev => ({
-                ...prev,
-                name: s.name,
-                description: s.description,
-                unit: s.unit,
-                targetValue: s.targetSuggestion
-            }));
+        setAiError(null);
+        try {
+            const suggestions = await generateKPISuggestions(profile, formData.perspective);
+            if (suggestions && suggestions.length > 0) {
+                const s = suggestions[0];
+                const validFrequencies = ['Monthly', 'Quarterly', 'Annually'];
+                setFormData(prev => ({
+                    ...prev,
+                    name: s.name,
+                    description: s.description,
+                    unit: s.unit,
+                    targetValue: s.targetSuggestion,
+                    frequency: validFrequencies.includes(s.frequency) ? s.frequency : prev.frequency,
+                }));
+            }
+        } catch (err) {
+            setAiError(err instanceof Error ? err.message : 'AI suggestion failed. Please try again.');
+        } finally {
+            setLoadingAi(false);
         }
-        setLoadingAi(false);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -297,16 +305,19 @@ const KPIForm: React.FC<KPIFormProps> = ({ initialData, onClose, onSave, company
                         <div className="md:col-span-2">
                              <div className="flex justify-between items-center mb-1">
                                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">KPI Name</label>
-                                <button 
-                                    type="button" 
+                                <button
+                                    type="button"
                                     onClick={handleAiSuggest}
                                     disabled={loadingAi}
-                                    className="text-xs bg-esg-100 text-esg-700 dark:bg-esg-900 dark:text-esg-300 px-2 py-1 rounded flex items-center gap-1 hover:bg-esg-200"
+                                    className="text-xs bg-esg-100 text-esg-700 dark:bg-esg-900 dark:text-esg-300 px-2 py-1 rounded flex items-center gap-1 hover:bg-esg-200 disabled:opacity-50"
                                 >
                                     {loadingAi ? <Loader2 className="w-3 h-3 animate-spin" /> : <Settings className="w-3 h-3" />}
-                                    AI Suggest
+                                    {loadingAi ? 'Generating…' : 'AI Suggest'}
                                 </button>
                              </div>
+                             {aiError && (
+                                <p className="text-xs text-red-500 mb-1">{aiError}</p>
+                             )}
                              <input 
                                 required
                                 value={formData.name}

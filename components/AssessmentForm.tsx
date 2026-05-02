@@ -1,18 +1,18 @@
 
 import React, { useState, useEffect } from 'react';
-import { AssessmentData, ESRSTopic, ImpactScore, FinancialScore } from '../types';
+import { AssessmentData, ESRSTopic, ImpactScore, FinancialScore, CompanyProfile } from '../types';
 import { SCALE_OPTIONS, LIKELIHOOD_OPTIONS, calculateImpactMateriality, calculateFinancialMateriality, TOPICS } from '../constants';
 import { generateAssessmentSuggestions } from '../services/geminiService';
 import { AlertCircle, TrendingUp, Cpu, Loader2, Save, X } from 'lucide-react';
 
 interface Props {
-  companyDescription: string;
+  profile: CompanyProfile;
   onSave: (data: AssessmentData) => void;
   onCancel: () => void;
   initialData?: AssessmentData | null;
 }
 
-const AssessmentForm: React.FC<Props> = ({ companyDescription, onSave, onCancel, initialData }) => {
+const AssessmentForm: React.FC<Props> = ({ profile, onSave, onCancel, initialData }) => {
   const [topic, setTopic] = useState<ESRSTopic>(ESRSTopic.E1);
   const [impactDesc, setImpactDesc] = useState('');
   const [financialDesc, setFinancialDesc] = useState('');
@@ -50,7 +50,7 @@ const AssessmentForm: React.FC<Props> = ({ companyDescription, onSave, onCancel,
 
   const handleAutoFill = async () => {
     setLoadingAI(true);
-    const suggestions = await generateAssessmentSuggestions(companyDescription, topic);
+    const suggestions = await generateAssessmentSuggestions(profile, topic);
     setImpactDesc(suggestions.impactSuggestion);
     setFinancialDesc(suggestions.financialSuggestion);
     setLoadingAI(false);

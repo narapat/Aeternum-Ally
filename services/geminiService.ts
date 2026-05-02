@@ -56,11 +56,11 @@ function errorMessage(error: unknown): string {
 }
 
 export const generateAssessmentSuggestions = async (
-  companyDescription: string,
+  profile: CompanyProfile,
   topic: ESRSTopic
 ) => {
   try {
-    return await callApi("generateAssessmentSuggestions", { companyDescription, topic });
+    return await callApi("generateAssessmentSuggestions", { profile, topic });
   } catch (error) {
     const msg = errorMessage(error);
     return { impactSuggestion: msg, financialSuggestion: msg };
@@ -68,23 +68,22 @@ export const generateAssessmentSuggestions = async (
 };
 
 export const generateCanvasSuggestion = async (
-  companyName: string,
-  companyDescription: string,
+  profile: CompanyProfile,
   fieldLabel: string
 ) => {
   try {
-    return await callApi("generateCanvasSuggestion", { companyName, companyDescription, fieldLabel });
+    return await callApi("generateCanvasSuggestion", { profile, fieldLabel });
   } catch (error) {
     return errorMessage(error);
   }
 };
 
 export const generateSwotInternal = async (
-  companyName: string,
+  profile: CompanyProfile,
   bmcData: SustainabilityBusinessModel
 ) => {
   try {
-    return await callApi("generateSwotInternal", { companyName, bmcData });
+    return await callApi("generateSwotInternal", { profile, bmcData });
   } catch (error) {
     const msg = errorMessage(error);
     return { strengths: msg, weaknesses: msg };
@@ -92,26 +91,21 @@ export const generateSwotInternal = async (
 };
 
 export const generateSwotExternal = async (
-  companyName: string,
-  companyDescription: string,
+  profile: CompanyProfile,
   type: "OPPORTUNITIES" | "THREATS"
 ) => {
   try {
-    return await callApi("generateSwotExternal", { companyName, companyDescription, type });
+    return await callApi("generateSwotExternal", { profile, type });
   } catch (error) {
     return errorMessage(error);
   }
 };
 
 export const generateKPISuggestions = async (
-  companyDescription: string,
+  profile: CompanyProfile,
   perspective: BSCPerspective
 ) => {
-  try {
-    return await callApi("generateKPISuggestions", { companyDescription, perspective });
-  } catch (error) {
-    return [];
-  }
+  return await callApi("generateKPISuggestions", { profile, perspective });
 };
 
 export interface GeneratedStatement {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AssessmentData, ESRSTopic, SustainabilityBusinessModel, SwotAnalysis, CompanyProfile, KPI, BSCPerspective } from './types';
 import AssessmentForm from './components/AssessmentForm';
 import MaterialityMatrix from './components/MaterialityMatrix';
@@ -158,25 +158,6 @@ const App: React.FC = () => {
   };
 
   const materialTopics = assessments.filter(a => a.isMaterial);
-
-  const derivedCompanyDescription = useMemo(() => `
-    Company: ${profile.data.name} (Tax ID: ${profile.data.taxId}).
-    Industry: ${profile.data.industry} (ISIC: ${profile.data.isicCode}).
-    Scale: ${profile.data.employeeCount} employees, Revenue: ${profile.data.revenueRange}.
-    Description: ${profile.data.description}.
-    Mission: ${profile.data.mission}.
-    Vision: ${profile.data.vision}.
-    Key Products: ${profile.data.productsServices}.
-
-    Business Model Context:
-    Value Proposition: ${canvas.data.valueProposition}.
-    Key Activities: ${canvas.data.keyActivities}.
-    Partners: ${canvas.data.keyPartners}.
-    Resources: ${canvas.data.keyResources}.
-    Target Customers: ${canvas.data.customerSegments}.
-    Eco-Social Benefits: ${canvas.data.ecoSocialBenefits}.
-    Eco-Social Costs: ${canvas.data.ecoSocialCosts}.
-  `.trim(), [profile.data, canvas.data]);
 
   // ----- Loading / auth gates -----
   if (authLoading) return <FullScreenLoader label="Signing you in…" />;
@@ -370,7 +351,7 @@ const App: React.FC = () => {
                     kpis={kpis}
                     onSaveKpi={handleSaveKpi}
                     onDeleteKpi={handleDeleteKpi}
-                    companyDescription={derivedCompanyDescription}
+                    profile={profile.data}
                   />
                 )}
 
@@ -404,8 +385,7 @@ const App: React.FC = () => {
                   <BusinessModelCanvas
                     data={canvas.data}
                     onChange={canvas.setData}
-                    companyName={profile.data.name}
-                    companyDescription={derivedCompanyDescription}
+                    profile={profile.data}
                     saveStatus={canvas.saveStatus}
                     isDirty={canvas.isDirty}
                     onSave={canvas.save}
@@ -417,8 +397,7 @@ const App: React.FC = () => {
                   <SwotAnalysisWizard
                     data={swot.data}
                     onChange={swot.setData}
-                    companyName={profile.data.name}
-                    companyDescription={derivedCompanyDescription}
+                    profile={profile.data}
                     bmcData={canvas.data}
                     saveStatus={swot.saveStatus}
                     isDirty={swot.isDirty}
@@ -457,7 +436,7 @@ const App: React.FC = () => {
                     ) : (
                       <div className="max-w-3xl mx-auto">
                         <AssessmentForm
-                          companyDescription={derivedCompanyDescription}
+                          profile={profile.data}
                           onSave={handleSaveAssessment}
                           onCancel={() => { setIsFormOpen(false); setEditingAssessment(null); }}
                           initialData={editingAssessment}
