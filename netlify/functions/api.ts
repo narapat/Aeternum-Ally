@@ -211,6 +211,18 @@ function extractTokens(response: any): { inputTokens: number; outputTokens: numb
   };
 }
 
+// Build a consistent company context block from a structured profile object.
+function buildCompanyContext(profile: any): string {
+  return [
+    `Company: ${profile.name} (${profile.industry}, ISIC: ${profile.isicCode})`,
+    `Scale: ${profile.employeeCount} employees, Revenue: ${profile.revenueRange}`,
+    `Description: ${profile.description}`,
+    `Mission: ${profile.mission}`,
+    `Vision: ${profile.vision}`,
+    `Key Products / Services: ${profile.productsServices}`,
+  ].join('\n');
+}
+
 // =============================================================
 // Action implementations
 // =============================================================
@@ -218,18 +230,18 @@ function extractTokens(response: any): { inputTokens: number; outputTokens: numb
 async function generateAssessmentSuggestions(
   ai: GoogleGenAI,
   model: string,
-  { companyDescription, topic }: any
+  { profile, topic }: any
 ) {
   const prompt = `
     Act as a senior sustainability consultant specializing in ESRS (European Sustainability Reporting Standards).
 
-    Analyze the following company: "${companyDescription}".
+    ${buildCompanyContext(profile)}
 
     For the ESRS Topic: "${topic}", provide:
     1. A summary of potential "Impacts" (Inside-out): How the company impacts people and the environment regarding this topic.
     2. A summary of potential "Risks & Opportunities" (Outside-in): How this sustainability matter triggers financial effects on the company.
 
-    Keep descriptions concise (under 50 words each) and specific to the industry.
+    Keep descriptions concise (under 50 words each) and specific to the company's industry and products/services.
   `;
 
   const response = await ai.models.generateContent({
@@ -256,19 +268,17 @@ async function generateAssessmentSuggestions(
 async function generateCanvasSuggestion(
   ai: GoogleGenAI,
   model: string,
-  { companyName, companyDescription, fieldLabel }: any
+  { profile, fieldLabel }: any
 ) {
   const prompt = `
     Act as a business strategy consultant specializing in Sustainable Business Model Canvas.
 
-    Context:
-    Company Name: "${companyName}"
-    Description: "${companyDescription}"
+    ${buildCompanyContext(profile)}
 
     Task:
     Suggest content for the "${fieldLabel}" block of the Business Model Canvas.
-    The suggestion should be specific to the industry, concise, and formatted as a list of key points (bullet points).
-    If the field is "Eco-Social Costs" or "Eco-Social Benefits", focus strictly on environmental and social externalities.
+    The suggestion should be specific to the company's industry and products/services, concise, and formatted as a list of key points (bullet points).
+    If the field is "Eco-Social Costs" or "Eco-Social Benefits", focus strictly on environmental and social externalities relevant to this company.
 
     Output plain text only.
   `;
@@ -283,20 +293,29 @@ async function generateCanvasSuggestion(
 async function generateSwotInternal(
   ai: GoogleGenAI,
   model: string,
-  { companyName, bmcData }: any
+  { profile, bmcData }: any
 ) {
   const prompt = `
     Act as a strategic business analyst.
 
-    Based on the following Business Model Canvas data for "${companyName}", suggest list of:
+    ${buildCompanyContext(profile)}
+
+    Based on the full Business Model Canvas data for "${profile.name}" below, suggest a list of:
     1. STRENGTHS (Internal positive factors)
     2. WEAKNESSES (Internal negative factors)
 
     BMC Data:
-    - Value Prop: ${bmcData.valueProposition}
-    - Key Resources: ${bmcData.keyResources}
+    - Value Proposition: ${bmcData.valueProposition}
+    - Key Partners: ${bmcData.keyPartners}
     - Key Activities: ${bmcData.keyActivities}
+    - Key Resources: ${bmcData.keyResources}
+    - Customer Relationships: ${bmcData.customerRelationships}
+    - Channels: ${bmcData.channels}
+    - Customer Segments: ${bmcData.customerSegments}
     - Cost Structure: ${bmcData.costStructure}
+    - Revenue Streams: ${bmcData.revenueStreams}
+    - Eco-Social Benefits: ${bmcData.ecoSocialBenefits}
+    - Eco-Social Costs: ${bmcData.ecoSocialCosts}
 
     Return the response in JSON format with keys "strengths" and "weaknesses".
     Provide bullet points using a hyphen (-).
@@ -326,12 +345,11 @@ async function generateSwotInternal(
 async function generateSwotExternal(
   ai: GoogleGenAI,
   model: string,
-  { companyName, companyDescription, type }: any
+  { profile, type }: any
 ) {
   const prompt = `
     Act as a market researcher. Search for recent news, market trends, and regulatory changes relevant to:
-    Company: "${companyName}"
-    Context: "${companyDescription}"
+    ${buildCompanyContext(profile)}
 
     Based on the search results, list the key ${type} (External factors) for this business.
     Focus on:
@@ -358,14 +376,14 @@ async function generateSwotExternal(
 async function generateKPISuggestions(
   ai: GoogleGenAI,
   model: string,
-  { companyDescription, perspective }: any
+  { profile, perspective }: any
 ) {
   const prompt = `
     Act as a Strategy Performance Manager using the Balanced Scorecard framework.
 
-    Company Context: "${companyDescription}"
+    ${buildCompanyContext(profile)}
 
-    Task: Suggest 3 strategic KPIs for the "${perspective}" perspective.
+    Task: Suggest 3 strategic KPIs for the "${perspective}" perspective aligned with the company's mission and vision.
 
     Format the response as a JSON Array of objects, where each object has:
     - name: KPI Name (Short title)
@@ -413,23 +431,25 @@ async function generateSustainabilityStatement(
     };
   }
 
+  const companyContext = buildCompanyContext(profile);
+
   const topicSummary = materialAssessments
-    .map((a: any) => `- ${a.topic}: impact: ${a.impactDescription}; financial: ${a.financialDescription}`)
+    .map((a: any) => `- ${a.topic} (impact score: ${a.impactMaterialityValue}/100, financial score: ${a.financialMaterialityValue}/100): impact: ${a.impactDescription}; financial: ${a.financialDescription}`)
     .join("\n");
 
   // ── Call 1: Header sections (fast — no per-topic content) ──────────────────
   const headerPrompt = `
     Act as a Sustainability Reporting Officer drafting a "Sustainability Statement" aligned with ESRS and GRI Standards.
 
-    Company: ${profile.name} (${profile.industry})
-    Mission: ${profile.mission}
-    Material topics identified:
+    ${companyContext}
+
+    Material topics identified (above threshold of 40/100 on either axis):
     ${topicSummary}
 
     Generate ONLY the two header sections below as JSON.
 
-    1. generalDisclosure: "Basis of Preparation" (ESRS 2 BP-1/BP-2). Explain the Double Materiality approach (impact materiality + financial materiality). ~120 words.
-    2. strategyDisclosure: "Strategy & Business Model" (ESRS 2 SBM-3). Summarise how the business model interacts with these material impacts and risks. ~150 words.
+    1. generalDisclosure: "Basis of Preparation" (ESRS 2 BP-1/BP-2). Explain the Double Materiality approach (impact materiality + financial materiality) as applied by this company. Reference the company's scale and sector. ~120 words.
+    2. strategyDisclosure: "Strategy & Business Model" (ESRS 2 SBM-3). Summarise how the company's specific products/services and business model interact with the material impacts and risks identified. ~150 words.
   `;
 
   // ── Calls 2…N: One call per topic (run in parallel) ────────────────────────
@@ -438,18 +458,19 @@ async function generateSustainabilityStatement(
     return `
       Act as a Sustainability Reporting Officer drafting topical disclosures aligned with ESRS and GRI Standards.
 
-      Company: ${profile.name} (${profile.industry})
+      ${companyContext}
+
       Topic: ${a.topic} (code: "${topicCode}")
-      Impact description: ${a.impactDescription}
-      Financial description: ${a.financialDescription}
+      Impact materiality score: ${a.impactMaterialityValue}/100 — ${a.impactDescription}
+      Financial materiality score: ${a.financialMaterialityValue}/100 — ${a.financialDescription}
 
       Write a structured narrative disclosure for this single topic as JSON with:
       - topicId: the short code only — "${topicCode}"
       - topicName: the full string — "${a.topic}"
       - disclosureContent: 200-300 word multi-paragraph narrative covering:
-          • Policies (ESRS MDR-P)
-          • Actions & Resources (MDR-A)
-          • Metrics & Targets (MDR-M)
+          • Policies (ESRS MDR-P) — reference the company's specific context
+          • Actions & Resources (MDR-A) — tie to the company's products/services and scale
+          • Metrics & Targets (MDR-M) — suggest targets appropriate for a ${profile.employeeCount}-scale company
         Reference the relevant GRI Standard number (e.g. GRI 305 for climate, GRI 303 for water).
         Use plain text with line breaks between paragraphs; no markdown.
     `;

@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { KPI, BSCPerspective, RACI } from '../types';
+import { KPI, BSCPerspective, RACI, CompanyProfile } from '../types';
 import { generateKPISuggestions } from '../services/geminiService';
 import {
   TrendingUp, Users, Settings, BookOpen, Plus,
@@ -12,7 +12,7 @@ interface Props {
   kpis: KPI[];
   onSaveKpi: (kpi: KPI) => Promise<void>;
   onDeleteKpi: (id: string) => Promise<void>;
-  companyDescription: string;
+  profile: CompanyProfile;
 }
 
 const PERSPECTIVE_CONFIG = {
@@ -22,7 +22,7 @@ const PERSPECTIVE_CONFIG = {
   [BSCPerspective.LEARNING]: { color: 'bg-purple-100 text-purple-800', border: 'border-purple-200', icon: <BookOpen className="w-5 h-5" /> },
 };
 
-const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, companyDescription }) => {
+const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, profile }) => {
   const [viewMode, setViewMode] = useState<'map' | 'tracking'>('map');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
@@ -70,7 +70,7 @@ const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, c
                 await onSaveKpi(kpi);
                 setIsFormOpen(false);
             }}
-            companyDescription={companyDescription}
+            profile={profile}
             allKpis={kpis}
         />
       )}
@@ -222,12 +222,12 @@ interface KPIFormProps {
   initialData: KPI | null;
   onClose: () => void;
   onSave: (kpi: KPI) => Promise<void> | void;
-  companyDescription: string;
+  profile: CompanyProfile;
   allKpis: KPI[];
 }
 
 // --- Sub-Component: KPI Form (Modal) ---
-const KPIForm: React.FC<KPIFormProps> = ({ initialData, onClose, onSave, companyDescription, allKpis }) => {
+const KPIForm: React.FC<KPIFormProps> = ({ initialData, onClose, onSave, profile, allKpis }) => {
     const [formData, setFormData] = useState<KPI>(initialData || {
         id: '',
         name: '',
@@ -245,7 +245,7 @@ const KPIForm: React.FC<KPIFormProps> = ({ initialData, onClose, onSave, company
 
     const handleAiSuggest = async () => {
         setLoadingAi(true);
-        const suggestions = await generateKPISuggestions(companyDescription, formData.perspective);
+        const suggestions = await generateKPISuggestions(profile, formData.perspective);
         if (suggestions && suggestions.length > 0) {
             // Take the first one or ask user (Simplified: Take first)
             const s = suggestions[0];

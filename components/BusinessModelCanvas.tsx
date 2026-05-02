@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { SustainabilityBusinessModel } from '../types';
+import { SustainabilityBusinessModel, CompanyProfile } from '../types';
 import { Info, Wand2, ArrowRight, ArrowLeft, Grid, Check, Loader2, PlayCircle } from 'lucide-react';
 import { generateCanvasSuggestion } from '../services/geminiService';
 import SaveIndicator from './SaveIndicator';
@@ -9,8 +9,7 @@ import type { SaveStatus } from '../hooks/useOrgData';
 interface Props {
   data: SustainabilityBusinessModel;
   onChange: (data: SustainabilityBusinessModel) => void;
-  companyName: string;
-  companyDescription: string;
+  profile: CompanyProfile;
   saveStatus: SaveStatus;
   isDirty: boolean;
   onSave: () => void;
@@ -75,7 +74,7 @@ const WIZARD_STEPS: Step[] = [
   }
 ];
 
-const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, companyName, companyDescription, saveStatus, isDirty, onSave, saveError }) => {
+const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, profile, saveStatus, isDirty, onSave, saveError }) => {
   const [mode, setMode] = useState<'grid' | 'wizard'>('wizard');
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [loadingField, setLoadingField] = useState<string | null>(null);
@@ -90,7 +89,7 @@ const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, companyName, com
 
   const handleAiSuggest = async (field: CanvasField, label: string) => {
     setLoadingField(field);
-    const suggestion = await generateCanvasSuggestion(companyName, companyDescription, label);
+    const suggestion = await generateCanvasSuggestion(profile, label);
     if (suggestion) {
       // Append if not empty, or replace if empty
       const currentVal = data[field];

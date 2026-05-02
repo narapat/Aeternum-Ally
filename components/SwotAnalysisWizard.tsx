@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { SwotAnalysis, SustainabilityBusinessModel } from '../types';
+import { SwotAnalysis, SustainabilityBusinessModel, CompanyProfile } from '../types';
 import { generateSwotInternal, generateSwotExternal } from '../services/geminiService';
 import { ArrowRight, ArrowLeft, Loader2, Globe, ShieldAlert, TrendingUp, Zap, AlertTriangle } from 'lucide-react';
 import SaveIndicator from './SaveIndicator';
@@ -9,8 +9,7 @@ import type { SaveStatus } from '../hooks/useOrgData';
 interface Props {
   data: SwotAnalysis;
   onChange: (data: SwotAnalysis) => void;
-  companyName: string;
-  companyDescription: string;
+  profile: CompanyProfile;
   bmcData: SustainabilityBusinessModel;
   saveStatus: SaveStatus;
   isDirty: boolean;
@@ -18,13 +17,13 @@ interface Props {
   saveError?: string | null;
 }
 
-const SwotAnalysisWizard: React.FC<Props> = ({ data, onChange, companyName, companyDescription, bmcData, saveStatus, isDirty, onSave, saveError }) => {
+const SwotAnalysisWizard: React.FC<Props> = ({ data, onChange, profile, bmcData, saveStatus, isDirty, onSave, saveError }) => {
   const [step, setStep] = useState<number>(0);
   const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});
 
   const handleGenerateInternal = async () => {
     setLoadingMap({ ...loadingMap, internal: true });
-    const result = await generateSwotInternal(companyName, bmcData);
+    const result = await generateSwotInternal(profile, bmcData);
     onChange({
       ...data,
       strengths: result.strengths || data.strengths,
@@ -35,7 +34,7 @@ const SwotAnalysisWizard: React.FC<Props> = ({ data, onChange, companyName, comp
 
   const handleGenerateExternal = async (field: 'opportunities' | 'threats') => {
     setLoadingMap({ ...loadingMap, [field]: true });
-    const result = await generateSwotExternal(companyName, companyDescription, field === 'opportunities' ? 'OPPORTUNITIES' : 'THREATS');
+    const result = await generateSwotExternal(profile, field === 'opportunities' ? 'OPPORTUNITIES' : 'THREATS');
     onChange({
       ...data,
       [field]: result
