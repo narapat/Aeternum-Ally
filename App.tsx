@@ -192,7 +192,7 @@ const App: React.FC = () => {
         `}>
           <div className={`p-4 sm:p-6 border-b border-slate-800 dark:border-slate-900 flex-shrink-0 flex items-center ${isSidebarCollapsed ? 'justify-center lg:px-2' : 'justify-between'}`}>
             <div className="flex items-center gap-3 overflow-hidden">
-              <img src="/favicon.svg" alt="" className="w-8 h-8 flex-shrink-0" />
+              <img src="/favicon.png" alt="" className="w-8 h-8 flex-shrink-0" />
               <div className={`transition-opacity duration-200 ${isSidebarCollapsed ? 'lg:hidden' : 'opacity-100'}`}>
                 <span className="text-white font-bold text-xl whitespace-nowrap">Aeternum Ally</span>
               </div>
