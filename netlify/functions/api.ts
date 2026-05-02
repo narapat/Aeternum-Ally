@@ -390,6 +390,7 @@ async function generateKPISuggestions(
     - description: Why this is important for this company.
     - unit: Measurement unit (e.g., %, THB, #)
     - targetSuggestion: A placeholder target value (number) appropriate for an SME.
+    - frequency: How often this should be measured — one of "Monthly", "Quarterly", or "Annually".
   `;
 
   const response = await ai.models.generateContent({
@@ -406,6 +407,7 @@ async function generateKPISuggestions(
             description: { type: Type.STRING },
             unit: { type: Type.STRING },
             targetSuggestion: { type: Type.NUMBER },
+            frequency: { type: Type.STRING },
           },
         },
       },

@@ -242,22 +242,30 @@ const KPIForm: React.FC<KPIFormProps> = ({ initialData, onClose, onSave, profile
         history: []
     });
     const [loadingAi, setLoadingAi] = useState(false);
+    const [aiError, setAiError] = useState<string | null>(null);
 
     const handleAiSuggest = async () => {
         setLoadingAi(true);
-        const suggestions = await generateKPISuggestions(profile, formData.perspective);
-        if (suggestions && suggestions.length > 0) {
-            // Take the first one or ask user (Simplified: Take first)
-            const s = suggestions[0];
-            setFormData(prev => ({
-                ...prev,
-                name: s.name,
-                description: s.description,
-                unit: s.unit,
-                targetValue: s.targetSuggestion
-            }));
+        setAiError(null);
+        try {
+            const suggestions = await generateKPISuggestions(profile, formData.perspective);
+            if (suggestions && suggestions.length > 0) {
+                const s = suggestions[0];
+                const validFrequencies = ['Monthly', 'Quarterly', 'Annually'];
+                setFormData(prev => ({
+                    ...prev,
+                    name: s.name,
+                    description: s.description,
+                    unit: s.unit,
+                    targetValue: s.targetSuggestion,
+                    frequency: validFrequencies.includes(s.frequency) ? s.frequency : prev.frequency,
+                }));
+            }
+        } catch (err) {
+            setAiError(err instanceof Error ? err.message : 'AI suggestion failed. Please try again.');
+        } finally {
+            setLoadingAi(false);
         }
-        setLoadingAi(false);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -297,16 +305,19 @@ const KPIForm: React.FC<KPIFormProps> = ({ initialData, onClose, onSave, profile
                         <div className="md:col-span-2">
                              <div className="flex justify-between items-center mb-1">
                                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">KPI Name</label>
-                                <button 
-                                    type="button" 
+                                <button
+                                    type="button"
                                     onClick={handleAiSuggest}
                                     disabled={loadingAi}
-                                    className="text-xs bg-esg-100 text-esg-700 dark:bg-esg-900 dark:text-esg-300 px-2 py-1 rounded flex items-center gap-1 hover:bg-esg-200"
+                                    className="text-xs bg-esg-100 text-esg-700 dark:bg-esg-900 dark:text-esg-300 px-2 py-1 rounded flex items-center gap-1 hover:bg-esg-200 disabled:opacity-50"
                                 >
                                     {loadingAi ? <Loader2 className="w-3 h-3 animate-spin" /> : <Settings className="w-3 h-3" />}
-                                    AI Suggest
+                                    {loadingAi ? 'Generating…' : 'AI Suggest'}
                                 </button>
                              </div>
+                             {aiError && (
+                                <p className="text-xs text-red-500 mb-1">{aiError}</p>
+                             )}
                              <input 
                                 required
                                 value={formData.name}

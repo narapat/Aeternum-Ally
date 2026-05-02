@@ -105,11 +105,7 @@ export const generateKPISuggestions = async (
   profile: CompanyProfile,
   perspective: BSCPerspective
 ) => {
-  try {
-    return await callApi("generateKPISuggestions", { profile, perspective });
-  } catch (error) {
-    return [];
-  }
+  return await callApi("generateKPISuggestions", { profile, perspective });
 };
 
 export interface GeneratedStatement {
