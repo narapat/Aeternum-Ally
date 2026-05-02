@@ -309,7 +309,7 @@ const KPIForm: React.FC<KPIFormProps> = ({ initialData, onClose, onSave, profile
                                     type="button"
                                     onClick={handleAiSuggest}
                                     disabled={loadingAi}
-                                    className="text-xs bg-esg-100 text-esg-700 dark:bg-esg-900 dark:text-esg-300 px-2 py-1 rounded flex items-center gap-1 hover:bg-esg-200 disabled:opacity-50"
+                                    className="text-xs bg-esg-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-esg-700 transition-colors font-medium shadow-sm disabled:opacity-50"
                                 >
                                     {loadingAi ? <Loader2 className="w-3 h-3 animate-spin" /> : <Settings className="w-3 h-3" />}
                                     {loadingAi ? 'Generating…' : 'AI Suggest'}
