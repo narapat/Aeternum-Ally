@@ -46,7 +46,7 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <div className="w-full space-y-8 animate-in fade-in duration-500">
       {error && (
         <div className="flex items-start gap-2 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300 print:hidden">
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
