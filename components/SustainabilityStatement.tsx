@@ -67,14 +67,19 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
           {!generatedContent ? (
-            <button 
+            <div className="flex flex-col items-end gap-1 w-full sm:w-auto">
+              <button
                 onClick={handleGenerate}
                 disabled={loading}
-                className="flex items-center justify-center gap-2 bg-esg-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-esg-700 shadow-lg shadow-esg-600/20 transition-all w-full sm:w-auto"
-            >
+                className="flex items-center justify-center gap-2 bg-esg-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-esg-700 shadow-lg shadow-esg-600/20 transition-all w-full sm:w-auto disabled:opacity-60"
+              >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                Generate Report (AI)
-            </button>
+                {loading ? `Generating… (${materialTopics.length} topic${materialTopics.length !== 1 ? 's' : ''})` : 'Generate Report (AI)'}
+              </button>
+              {loading && (
+                <p className="text-xs text-slate-400">This may take up to 30 seconds</p>
+              )}
+            </div>
           ) : (
              <button 
                 onClick={() => window.print()}

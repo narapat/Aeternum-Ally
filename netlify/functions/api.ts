@@ -478,41 +478,57 @@ async function generateSustainabilityStatement(
     `;
   });
 
-  // Fire all calls in parallel
-  const [headerResp, ...topicResps] = await Promise.all([
-    ai.models.generateContent({
-      model,
-      contents: headerPrompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            generalDisclosure: { type: Type.STRING },
-            strategyDisclosure: { type: Type.STRING },
-          },
+  const topicConfig = {
+    responseMimeType: "application/json",
+    responseSchema: {
+      type: Type.OBJECT,
+      properties: {
+        topicId: { type: Type.STRING },
+        topicName: { type: Type.STRING },
+        disclosureContent: { type: Type.STRING },
+      },
+    },
+  };
+
+  // Fire header and topic batches. Topics run in batches of 3 (sequential batches,
+  // parallel within each batch) to avoid Gemini rate limits and stay within the
+  // Netlify function timeout. Header fires concurrently with the first batch.
+  const BATCH_SIZE = 3;
+  const topicBatches: string[][] = [];
+  for (let i = 0; i < topicPrompts.length; i += BATCH_SIZE) {
+    topicBatches.push(topicPrompts.slice(i, i + BATCH_SIZE));
+  }
+
+  const headerRespPromise = ai.models.generateContent({
+    model,
+    contents: headerPrompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          generalDisclosure: { type: Type.STRING },
+          strategyDisclosure: { type: Type.STRING },
         },
       },
-    }),
-    ...topicPrompts.map((prompt: string) =>
-      ai.models.generateContent({
-        model,
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              topicId: { type: Type.STRING },
-              topicName: { type: Type.STRING },
-              disclosureContent: { type: Type.STRING },
-            },
-          },
-        },
-      })
-    ),
-  ]);
+    },
+  });
 
+  const topicResps: any[] = [];
+  let firstBatch = true;
+  for (const batch of topicBatches) {
+    const batchCalls = batch.map((prompt: string) =>
+      ai.models.generateContent({ model, contents: prompt, config: topicConfig })
+    );
+    // Run header concurrently with the first topic batch
+    const results = firstBatch
+      ? (await Promise.all([headerRespPromise, ...batchCalls])).slice(1)
+      : await Promise.all(batchCalls);
+    topicResps.push(...results);
+    firstBatch = false;
+  }
+
+  const headerResp = await headerRespPromise;
   const header = JSON.parse(headerResp.text || "{}");
   const topics = topicResps.map((r: any) => JSON.parse(r.text || "{}"));
 
