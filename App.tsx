@@ -22,7 +22,7 @@ import {
   fetchKpis, upsertKpi, deleteKpi,
 } from './services/dbService';
 import { setOrganizationContext } from './services/geminiService';
-import { Layout, Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2 } from 'lucide-react';
+import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2 } from 'lucide-react';
 
 const DEFAULT_PROFILE: CompanyProfile = {
   name: '', taxId: '', industry: '', isicCode: '', foundingYear: '',
@@ -192,7 +192,7 @@ const App: React.FC = () => {
         `}>
           <div className={`p-4 sm:p-6 border-b border-slate-800 dark:border-slate-900 flex-shrink-0 flex items-center ${isSidebarCollapsed ? 'justify-center lg:px-2' : 'justify-between'}`}>
             <div className="flex items-center gap-3 overflow-hidden">
-              <Layout className="w-6 h-6 text-esg-500 flex-shrink-0" />
+              <img src="/favicon.svg" alt="" className="w-8 h-8 flex-shrink-0" />
               <div className={`transition-opacity duration-200 ${isSidebarCollapsed ? 'lg:hidden' : 'opacity-100'}`}>
                 <span className="text-white font-bold text-xl whitespace-nowrap">Aeternum Ally</span>
               </div>

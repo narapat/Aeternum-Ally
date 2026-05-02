@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="leaf-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1f8080"/>
+      <stop offset="100%" stop-color="#0a3f3f"/>
+    </linearGradient>
+    <linearGradient id="trace" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#40d4a0"/>
+      <stop offset="100%" stop-color="#a0ff40"/>
+    </linearGradient>
+    <!-- Drop shadow for leaf border -->
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Leaf shape: pointed top, rounded bottom -->
+  <path d="M50 6
+    C70 6 88 22 92 42
+    C96 62 84 82 65 90
+    C60 93 55 95 50 95
+    C45 95 40 93 35 90
+    C16 82 4 62 8 42
+    C12 22 30 6 50 6 Z"
+    fill="url(#leaf-bg)"
+    stroke="#0a2a2a"
+    stroke-width="3"
+    filter="url(#shadow)"
+  />
+
+  <!-- ── Circuit traces ── -->
+  <!-- Main vertical stem -->
+  <line x1="50" y1="83" x2="50" y2="22" stroke="url(#trace)" stroke-width="2.8" stroke-linecap="round"/>
+
+  <!-- Left lower branch: diagonal then horizontal -->
+  <polyline points="50,68 34,58 22,58" fill="none" stroke="url(#trace)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Left upper branch -->
+  <polyline points="50,50 34,40 22,40" fill="none" stroke="url(#trace)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Left top branch (shorter, diagonal) -->
+  <polyline points="50,34 36,26" fill="none" stroke="url(#trace)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Right lower branch -->
+  <polyline points="50,68 66,58 78,58" fill="none" stroke="url(#trace)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Right upper branch -->
+  <polyline points="50,50 66,40 78,40" fill="none" stroke="url(#trace)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Right top branch -->
+  <polyline points="50,34 64,26" fill="none" stroke="url(#trace)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- ── Terminal nodes (PCB pads) ── -->
+  <!-- Left terminals -->
+  <circle cx="22" cy="58" r="4.5" fill="#a8ff40" stroke="#60c030" stroke-width="1"/>
+  <circle cx="22" cy="40" r="4.5" fill="#a8ff40" stroke="#60c030" stroke-width="1"/>
+  <circle cx="36" cy="26" r="4.5" fill="#a8ff40" stroke="#60c030" stroke-width="1"/>
+  <!-- Right terminals -->
+  <circle cx="78" cy="58" r="4.5" fill="#a8ff40" stroke="#60c030" stroke-width="1"/>
+  <circle cx="78" cy="40" r="4.5" fill="#a8ff40" stroke="#60c030" stroke-width="1"/>
+  <circle cx="64" cy="26" r="4.5" fill="#a8ff40" stroke="#60c030" stroke-width="1"/>
+  <!-- Top terminal (apex of stem) -->
+  <circle cx="50" cy="22" r="4.5" fill="#a8ff40" stroke="#60c030" stroke-width="1"/>
+  <!-- Bottom terminal -->
+  <circle cx="50" cy="83" r="4.5" fill="#a8ff40" stroke="#60c030" stroke-width="1"/>
+</svg>
