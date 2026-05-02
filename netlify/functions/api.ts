@@ -403,6 +403,7 @@ async function generateKPISuggestions(
         type: Type.ARRAY,
         items: {
           type: Type.OBJECT,
+          required: ["name", "description", "unit", "targetSuggestion", "frequency"],
           properties: {
             name: { type: Type.STRING },
             description: { type: Type.STRING },
