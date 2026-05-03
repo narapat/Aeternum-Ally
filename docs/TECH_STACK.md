@@ -1,4 +1,4 @@
-<!-- Version: 1.1.0 — Last updated: 2026-05-01 -->
+<!-- Version: 1.2.0 — Last updated: 2026-05-03 -->
 
 # Tech Stack & Deployment
 
@@ -47,10 +47,11 @@ hooks/         Auth + per-org data hooks
                - useOrganization  — current-org context, role, switch
                - useOrgData       — loads & mutates all org-scoped singleton tables
 lib/           Supabase client singleton (imported only by dbService and auth hooks)
-services/      dbService  — single source of all DB access: CRUD wrappers,
-                            data mappers (fromDb/toDb), org/member/AI helpers.
-                            No component or hook calls supabase.from() directly.
-               geminiService — AI call helpers (proxied via Netlify Functions)
+services/      dbService        — single source of all DB access: CRUD wrappers,
+                                  data mappers (fromDb/toDb), org/member/AI helpers.
+                                  No component or hook calls supabase.from() directly.
+               geminiService    — AI call helpers (proxied via Netlify Functions)
+               errorLogService  — silent client-side error logging to error_log table
 ```
 
 ---
@@ -89,7 +90,8 @@ organization_ai_settings   ─┘
 
 assessments                ─┐  Many per org
 kpis                       ─┤  (org-scoped via FK + RLS)
-ai_usage_log               ─┘
+ai_usage_log               ─┤
+error_log                  ─┘
 
 user_preferences           ─┐  Per user (not org-scoped)
 auth.users (Supabase)      ─┘
@@ -114,6 +116,9 @@ Standard policy pattern:
 
 - `001_create_organization_with_owner.sql` — atomic org-creation RPC
 - `002_ai_settings_and_usage.sql` — per-org AI model + usage log
+- `003_ai_usage_log_http_status.sql` — adds `http_status` column to `ai_usage_log`
+- `004_error_log.sql` — creates `error_log` table with RLS (server + client error tracking)
+- `005_company_profile_address_contact.sql` — structured address + contact fields on `company_profiles`
 
 **When to run what:**
 
