@@ -3,15 +3,17 @@ import React, { useState } from 'react';
 import { CompanyProfile, AssessmentData, SustainabilityBusinessModel } from '../types';
 import { GRI_MAPPING } from '../constants';
 import { generateSustainabilityStatement, GeneratedStatement } from '../services/geminiService';
+import { logError } from '../services/errorLogService';
 import { FileText, Download, Loader2, Book, RefreshCw, ShieldCheck, AlertCircle } from 'lucide-react';
 
 interface Props {
   profile: CompanyProfile;
   assessments: AssessmentData[];
   canvas: SustainabilityBusinessModel;
+  organizationId: string;
 }
 
-const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas }) => {
+const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas, organizationId }) => {
   const [generatedContent, setGeneratedContent] = useState<GeneratedStatement | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +27,15 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
       const result = await generateSustainabilityStatement(profile, materialTopics);
       setGeneratedContent(result);
     } catch (e: any) {
-      setError(e?.message ?? 'Failed to generate the report. Please try again.');
+      const msg = e?.message ?? 'Failed to generate the report. Please try again.';
+      setError(msg);
+      logError({
+        context: 'sustainability-statement',
+        action: 'generate_report',
+        error: e,
+        organizationId,
+        metadata: { topic_count: materialTopics.length },
+      });
     } finally {
       setLoading(false);
     }
