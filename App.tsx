@@ -447,7 +447,7 @@ const App: React.FC = () => {
                 )}
 
                 {view === 'report' && (
-                  <SustainabilityStatement profile={profile.data} assessments={assessments} canvas={canvas.data} />
+                  <SustainabilityStatement profile={profile.data} assessments={assessments} canvas={canvas.data} organizationId={organization.id} />
                 )}
               </>
             )}
