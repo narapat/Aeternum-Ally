@@ -227,18 +227,28 @@ export const toDbProfile = (data: CompanyProfile) => ({
 // BUSINESS MODEL CANVAS  (1 row per org)
 // =================================================================
 
+// Normalise a DB jsonb field → string[]. Handles both the new jsonb array
+// format and the legacy text format (in case of partial migrations).
+function toStringArray(val: any): string[] {
+  if (Array.isArray(val)) return val.filter((v) => typeof v === "string");
+  if (typeof val === "string" && val.trim()) {
+    return val.split("\n").map((s) => s.replace(/^[\s•\-\*–]+/, "").trim()).filter(Boolean);
+  }
+  return [];
+}
+
 export const fromDbCanvas = (row: any): SustainabilityBusinessModel => ({
-  keyPartners: row.key_partners ?? "",
-  keyActivities: row.key_activities ?? "",
-  keyResources: row.key_resources ?? "",
-  valueProposition: row.value_proposition ?? "",
-  customerRelationships: row.customer_relationships ?? "",
-  channels: row.channels ?? "",
-  customerSegments: row.customer_segments ?? "",
-  costStructure: row.cost_structure ?? "",
-  revenueStreams: row.revenue_streams ?? "",
-  ecoSocialCosts: row.eco_social_costs ?? "",
-  ecoSocialBenefits: row.eco_social_benefits ?? "",
+  keyPartners: toStringArray(row.key_partners),
+  keyActivities: toStringArray(row.key_activities),
+  keyResources: toStringArray(row.key_resources),
+  valueProposition: toStringArray(row.value_proposition),
+  customerRelationships: toStringArray(row.customer_relationships),
+  channels: toStringArray(row.channels),
+  customerSegments: toStringArray(row.customer_segments),
+  costStructure: toStringArray(row.cost_structure),
+  revenueStreams: toStringArray(row.revenue_streams),
+  ecoSocialCosts: toStringArray(row.eco_social_costs),
+  ecoSocialBenefits: toStringArray(row.eco_social_benefits),
 });
 
 export const toDbCanvas = (data: SustainabilityBusinessModel) => ({
@@ -260,10 +270,10 @@ export const toDbCanvas = (data: SustainabilityBusinessModel) => ({
 // =================================================================
 
 export const fromDbSwot = (row: any): SwotAnalysis => ({
-  strengths: row.strengths ?? "",
-  weaknesses: row.weaknesses ?? "",
-  opportunities: row.opportunities ?? "",
-  threats: row.threats ?? "",
+  strengths: toStringArray(row.strengths),
+  weaknesses: toStringArray(row.weaknesses),
+  opportunities: toStringArray(row.opportunities),
+  threats: toStringArray(row.threats),
 });
 
 export const toDbSwot = (data: SwotAnalysis) => ({

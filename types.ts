@@ -98,24 +98,24 @@ export interface CompanyProfile {
 }
 
 export interface SustainabilityBusinessModel {
-  keyPartners: string;
-  keyActivities: string;
-  keyResources: string;
-  valueProposition: string;
-  customerRelationships: string;
-  channels: string;
-  customerSegments: string;
-  costStructure: string;
-  revenueStreams: string;
-  ecoSocialCosts: string; // Negative impacts
-  ecoSocialBenefits: string; // Positive impacts
+  keyPartners: string[];
+  keyActivities: string[];
+  keyResources: string[];
+  valueProposition: string[];
+  customerRelationships: string[];
+  channels: string[];
+  customerSegments: string[];
+  costStructure: string[];
+  revenueStreams: string[];
+  ecoSocialCosts: string[];
+  ecoSocialBenefits: string[];
 }
 
 export interface SwotAnalysis {
-  strengths: string;
-  weaknesses: string;
-  opportunities: string;
-  threats: string;
+  strengths: string[];
+  weaknesses: string[];
+  opportunities: string[];
+  threats: string[];
 }
 
 // --- Performance Management Types ---

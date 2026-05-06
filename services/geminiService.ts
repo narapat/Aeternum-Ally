@@ -70,34 +70,33 @@ export const generateAssessmentSuggestions = async (
 export const generateCanvasSuggestion = async (
   profile: CompanyProfile,
   fieldLabel: string
-) => {
+): Promise<string[]> => {
   try {
     return await callApi("generateCanvasSuggestion", { profile, fieldLabel });
-  } catch (error) {
-    return errorMessage(error);
+  } catch {
+    return [];
   }
 };
 
 export const generateSwotInternal = async (
   profile: CompanyProfile,
   bmcData: SustainabilityBusinessModel
-) => {
+): Promise<{ strengths: string[]; weaknesses: string[] }> => {
   try {
     return await callApi("generateSwotInternal", { profile, bmcData });
-  } catch (error) {
-    const msg = errorMessage(error);
-    return { strengths: msg, weaknesses: msg };
+  } catch {
+    return { strengths: [], weaknesses: [] };
   }
 };
 
 export const generateSwotExternal = async (
   profile: CompanyProfile,
   type: "OPPORTUNITIES" | "THREATS"
-) => {
+): Promise<string[]> => {
   try {
     return await callApi("generateSwotExternal", { profile, type });
-  } catch (error) {
-    return errorMessage(error);
+  } catch {
+    return [];
   }
 };
 
