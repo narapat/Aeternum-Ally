@@ -147,3 +147,132 @@ export interface KPI {
   raci: RACI;
   history: { date: string; value: number }[]; // For trend analysis
 }
+
+// =============================================================
+// Phase 2 Types
+// =============================================================
+
+// --- Tasks ---
+
+export type TaskType = 'fix' | 'comply' | 'improve';
+export type TaskStatus = 'todo' | 'in_progress' | 'done';
+export type TaskPriority = 'low' | 'medium' | 'high';
+export type TaskSourceType = 'dma' | 'insight_hub' | 'kpi' | 'manual';
+
+export interface Task {
+  id: string;
+  organization_id: string;
+  title: string;
+  description: string | null;
+  type: TaskType;
+  status: TaskStatus;
+  priority: TaskPriority;
+  due_date: string | null;
+  assignee_id: string | null;
+  source_type: TaskSourceType | null;
+  source_id: string | null;
+  esrs_ref: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
+export interface SuggestedTask {
+  id: string;
+  organization_id: string;
+  title: string;
+  description: string | null;
+  type: TaskType;
+  priority: TaskPriority;
+  source_type: string;
+  source_id: string;
+  esrs_ref: string | null;
+  dismissed: boolean;
+  dismissed_at: string | null;
+  dismissed_by: string | null;
+  converted_to_task_id: string | null;
+  converted_at: string | null;
+  created_at: string;
+}
+
+// --- Carbon Accounting ---
+
+export type EmissionScope = '1' | '2' | '3';
+
+export interface EmissionSource {
+  id: string;
+  organization_id: string;
+  scope: EmissionScope;
+  source_name: string;
+  fuel_type: string | null;
+  unit: string;
+  emission_factor_value: number | null;
+  emission_factor_source: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmissionEntry {
+  id: string;
+  organization_id: string;
+  source_id: string;
+  period_start: string;
+  period_end: string;
+  activity_data: number;
+  calculated_emissions_kgco2e: number;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmissionFactor {
+  id: string;
+  fuel_type: string;
+  scope: EmissionScope;
+  unit: string;
+  kgco2e_per_unit: number;
+  source: string;
+  year: number;
+  region: string | null;
+}
+
+// --- Evidence Vault ---
+
+export type StorageType = 'google_drive' | 'onedrive' | 'dropbox' | 'url' | 'supabase_storage' | 's3';
+export type EvidenceLinkedToType = 'assessment' | 'kpi' | 'task' | 'emission_entry';
+
+export interface EvidenceAttachment {
+  id: string;
+  organization_id: string;
+  file_name: string;
+  file_type: string | null;
+  file_size_mb: number | null;
+  storage_type: StorageType;
+  external_url: string | null;
+  external_id: string | null;
+  storage_path: string | null;
+  linked_to_type: EvidenceLinkedToType;
+  linked_to_id: string;
+  notes: string | null;
+  uploaded_by: string | null;
+  uploaded_at: string;
+}
+
+// --- Notifications ---
+
+export type NotificationChannelType = 'in_app' | 'email' | 'line' | 'slack' | 'webhook';
+
+export interface NotificationChannel {
+  id: string;
+  organization_id: string;
+  user_id: string | null;
+  channel_type: NotificationChannelType;
+  channel_config: Record<string, unknown>;
+  enabled: boolean;
+  notification_types: string[];
+  created_at: string;
+  updated_at: string;
+}
