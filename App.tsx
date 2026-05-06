@@ -440,6 +440,8 @@ const App: React.FC = () => {
                       <div className="max-w-4xl mx-auto">
                         <AssessmentForm
                           profile={profile.data}
+                          bmcData={canvas.data}
+                          swotData={swot.data}
                           onSave={handleSaveAssessment}
                           onCancel={() => { setIsFormOpen(false); setEditingAssessment(null); }}
                           initialData={editingAssessment}

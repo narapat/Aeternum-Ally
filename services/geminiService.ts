@@ -1,4 +1,4 @@
-import { ESRSTopic, SustainabilityBusinessModel, BSCPerspective, AssessmentData, CompanyProfile } from "../types";
+import { ESRSTopic, SustainabilityBusinessModel, SwotAnalysis, BSCPerspective, AssessmentData, CompanyProfile, AssessmentScoring } from "../types";
 import { supabase } from "../lib/supabaseClient";
 
 const API_ENDPOINT = "/.netlify/functions/api";
@@ -64,6 +64,20 @@ export const generateAssessmentSuggestions = async (
   } catch (error) {
     const msg = errorMessage(error);
     return { impactSuggestion: msg, financialSuggestion: msg };
+  }
+};
+
+export const generateAssessmentScoring = async (
+  topic: ESRSTopic,
+  profile: CompanyProfile,
+  bmcData: SustainabilityBusinessModel,
+  swotData: SwotAnalysis
+): Promise<AssessmentScoring | null> => {
+  const topicTitle = String(topic).replace(/^[A-Z0-9]+ /, "");
+  try {
+    return await callApi("generateAssessmentScoring", { topic, topicTitle, profile, bmcData, swotData });
+  } catch {
+    return null;
   }
 };
 

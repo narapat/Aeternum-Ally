@@ -188,6 +188,8 @@ async function runAction(
   switch (action) {
     case "generateAssessmentSuggestions":
       return generateAssessmentSuggestions(ai, model, params);
+    case "generateAssessmentScoring":
+      return generateAssessmentScoring(ai, model, params);
     case "generateCanvasSuggestion":
       return generateCanvasSuggestion(ai, model, params);
     case "generateSwotInternal":
@@ -466,6 +468,112 @@ async function generateKPISuggestions(
     result: parseAIJson<object[]>(response.text, []),
     ...extractTokens(response),
   };
+}
+
+async function generateAssessmentScoring(
+  ai: GoogleGenAI,
+  model: string,
+  { topic, topicTitle, profile, bmcData, swotData }: any
+) {
+  const keyActivities = joinField(bmcData?.keyActivities);
+  const ecoSocialCosts = joinField(bmcData?.ecoSocialCosts);
+  const ecoSocialBenefits = joinField(bmcData?.ecoSocialBenefits);
+  const threats = joinField(swotData?.threats);
+  const opportunities = joinField(swotData?.opportunities);
+
+  const prompt = `
+You are an ESRS materiality expert helping SMEs assess ${topic} ${topicTitle}.
+
+${buildCompanyContext(profile)}
+
+Business context:
+- Key activities: ${keyActivities || "Not provided"}
+- Eco-social costs: ${ecoSocialCosts || "Not provided"}
+- Eco-social benefits: ${ecoSocialBenefits || "Not provided"}
+- Business threats: ${threats || "Not provided"}
+- Business opportunities: ${opportunities || "Not provided"}
+
+Task: Suggest materiality scores (1-5 scale) for each criterion based on the company's ACTUAL operations.
+
+Scoring guidelines:
+- Impact Scale: 1=minimal severity, 3=moderate, 5=severe
+- Impact Scope: 1=internal only, 3=regional/industry, 5=global
+- Irremediability: 1=fully reversible, 3=partially reversible, 5=irreversible
+- Impact Likelihood: 1=rare/unlikely, 3=possible, 5=certain/ongoing
+- Financial Magnitude: 1=less than 0.5% of revenue, 3=0.5–2%, 5=greater than 5%
+- Financial Likelihood: 1=unlikely within 3 years, 3=possible, 5=almost certain
+
+Base each score AND reasoning on the ACTUAL company context above. Be specific — reference the industry, activities, and costs/benefits mentioned.
+
+Return ONLY valid JSON, no markdown:
+{
+  "impact": {
+    "scale": { "score": number, "reasoning": string },
+    "scope": { "score": number, "reasoning": string },
+    "irremediability": { "score": number, "reasoning": string },
+    "likelihood": { "score": number, "reasoning": string }
+  },
+  "financial": {
+    "magnitude": { "score": number, "reasoning": string },
+    "likelihood": { "score": number, "reasoning": string }
+  }
+}
+  `;
+
+  const response = await ai.models.generateContent({
+    model,
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          impact: {
+            type: Type.OBJECT,
+            properties: {
+              scale:          { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, reasoning: { type: Type.STRING } } },
+              scope:          { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, reasoning: { type: Type.STRING } } },
+              irremediability:{ type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, reasoning: { type: Type.STRING } } },
+              likelihood:     { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, reasoning: { type: Type.STRING } } },
+            },
+          },
+          financial: {
+            type: Type.OBJECT,
+            properties: {
+              magnitude: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, reasoning: { type: Type.STRING } } },
+              likelihood:{ type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, reasoning: { type: Type.STRING } } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const fallback = {
+    impact: {
+      scale:          { score: 1, reasoning: "" },
+      scope:          { score: 1, reasoning: "" },
+      irremediability:{ score: 1, reasoning: "" },
+      likelihood:     { score: 1, reasoning: "" },
+    },
+    financial: {
+      magnitude: { score: 1, reasoning: "" },
+      likelihood:{ score: 1, reasoning: "" },
+    },
+  };
+
+  const parsed = parseAIJson(response.text, fallback);
+
+  // Clamp all scores to 1–5
+  const clamp = (n: number) => Math.min(5, Math.max(1, Math.round(n)));
+  parsed.impact.scale.score           = clamp(parsed.impact.scale.score);
+  parsed.impact.scope.score           = clamp(parsed.impact.scope.score);
+  parsed.impact.irremediability.score = clamp(parsed.impact.irremediability.score);
+  parsed.impact.likelihood.score      = clamp(parsed.impact.likelihood.score);
+  parsed.financial.magnitude.score    = clamp(parsed.financial.magnitude.score);
+  parsed.financial.likelihood.score   = clamp(parsed.financial.likelihood.score);
+
+  return { result: parsed, ...extractTokens(response) };
 }
 
 async function generateSustainabilityStatement(
