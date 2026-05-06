@@ -143,6 +143,10 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
       impactMaterialityValue: imValue,
       financialMaterialityValue: fmValue,
       isMaterial: imValue > 40 || fmValue > 40,
+      // Preserve existing suggestion if user didn't request new AI scoring this session
+      aiScoringSuggestion: aiScoring
+        ? { ...aiScoring, suggestedAt: new Date().toISOString() }
+        : (initialData?.aiScoringSuggestion ?? null),
     };
     onSave(data);
   };

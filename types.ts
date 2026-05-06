@@ -52,6 +52,7 @@ export interface AssessmentData {
   impactMaterialityValue: number; // Calculated
   financialMaterialityValue: number; // Calculated
   isMaterial: boolean;
+  aiScoringSuggestion?: (AssessmentScoring & { suggestedAt: string }) | null;
 }
 
 export interface User {
