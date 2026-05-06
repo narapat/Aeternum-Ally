@@ -893,14 +893,41 @@ Return ONLY valid JSON — no markdown, no backticks.
   });
 
   // ── Insight + actions call (fires in parallel with topic calls) ───────────
+  const materialTopics = assessments
+    .filter((a: any) => a.isMaterial ?? false)
+    .map((a: any) => String(a.topic).split(" ")[0])
+    .join(", ") || "none identified";
+
   const insightPrompt = `
-You are a senior sustainability strategy advisor briefing a CEO on their completed DMA.
+You are a senior sustainability strategy advisor briefing a CEO on their completed Double Materiality Assessment (DMA).
 
 ${companySection}
 
-All topics summary: ${allTopicsSummary}
+All 10 ESRS topics summary (topic: material? impact/100 financial/100):
+${allTopicsSummary}
 
-Write a CEO-level briefing in plain language (no ESRS jargon) and a short action list.
+Material topics: ${materialTopics}
+
+TASK 1 — STRATEGIC INSIGHT (plain language, no ESRS jargon):
+- summary: 2-3 sentences on what this DMA reveals about the business
+- keyRisks: exactly 3-5 strings, each describing a specific material risk with business impact
+- opportunities: exactly 3-5 strings, each describing a concrete strategic opportunity
+- bottomLine: one sentence — the single most important thing this company must do now
+
+TASK 2 — RECOMMENDED ACTIONS: Generate exactly 5 to 8 actions covering all three types.
+Each action MUST have ALL of these fields:
+- id: "action-1", "action-2", etc.
+- type: one of "fix" (correct an incomplete assessment), "comply" (meet an ESRS requirement for a material topic), or "improve" (strategic opportunity)
+- priority: "high", "medium", or "low"
+- title: short action title (under 10 words)
+- description: what to do and why (under 25 words)
+- esrs_ref: relevant ESRS standard (e.g. "ESRS E1-6", "ESRS S1-1")
+- source_type: "dma"
+- source_id: the ESRS topic code this action relates to (e.g. "E1", "S1")
+- estimated_time: realistic estimate (e.g. "2 hours", "1 day", "1 week")
+
+Distribute actions: include at least 1 "fix", 2 "comply", and 1 "improve".
+Prioritise material topics.
 
 Return ONLY valid JSON — no markdown, no backticks.
   `.trim();

@@ -474,6 +474,14 @@ const App: React.FC = () => {
                     swotData={swot.data}
                     onBack={() => setView('assess')}
                     onContinue={() => setView('kpi')}
+                    onEditTopic={(topicCode) => {
+                      const match = assessments.find(a =>
+                        String(a.topic).startsWith(topicCode)
+                      );
+                      setEditingAssessment(match ?? null);
+                      setIsFormOpen(true);
+                      setView('assess');
+                    }}
                   />
                 )}
               </>

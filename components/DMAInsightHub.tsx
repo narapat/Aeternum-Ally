@@ -36,6 +36,7 @@ interface Props {
   swotData: SwotAnalysis;
   onBack: () => void;
   onContinue: () => void;
+  onEditTopic: (topicCode: string) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,6 +50,7 @@ const DMAInsightHub: React.FC<Props> = ({
   swotData,
   onBack,
   onContinue,
+  onEditTopic,
 }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -116,7 +118,7 @@ const DMAInsightHub: React.FC<Props> = ({
 
       {/* Quality checks */}
       {insight && insight.qualityChecks.length > 0 && (
-        <QualityCheckSection checks={insight.qualityChecks} onFixTopic={onBack} />
+        <QualityCheckSection checks={insight.qualityChecks} onEditTopic={onEditTopic} />
       )}
 
       {/* Strategic insight */}
@@ -125,8 +127,8 @@ const DMAInsightHub: React.FC<Props> = ({
       )}
 
       {/* Recommended actions */}
-      {insight && insight.recommendedActions.length > 0 && (
-        <RecommendedActionsSection actions={insight.recommendedActions} onFixSource={onBack} />
+      {insight && (
+        <RecommendedActionsSection actions={insight.recommendedActions} onEditTopic={onEditTopic} />
       )}
 
       {/* Navigation */}
@@ -262,8 +264,8 @@ const statusConfig = {
 
 const QualityCheckSection: React.FC<{
   checks: QualityCheck[];
-  onFixTopic: () => void;
-}> = ({ checks }) => {
+  onEditTopic: (topicCode: string) => void;
+}> = ({ checks, onEditTopic }) => {
   const sorted = [...checks].sort((a, b) => {
     const order = { needs_fix: 0, review: 1, ok: 2 };
     return order[a.status] - order[b.status];
@@ -277,14 +279,17 @@ const QualityCheckSection: React.FC<{
       </h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {sorted.map((check) => (
-          <QualityCheckCard key={check.topic} check={check} />
+          <QualityCheckCard key={check.topic} check={check} onEditTopic={onEditTopic} />
         ))}
       </div>
     </section>
   );
 };
 
-const QualityCheckCard: React.FC<{ check: QualityCheck }> = ({ check }) => {
+const QualityCheckCard: React.FC<{
+  check: QualityCheck;
+  onEditTopic: (topicCode: string) => void;
+}> = ({ check, onEditTopic }) => {
   const [expanded, setExpanded] = useState(check.status === "needs_fix");
   const cfg = statusConfig[check.status] ?? statusConfig.ok;
 
@@ -356,6 +361,18 @@ const QualityCheckCard: React.FC<{ check: QualityCheck }> = ({ check }) => {
         <p className="px-4 pb-3 text-xs text-emerald-600 dark:text-emerald-400 border-t border-slate-200 dark:border-slate-700 pt-3">
           No issues found — this topic meets minimum ESRS requirements.
         </p>
+      )}
+
+      {/* Edit link — always visible in footer */}
+      {expanded && (
+        <div className="px-4 pb-3 flex justify-end border-t border-slate-200/60 dark:border-slate-700/60 pt-2">
+          <button
+            onClick={() => onEditTopic(check.topic)}
+            className="text-xs font-medium text-esg-600 dark:text-esg-400 hover:underline flex items-center gap-1"
+          >
+            Edit {check.topic} assessment →
+          </button>
+        </div>
       )}
     </div>
   );
@@ -445,8 +462,20 @@ const priorityStyle = {
 
 const RecommendedActionsSection: React.FC<{
   actions: RecommendedAction[];
-  onFixSource: () => void;
-}> = ({ actions }) => {
+  onEditTopic: (topicCode: string) => void;
+}> = ({ actions, onEditTopic }) => {
+  if (actions.length === 0) {
+    return (
+      <section>
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+          <Zap className="w-5 h-5 text-esg-500" />
+          Recommended Actions
+        </h2>
+        <p className="text-sm text-slate-400 dark:text-slate-500 italic">No actions generated.</p>
+      </section>
+    );
+  }
+
   const groups = (["fix", "comply", "improve"] as const).map((type) => ({
     type,
     items: actions.filter((a) => a.type === type),
@@ -472,7 +501,7 @@ const RecommendedActionsSection: React.FC<{
               </div>
               <div className="space-y-3">
                 {items.map((action) => (
-                  <ActionCard key={action.id} action={action} />
+                  <ActionCard key={action.id} action={action} onEditTopic={onEditTopic} />
                 ))}
               </div>
             </div>
@@ -483,7 +512,10 @@ const RecommendedActionsSection: React.FC<{
   );
 };
 
-const ActionCard: React.FC<{ action: RecommendedAction }> = ({ action }) => (
+const ActionCard: React.FC<{
+  action: RecommendedAction;
+  onEditTopic: (topicCode: string) => void;
+}> = ({ action, onEditTopic }) => (
   <div
     className={`bg-white dark:bg-slate-800 rounded-xl border border-l-4 ${priorityStyle[action.priority] ?? priorityStyle.low} border-slate-200 dark:border-slate-700 p-4`}
   >
@@ -492,27 +524,35 @@ const ActionCard: React.FC<{ action: RecommendedAction }> = ({ action }) => (
         <p className="font-medium text-slate-800 dark:text-white text-sm">{action.title}</p>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{action.description}</p>
       </div>
-      <div className="flex flex-col items-end gap-1 flex-shrink-0">
-        <span
-          className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-            action.priority === "high"
-              ? "bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300"
-              : action.priority === "medium"
-              ? "bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300"
-              : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
-          }`}
-        >
-          {action.priority}
-        </span>
-      </div>
+      <span
+        className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${
+          action.priority === "high"
+            ? "bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300"
+            : action.priority === "medium"
+            ? "bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300"
+            : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+        }`}
+      >
+        {action.priority}
+      </span>
     </div>
-    <div className="flex items-center gap-3 mt-2 text-xs text-slate-400 dark:text-slate-500">
-      <span className="font-mono text-esg-600 dark:text-esg-400">{action.esrs_ref}</span>
-      {action.estimated_time && (
-        <span className="flex items-center gap-1">
-          <Clock className="w-3 h-3" />
-          {action.estimated_time}
-        </span>
+    <div className="flex items-center justify-between mt-2">
+      <div className="flex items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
+        <span className="font-mono text-esg-600 dark:text-esg-400">{action.esrs_ref}</span>
+        {action.estimated_time && (
+          <span className="flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            {action.estimated_time}
+          </span>
+        )}
+      </div>
+      {action.source_id && (
+        <button
+          onClick={() => onEditTopic(action.source_id)}
+          className="text-xs text-esg-600 dark:text-esg-400 hover:underline font-medium"
+        >
+          Edit {action.source_id} →
+        </button>
       )}
     </div>
   </div>
