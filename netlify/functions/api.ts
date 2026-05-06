@@ -212,6 +212,29 @@ function extractTokens(response: any): { inputTokens: number; outputTokens: numb
   };
 }
 
+// Shared JSON parser with fallback for markdown-wrapped responses.
+// Used by all action functions so error handling is consistent.
+function parseAIJson<T>(text: string | undefined, fallback: T): T {
+  if (!text) return fallback;
+  // 1. Direct parse (works when schema mode is used correctly)
+  try { return JSON.parse(text) as T; } catch {}
+  // 2. Strip markdown code fences and retry
+  const stripped = text.replace(/^```(?:json)?\s*/im, "").replace(/\s*```\s*$/m, "").trim();
+  try { return JSON.parse(stripped) as T; } catch {}
+  // 3. Extract first [...] or {...} block as last resort
+  const block = text.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
+  if (block) try { return JSON.parse(block[0]) as T; } catch {}
+  console.warn("parseAIJson: could not parse response, returning fallback. text:", text.slice(0, 200));
+  return fallback;
+}
+
+// For actions that cannot use schema mode (e.g. Google Search grounding),
+// append this to the prompt and parse the result with parseAIJson.
+const STRUCTURED_OUTPUT_INSTRUCTION = `
+CRITICAL: Return ONLY valid JSON. No markdown code fences (\`\`\`json), no preamble, no explanation.
+Return an empty array [] if no items apply.
+`;
+
 // Build a consistent company context block from a structured profile object.
 function buildCompanyContext(profile: any): string {
   return [
@@ -223,6 +246,10 @@ function buildCompanyContext(profile: any): string {
     `Key Products / Services: ${profile.productsServices}`,
   ].join('\n');
 }
+
+// Join a BMC field (string[] after migration) for use in AI prompts.
+const joinField = (v: string | string[]): string =>
+  Array.isArray(v) ? v.join(", ") : (v ?? "");
 
 // =============================================================
 // Action implementations
@@ -261,7 +288,7 @@ async function generateAssessmentSuggestions(
   });
 
   return {
-    result: JSON.parse(response.text || "{}"),
+    result: parseAIJson(response.text, { impactSuggestion: "", financialSuggestion: "" }),
     ...extractTokens(response),
   };
 }
@@ -297,14 +324,7 @@ async function generateCanvasSuggestion(
     },
   });
 
-  let parsed: string[] = [];
-  try {
-    parsed = JSON.parse(response.text || "[]");
-  } catch {
-    const match = response.text?.match(/\[.*\]/s);
-    if (match) parsed = JSON.parse(match[0]);
-  }
-
+  const parsed = parseAIJson<string[]>(response.text, []);
   return {
     result: Array.isArray(parsed) ? parsed : [],
     ...extractTokens(response),
@@ -326,17 +346,17 @@ async function generateSwotInternal(
     2. WEAKNESSES (Internal negative factors)
 
     BMC Data:
-    - Value Proposition: ${Array.isArray(bmcData.valueProposition) ? bmcData.valueProposition.join(', ') : bmcData.valueProposition}
-    - Key Partners: ${Array.isArray(bmcData.keyPartners) ? bmcData.keyPartners.join(', ') : bmcData.keyPartners}
-    - Key Activities: ${Array.isArray(bmcData.keyActivities) ? bmcData.keyActivities.join(', ') : bmcData.keyActivities}
-    - Key Resources: ${Array.isArray(bmcData.keyResources) ? bmcData.keyResources.join(', ') : bmcData.keyResources}
-    - Customer Relationships: ${Array.isArray(bmcData.customerRelationships) ? bmcData.customerRelationships.join(', ') : bmcData.customerRelationships}
-    - Channels: ${Array.isArray(bmcData.channels) ? bmcData.channels.join(', ') : bmcData.channels}
-    - Customer Segments: ${Array.isArray(bmcData.customerSegments) ? bmcData.customerSegments.join(', ') : bmcData.customerSegments}
-    - Cost Structure: ${Array.isArray(bmcData.costStructure) ? bmcData.costStructure.join(', ') : bmcData.costStructure}
-    - Revenue Streams: ${Array.isArray(bmcData.revenueStreams) ? bmcData.revenueStreams.join(', ') : bmcData.revenueStreams}
-    - Eco-Social Benefits: ${Array.isArray(bmcData.ecoSocialBenefits) ? bmcData.ecoSocialBenefits.join(', ') : bmcData.ecoSocialBenefits}
-    - Eco-Social Costs: ${Array.isArray(bmcData.ecoSocialCosts) ? bmcData.ecoSocialCosts.join(', ') : bmcData.ecoSocialCosts}
+    - Value Proposition: ${joinField(bmcData.valueProposition)}
+    - Key Partners: ${joinField(bmcData.keyPartners)}
+    - Key Activities: ${joinField(bmcData.keyActivities)}
+    - Key Resources: ${joinField(bmcData.keyResources)}
+    - Customer Relationships: ${joinField(bmcData.customerRelationships)}
+    - Channels: ${joinField(bmcData.channels)}
+    - Customer Segments: ${joinField(bmcData.customerSegments)}
+    - Cost Structure: ${joinField(bmcData.costStructure)}
+    - Revenue Streams: ${joinField(bmcData.revenueStreams)}
+    - Eco-Social Benefits: ${joinField(bmcData.ecoSocialBenefits)}
+    - Eco-Social Costs: ${joinField(bmcData.ecoSocialCosts)}
 
     CRITICAL: Return ONLY a JSON object with keys "strengths" and "weaknesses".
     Each value must be an array of short, distinct strings (one factor per item, under 15 words each).
@@ -358,7 +378,7 @@ async function generateSwotInternal(
   });
 
   return {
-    result: JSON.parse(response.text || "{}"),
+    result: parseAIJson(response.text, { strengths: [], weaknesses: [] }),
     ...extractTokens(response),
   };
 }
@@ -443,7 +463,7 @@ async function generateKPISuggestions(
   });
 
   return {
-    result: JSON.parse(response.text || "[]"),
+    result: parseAIJson<object[]>(response.text, []),
     ...extractTokens(response),
   };
 }
@@ -557,8 +577,8 @@ async function generateSustainabilityStatement(
   }
 
   const headerResp = await headerRespPromise;
-  const header = JSON.parse(headerResp.text || "{}");
-  const topics = topicResps.map((r: any) => JSON.parse(r.text || "{}"));
+  const header = parseAIJson(headerResp.text, { generalDisclosure: "", strategyDisclosure: "" });
+  const topics = topicResps.map((r: any) => parseAIJson(r.text, { topicId: "", topicName: "", disclosureContent: "" }));
 
   // Sum token usage across all calls
   const allResps = [headerResp, ...topicResps];
