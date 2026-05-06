@@ -26,18 +26,21 @@ import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun,
 
 const DEFAULT_PROFILE: CompanyProfile = {
   name: '', taxId: '', industry: '', isicCode: '', foundingYear: '',
-  website: '', address: '', employeeCount: '', revenueRange: '',
+  website: '',
+  addressStreet: '', addressCity: '', addressState: '', addressPostalCode: '', addressCountry: '',
+  contactEmail: '', contactPhone: '',
+  employeeCount: '', revenueRange: '',
   description: '', mission: '', vision: '', productsServices: '',
 };
 
 const DEFAULT_CANVAS: SustainabilityBusinessModel = {
-  keyPartners: '', keyActivities: '', keyResources: '', valueProposition: '',
-  customerRelationships: '', channels: '', customerSegments: '',
-  costStructure: '', revenueStreams: '', ecoSocialCosts: '', ecoSocialBenefits: '',
+  keyPartners: [], keyActivities: [], keyResources: [], valueProposition: [],
+  customerRelationships: [], channels: [], customerSegments: [],
+  costStructure: [], revenueStreams: [], ecoSocialCosts: [], ecoSocialBenefits: [],
 };
 
 const DEFAULT_SWOT: SwotAnalysis = {
-  strengths: '', weaknesses: '', opportunities: '', threats: '',
+  strengths: [], weaknesses: [], opportunities: [], threats: [],
 };
 
 const App: React.FC = () => {

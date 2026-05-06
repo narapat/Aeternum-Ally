@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { SustainabilityBusinessModel, CompanyProfile } from '../types';
-import { Info, Wand2, ArrowRight, ArrowLeft, Grid, Check, Loader2, PlayCircle } from 'lucide-react';
+import { Info, Wand2, ArrowRight, ArrowLeft, Grid, Check, Loader2, PlayCircle, Plus, X } from 'lucide-react';
 import { generateCanvasSuggestion } from '../services/geminiService';
 import SaveIndicator from './SaveIndicator';
 import type { SaveStatus } from '../hooks/useOrgData';
@@ -74,6 +74,69 @@ const WIZARD_STEPS: Step[] = [
   }
 ];
 
+// ── Shared array editor (wizard view — spacious) ──────────────────────────────
+
+interface ArrayFieldEditorProps {
+  items: string[];
+  onChange: (items: string[]) => void;
+  placeholder?: string;
+}
+
+const ArrayFieldEditor: React.FC<ArrayFieldEditorProps> = ({ items, onChange, placeholder }) => {
+  const [draft, setDraft] = useState('');
+
+  const addItem = () => {
+    const trimmed = draft.trim();
+    if (!trimmed) return;
+    onChange([...items, trimmed]);
+    setDraft('');
+  };
+
+  const removeItem = (index: number) => {
+    onChange(items.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div className="border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 focus-within:border-esg-400 transition-colors">
+      <ul className="p-3 space-y-2 min-h-[80px] max-h-56 overflow-y-auto">
+        {items.map((item, i) => (
+          <li key={i} className="flex items-center gap-2 group">
+            <span className="text-slate-300 dark:text-slate-600 text-sm flex-shrink-0">•</span>
+            <span className="flex-1 text-sm text-slate-700 dark:text-slate-200">{item}</span>
+            <button
+              onClick={() => removeItem(i)}
+              className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 dark:text-slate-600 dark:hover:text-red-400 transition-opacity p-0.5 rounded flex-shrink-0"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </li>
+        ))}
+        {items.length === 0 && (
+          <li className="text-sm text-slate-300 dark:text-slate-600 italic py-1">No items yet — add one below.</li>
+        )}
+      </ul>
+      <div className="border-t border-slate-100 dark:border-slate-700 p-2 flex gap-2">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } }}
+          placeholder={placeholder || 'Add item and press Enter…'}
+          className="flex-1 text-sm px-3 py-1.5 rounded-md border border-slate-200 dark:border-slate-600 bg-transparent text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-esg-400"
+        />
+        <button
+          onClick={addItem}
+          disabled={!draft.trim()}
+          className="text-sm px-3 py-1.5 bg-esg-600 text-white rounded-md hover:bg-esg-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition-colors"
+        >
+          <Plus className="w-3 h-3" /> Add
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, profile, saveStatus, isDirty, onSave, saveError }) => {
   const [mode, setMode] = useState<'grid' | 'wizard'>('wizard');
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -83,18 +146,17 @@ const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, profile, saveSta
   const isFirstStep = currentStepIndex === 0;
   const isLastStep = currentStepIndex === WIZARD_STEPS.length - 1;
 
-  const handleChange = (field: CanvasField, value: string) => {
+  const handleChange = (field: CanvasField, value: string[]) => {
     onChange({ ...data, [field]: value });
   };
 
   const handleAiSuggest = async (field: CanvasField, label: string) => {
     setLoadingField(field);
     const suggestion = await generateCanvasSuggestion(profile, label);
-    if (suggestion) {
-      // Append if not empty, or replace if empty
-      const currentVal = data[field];
-      const newVal = currentVal ? `${currentVal}\n\n--- AI Suggestion ---\n${suggestion}` : suggestion;
-      handleChange(field, newVal);
+    if (suggestion.length > 0) {
+      const existing = data[field];
+      const merged = [...existing, ...suggestion.filter(s => !existing.includes(s))];
+      handleChange(field, merged);
     }
     setLoadingField(null);
   };
@@ -109,7 +171,7 @@ const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, profile, saveSta
           <span>{Math.round(((currentStepIndex + 1) / WIZARD_STEPS.length) * 100)}% Completed</span>
         </div>
         <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-          <div 
+          <div
             className="bg-esg-600 h-2 rounded-full transition-all duration-500 ease-in-out"
             style={{ width: `${((currentStepIndex + 1) / WIZARD_STEPS.length) * 100}%` }}
           />
@@ -139,12 +201,11 @@ const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, profile, saveSta
                   AI Suggest
                 </button>
               </div>
-              
-              <textarea
-                value={data[field.key]}
-                onChange={(e) => handleChange(field.key, e.target.value)}
-                className="w-full p-4 border border-slate-300 dark:border-slate-600 rounded-lg h-32 focus:ring-2 focus:ring-esg-500 focus:border-esg-500 transition-all text-sm leading-relaxed bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
-                placeholder={`Enter details for ${field.label}...`}
+
+              <ArrayFieldEditor
+                items={data[field.key]}
+                onChange={(items) => handleChange(field.key, items)}
+                placeholder={`Add ${field.label} item and press Enter…`}
               />
               <p className="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1">
                 <Info className="w-3 h-3" /> {field.hint}
@@ -167,12 +228,12 @@ const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, profile, saveSta
         </button>
 
         {isLastStep ? (
-           <button
-           onClick={() => setMode('grid')}
-           className="flex items-center gap-2 bg-esg-600 text-white px-6 py-2 md:px-8 md:py-3 rounded-lg font-bold hover:bg-esg-700 shadow-lg shadow-esg-600/20 transition-all text-sm md:text-base"
-         >
-           Finish & View Canvas <Check className="w-5 h-5" />
-         </button>
+          <button
+            onClick={() => setMode('grid')}
+            className="flex items-center gap-2 bg-esg-600 text-white px-6 py-2 md:px-8 md:py-3 rounded-lg font-bold hover:bg-esg-700 shadow-lg shadow-esg-600/20 transition-all text-sm md:text-base"
+          >
+            Finish & View Canvas <Check className="w-5 h-5" />
+          </button>
         ) : (
           <button
             onClick={() => setCurrentStepIndex(prev => Math.min(WIZARD_STEPS.length - 1, prev + 1))}
@@ -185,128 +246,121 @@ const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, profile, saveSta
     </div>
   );
 
-  // --- Render: Grid View (Original) ---
+  // --- Render: Grid View ---
   const renderGrid = () => (
     <div className="animate-in fade-in duration-500">
       <div className="bg-white dark:bg-slate-800 p-1 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden transition-colors">
-        {/* Top Section: The Business Logic */}
-        {/* Responsive: Flex column on mobile, grid on desktop */}
+        {/* Top Section */}
         <div className="flex flex-col md:grid md:grid-cols-5 divide-y md:divide-y-0 md:divide-x divide-slate-200 dark:divide-slate-700">
-            
-            {/* Column 1: Upstream */}
-            <div className="flex flex-col divide-y divide-slate-200 dark:divide-slate-700">
-                <CanvasCard 
-                    title="Key Partners" 
-                    hint="Suppliers, NGOs, Gov bodies"
-                    value={data.keyPartners} 
-                    onChange={(v) => handleChange('keyPartners', v)} 
-                    className="h-auto md:h-full min-h-[160px]"
-                />
-            </div>
+          <div className="flex flex-col divide-y divide-slate-200 dark:divide-slate-700">
+            <CanvasCard
+              title="Key Partners"
+              hint="Suppliers, NGOs, Gov bodies"
+              value={data.keyPartners}
+              onChange={(v) => handleChange('keyPartners', v)}
+              className="h-auto md:h-full min-h-[160px]"
+            />
+          </div>
 
-            {/* Column 2: Activities & Resources */}
-            <div className="flex flex-col divide-y divide-slate-200 dark:divide-slate-700">
-                <CanvasCard 
-                    title="Key Activities" 
-                    hint="Production, Problem solving, Network"
-                    value={data.keyActivities} 
-                    onChange={(v) => handleChange('keyActivities', v)} 
-                    className="h-auto md:h-1/2 min-h-[160px]"
-                />
-                <CanvasCard 
-                    title="Key Resources" 
-                    hint="Physical, Intellectual, Human, Financial"
-                    value={data.keyResources} 
-                    onChange={(v) => handleChange('keyResources', v)} 
-                    className="h-auto md:h-1/2 min-h-[160px]"
-                />
-            </div>
+          <div className="flex flex-col divide-y divide-slate-200 dark:divide-slate-700">
+            <CanvasCard
+              title="Key Activities"
+              hint="Production, Problem solving, Network"
+              value={data.keyActivities}
+              onChange={(v) => handleChange('keyActivities', v)}
+              className="h-auto md:h-1/2 min-h-[160px]"
+            />
+            <CanvasCard
+              title="Key Resources"
+              hint="Physical, Intellectual, Human, Financial"
+              value={data.keyResources}
+              onChange={(v) => handleChange('keyResources', v)}
+              className="h-auto md:h-1/2 min-h-[160px]"
+            />
+          </div>
 
-            {/* Column 3: Value Proposition (Center) */}
-            <div className="flex flex-col">
-                <CanvasCard 
-                    title="Value Propositions" 
-                    hint="Product/Service value + Social/Eco value"
-                    value={data.valueProposition} 
-                    onChange={(v) => handleChange('valueProposition', v)} 
-                    className="h-auto md:h-full min-h-[200px] bg-esg-50/50 dark:bg-esg-900/10"
-                />
-            </div>
+          <div className="flex flex-col">
+            <CanvasCard
+              title="Value Propositions"
+              hint="Product/Service value + Social/Eco value"
+              value={data.valueProposition}
+              onChange={(v) => handleChange('valueProposition', v)}
+              className="h-auto md:h-full min-h-[200px] bg-esg-50/50 dark:bg-esg-900/10"
+            />
+          </div>
 
-            {/* Column 4: Relationships & Channels */}
-            <div className="flex flex-col divide-y divide-slate-200 dark:divide-slate-700">
-                <CanvasCard 
-                    title="Customer Relationships" 
-                    hint="Personal assistance, Automated, Communities"
-                    value={data.customerRelationships} 
-                    onChange={(v) => handleChange('customerRelationships', v)} 
-                    className="h-auto md:h-1/2 min-h-[160px]"
-                />
-                <CanvasCard 
-                    title="Channels" 
-                    hint="Awareness, Evaluation, Purchase, Delivery, After-sales"
-                    value={data.channels} 
-                    onChange={(v) => handleChange('channels', v)} 
-                    className="h-auto md:h-1/2 min-h-[160px]"
-                />
-            </div>
+          <div className="flex flex-col divide-y divide-slate-200 dark:divide-slate-700">
+            <CanvasCard
+              title="Customer Relationships"
+              hint="Personal assistance, Automated, Communities"
+              value={data.customerRelationships}
+              onChange={(v) => handleChange('customerRelationships', v)}
+              className="h-auto md:h-1/2 min-h-[160px]"
+            />
+            <CanvasCard
+              title="Channels"
+              hint="Awareness, Evaluation, Purchase, Delivery, After-sales"
+              value={data.channels}
+              onChange={(v) => handleChange('channels', v)}
+              className="h-auto md:h-1/2 min-h-[160px]"
+            />
+          </div>
 
-             {/* Column 5: Segments */}
-             <div className="flex flex-col">
-                <CanvasCard 
-                    title="Customer Segments" 
-                    hint="Mass market, Niche, Segmented, Diversified"
-                    value={data.customerSegments} 
-                    onChange={(v) => handleChange('customerSegments', v)} 
-                    className="h-auto md:h-full min-h-[160px]"
-                />
-            </div>
+          <div className="flex flex-col">
+            <CanvasCard
+              title="Customer Segments"
+              hint="Mass market, Niche, Segmented, Diversified"
+              value={data.customerSegments}
+              onChange={(v) => handleChange('customerSegments', v)}
+              className="h-auto md:h-full min-h-[160px]"
+            />
+          </div>
         </div>
 
-        {/* Bottom Section: Financials & Impact */}
+        {/* Bottom Section: Financials */}
         <div className="border-t border-slate-200 dark:border-slate-700">
-            <div className="flex flex-col md:grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200 dark:divide-slate-700">
-                <CanvasCard 
-                    title="Cost Structure" 
-                    hint="Fixed costs, Variable costs, Economies of scale"
-                    value={data.costStructure} 
-                    onChange={(v) => handleChange('costStructure', v)} 
-                    className="h-auto md:h-32 min-h-[140px]"
-                    height=""
-                />
-                <CanvasCard 
-                    title="Revenue Streams" 
-                    hint="Asset sale, Usage fee, Subscription, Licensing"
-                    value={data.revenueStreams} 
-                    onChange={(v) => handleChange('revenueStreams', v)} 
-                    className="h-auto md:h-32 min-h-[140px]"
-                    height=""
-                />
-            </div>
+          <div className="flex flex-col md:grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200 dark:divide-slate-700">
+            <CanvasCard
+              title="Cost Structure"
+              hint="Fixed costs, Variable costs, Economies of scale"
+              value={data.costStructure}
+              onChange={(v) => handleChange('costStructure', v)}
+              className="h-auto md:h-32 min-h-[140px]"
+              height=""
+            />
+            <CanvasCard
+              title="Revenue Streams"
+              hint="Asset sale, Usage fee, Subscription, Licensing"
+              value={data.revenueStreams}
+              onChange={(v) => handleChange('revenueStreams', v)}
+              className="h-auto md:h-32 min-h-[140px]"
+              height=""
+            />
+          </div>
         </div>
-        
+
         {/* Sustainability Layer */}
         <div className="border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
-             <div className="flex flex-col md:grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200 dark:divide-slate-700">
-                <CanvasCard 
-                    title="Eco-Social Costs" 
-                    hint="Pollution, Waste, Social stress (Negative externalities)"
-                    value={data.ecoSocialCosts} 
-                    onChange={(v) => handleChange('ecoSocialCosts', v)} 
-                    className="h-auto md:h-32 min-h-[140px]"
-                    height=""
-                    headerColor="text-red-600 dark:text-red-400"
-                />
-                <CanvasCard 
-                    title="Eco-Social Benefits" 
-                    hint="Carbon reduction, Community dev, Wellbeing (Positive externalities)"
-                    value={data.ecoSocialBenefits} 
-                    onChange={(v) => handleChange('ecoSocialBenefits', v)} 
-                    className="h-auto md:h-32 min-h-[140px]"
-                    height=""
-                    headerColor="text-esg-600 dark:text-esg-400"
-                />
-            </div>
+          <div className="flex flex-col md:grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200 dark:divide-slate-700">
+            <CanvasCard
+              title="Eco-Social Costs"
+              hint="Pollution, Waste, Social stress (Negative externalities)"
+              value={data.ecoSocialCosts}
+              onChange={(v) => handleChange('ecoSocialCosts', v)}
+              className="h-auto md:h-32 min-h-[140px]"
+              height=""
+              headerColor="text-red-600 dark:text-red-400"
+            />
+            <CanvasCard
+              title="Eco-Social Benefits"
+              hint="Carbon reduction, Community dev, Wellbeing (Positive externalities)"
+              value={data.ecoSocialBenefits}
+              onChange={(v) => handleChange('ecoSocialBenefits', v)}
+              className="h-auto md:h-32 min-h-[140px]"
+              height=""
+              headerColor="text-esg-600 dark:text-esg-400"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -316,25 +370,25 @@ const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, profile, saveSta
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-            <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Sustainability Business Model Canvas</h2>
-            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Define your business logic including economic, environmental, and social layers.</p>
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Sustainability Business Model Canvas</h2>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Define your business logic including economic, environmental, and social layers.</p>
         </div>
         <div className="flex gap-2 w-full md:w-auto justify-between md:justify-end">
-             <div className="bg-slate-100 dark:bg-slate-700 p-1 rounded-lg flex text-sm font-medium">
-                <button 
-                    onClick={() => setMode('wizard')} 
-                    className={`px-3 py-1.5 rounded-md flex items-center gap-2 transition-all ${mode === 'wizard' ? 'bg-white dark:bg-slate-600 shadow text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
-                >
-                    <PlayCircle className="w-4 h-4" /> <span className="hidden sm:inline">Wizard</span>
-                </button>
-                <button 
-                    onClick={() => setMode('grid')} 
-                    className={`px-3 py-1.5 rounded-md flex items-center gap-2 transition-all ${mode === 'grid' ? 'bg-white dark:bg-slate-600 shadow text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
-                >
-                    <Grid className="w-4 h-4" /> <span className="hidden sm:inline">Canvas</span>
-                </button>
-             </div>
-             <SaveIndicator status={saveStatus} isDirty={isDirty} onSave={onSave} errorMessage={saveError} />
+          <div className="bg-slate-100 dark:bg-slate-700 p-1 rounded-lg flex text-sm font-medium">
+            <button
+              onClick={() => setMode('wizard')}
+              className={`px-3 py-1.5 rounded-md flex items-center gap-2 transition-all ${mode === 'wizard' ? 'bg-white dark:bg-slate-600 shadow text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+            >
+              <PlayCircle className="w-4 h-4" /> <span className="hidden sm:inline">Wizard</span>
+            </button>
+            <button
+              onClick={() => setMode('grid')}
+              className={`px-3 py-1.5 rounded-md flex items-center gap-2 transition-all ${mode === 'grid' ? 'bg-white dark:bg-slate-600 shadow text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+            >
+              <Grid className="w-4 h-4" /> <span className="hidden sm:inline">Canvas</span>
+            </button>
+          </div>
+          <SaveIndicator status={saveStatus} isDirty={isDirty} onSave={onSave} errorMessage={saveError} />
         </div>
       </div>
 
@@ -343,36 +397,85 @@ const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, profile, saveSta
   );
 };
 
+// ── Compact card for grid view ────────────────────────────────────────────────
+
 interface CardProps {
   title: string;
-  value: string;
-  onChange: (val: string) => void;
+  value: string[];
+  onChange: (val: string[]) => void;
   hint?: string;
   className?: string;
   height?: string;
   headerColor?: string;
 }
 
-const CanvasCard: React.FC<CardProps> = ({ title, value, onChange, hint, className = '', height = 'h-full', headerColor = 'text-slate-700 dark:text-slate-300' }) => (
-  <div className={`p-4 ${className} ${height} flex flex-col group`}>
-    <div className="flex justify-between items-center mb-2">
-        <h3 className={`font-bold text-sm uppercase tracking-wide ${headerColor}`}>{title}</h3>
+const CanvasCard: React.FC<CardProps> = ({
+  title, value, onChange, hint,
+  className = '', height = 'h-full',
+  headerColor = 'text-slate-700 dark:text-slate-300'
+}) => {
+  const [draft, setDraft] = useState('');
+
+  const addItem = () => {
+    const trimmed = draft.trim();
+    if (!trimmed) return;
+    onChange([...value, trimmed]);
+    setDraft('');
+  };
+
+  const removeItem = (index: number) => {
+    onChange(value.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div className={`p-3 ${className} ${height} flex flex-col`}>
+      <div className="flex justify-between items-center mb-2">
+        <h3 className={`font-bold text-xs uppercase tracking-wide ${headerColor}`}>{title}</h3>
         {hint && (
-            <div className="relative group/tooltip">
-                <Info className="w-3 h-3 text-slate-300 dark:text-slate-600 cursor-help" />
-                <div className="absolute right-0 top-4 w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none z-10 hidden md:block">
-                    {hint}
-                </div>
+          <div className="relative group/tooltip">
+            <Info className="w-3 h-3 text-slate-300 dark:text-slate-600 cursor-help" />
+            <div className="absolute right-0 top-4 w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none z-10 hidden md:block">
+              {hint}
             </div>
+          </div>
         )}
+      </div>
+
+      <ul className="flex-1 space-y-1 overflow-y-auto min-h-[40px] mb-2">
+        {value.map((item, i) => (
+          <li key={i} className="flex items-start gap-1 group/item">
+            <span className="text-slate-300 dark:text-slate-600 text-xs mt-0.5 flex-shrink-0">•</span>
+            <span className="flex-1 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{item}</span>
+            <button
+              onClick={() => removeItem(i)}
+              className="opacity-0 group-hover/item:opacity-100 text-slate-300 hover:text-red-400 dark:text-slate-600 dark:hover:text-red-400 flex-shrink-0 transition-opacity ml-0.5"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </li>
+        ))}
+        {value.length === 0 && (
+          <li className="text-xs text-slate-300 dark:text-slate-600 italic">None added</li>
+        )}
+      </ul>
+
+      <div className="flex gap-1">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } }}
+          placeholder="Add…"
+          className="flex-1 text-xs p-1.5 border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none focus:border-esg-400"
+        />
+        <button
+          onClick={addItem}
+          className="text-xs px-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded hover:bg-esg-50 hover:text-esg-600 dark:hover:bg-esg-900/20 dark:hover:text-esg-400 transition-colors"
+        >
+          +
+        </button>
+      </div>
     </div>
-    <textarea 
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full flex-1 resize-none text-sm text-slate-600 dark:text-slate-300 bg-transparent border border-transparent hover:border-slate-200 dark:hover:border-slate-600 focus:border-esg-400 focus:bg-white dark:focus:bg-slate-950 dark:focus:text-white focus:ring-0 rounded p-1 transition-all placeholder-slate-300 dark:placeholder-slate-600 min-h-[60px]"
-      placeholder={`Define ${title}...`}
-    />
-  </div>
-);
+  );
+};
 
 export default BusinessModelCanvas;

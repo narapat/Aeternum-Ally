@@ -278,15 +278,35 @@ async function generateCanvasSuggestion(
 
     Task:
     Suggest content for the "${fieldLabel}" block of the Business Model Canvas.
-    The suggestion should be specific to the company's industry and products/services, concise, and formatted as a list of key points (bullet points).
-    If the field is "Eco-Social Costs" or "Eco-Social Benefits", focus strictly on environmental and social externalities relevant to this company.
+    Each suggestion should be a short, distinct point specific to the company's industry and products/services.
+    If the field is "Eco-Social Costs" or "Eco-Social Benefits", focus strictly on environmental and social externalities.
 
-    Output plain text only.
+    CRITICAL: Return ONLY a valid JSON array of strings. Each string is one concise point (under 15 words).
+    No markdown, no backticks, no explanation.
   `;
 
-  const response = await ai.models.generateContent({ model, contents: prompt });
+  const response = await ai.models.generateContent({
+    model,
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+      },
+    },
+  });
+
+  let parsed: string[] = [];
+  try {
+    parsed = JSON.parse(response.text || "[]");
+  } catch {
+    const match = response.text?.match(/\[.*\]/s);
+    if (match) parsed = JSON.parse(match[0]);
+  }
+
   return {
-    result: response.text?.trim() || "",
+    result: Array.isArray(parsed) ? parsed : [],
     ...extractTokens(response),
   };
 }
@@ -306,20 +326,20 @@ async function generateSwotInternal(
     2. WEAKNESSES (Internal negative factors)
 
     BMC Data:
-    - Value Proposition: ${bmcData.valueProposition}
-    - Key Partners: ${bmcData.keyPartners}
-    - Key Activities: ${bmcData.keyActivities}
-    - Key Resources: ${bmcData.keyResources}
-    - Customer Relationships: ${bmcData.customerRelationships}
-    - Channels: ${bmcData.channels}
-    - Customer Segments: ${bmcData.customerSegments}
-    - Cost Structure: ${bmcData.costStructure}
-    - Revenue Streams: ${bmcData.revenueStreams}
-    - Eco-Social Benefits: ${bmcData.ecoSocialBenefits}
-    - Eco-Social Costs: ${bmcData.ecoSocialCosts}
+    - Value Proposition: ${Array.isArray(bmcData.valueProposition) ? bmcData.valueProposition.join(', ') : bmcData.valueProposition}
+    - Key Partners: ${Array.isArray(bmcData.keyPartners) ? bmcData.keyPartners.join(', ') : bmcData.keyPartners}
+    - Key Activities: ${Array.isArray(bmcData.keyActivities) ? bmcData.keyActivities.join(', ') : bmcData.keyActivities}
+    - Key Resources: ${Array.isArray(bmcData.keyResources) ? bmcData.keyResources.join(', ') : bmcData.keyResources}
+    - Customer Relationships: ${Array.isArray(bmcData.customerRelationships) ? bmcData.customerRelationships.join(', ') : bmcData.customerRelationships}
+    - Channels: ${Array.isArray(bmcData.channels) ? bmcData.channels.join(', ') : bmcData.channels}
+    - Customer Segments: ${Array.isArray(bmcData.customerSegments) ? bmcData.customerSegments.join(', ') : bmcData.customerSegments}
+    - Cost Structure: ${Array.isArray(bmcData.costStructure) ? bmcData.costStructure.join(', ') : bmcData.costStructure}
+    - Revenue Streams: ${Array.isArray(bmcData.revenueStreams) ? bmcData.revenueStreams.join(', ') : bmcData.revenueStreams}
+    - Eco-Social Benefits: ${Array.isArray(bmcData.ecoSocialBenefits) ? bmcData.ecoSocialBenefits.join(', ') : bmcData.ecoSocialBenefits}
+    - Eco-Social Costs: ${Array.isArray(bmcData.ecoSocialCosts) ? bmcData.ecoSocialCosts.join(', ') : bmcData.ecoSocialCosts}
 
-    Return the response in JSON format with keys "strengths" and "weaknesses".
-    Provide bullet points using a hyphen (-).
+    CRITICAL: Return ONLY a JSON object with keys "strengths" and "weaknesses".
+    Each value must be an array of short, distinct strings (one factor per item, under 15 words each).
   `;
 
   const response = await ai.models.generateContent({
@@ -330,8 +350,8 @@ async function generateSwotInternal(
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          strengths: { type: Type.STRING },
-          weaknesses: { type: Type.STRING },
+          strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
+          weaknesses: { type: Type.ARRAY, items: { type: Type.STRING } },
         },
       },
     },
@@ -362,14 +382,20 @@ async function generateSwotExternal(
     Provide the answer as a bulleted list. Cite sources if possible.
   `;
 
+  // Google Search grounding is incompatible with JSON schema mode; parse text manually.
   const response = await ai.models.generateContent({
     model,
     contents: prompt,
     config: { tools: [{ googleSearch: {} }] },
   });
 
+  const items = (response.text || "")
+    .split("\n")
+    .map((line: string) => line.replace(/^[\s•\-\*–\d\.]+/, "").replace(/\*+/g, "").trim())
+    .filter((line: string) => line.length > 0 && !line.startsWith("---") && !line.startsWith("#"));
+
   return {
-    result: response.text?.trim() || "",
+    result: items,
     ...extractTokens(response),
   };
 }
