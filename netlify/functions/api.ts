@@ -803,8 +803,8 @@ async function analyzeDMAQuality(
       return [
         `Topic: ${a.topic} (${a.topicTitle || ""})`,
         `  Material: ${material ? "Yes" : "No"}`,
-        `  Impact score: ${impactScore}/100 — ${impactDesc}`,
-        `  Financial score: ${financialScore}/100 — ${financialDesc}`,
+        `  Impact score: ${impactScore}/100 — ${impactDesc || "No description"}`,
+        `  Financial score: ${financialScore}/100 — ${financialDesc || "No description"}`,
         scores.scale ? `  Scores: scale=${scores.scale} scope=${scores.scope} irremediability=${scores.irremediability} likelihood=${scores.likelihood}` : "",
       ].filter(Boolean).join("\n");
     })
@@ -825,72 +825,29 @@ async function analyzeDMAQuality(
       ].filter(Boolean).join("\n")
     : "";
 
-  const prompt = `
-You are a senior ESRS/CSRD sustainability advisor performing a quality review of a Double Materiality Assessment (DMA) for an SME.
-
+  const sharedContext = `
 ${companyCtx}
-
-${bmcContext ? `Business context:\n${bmcContext}` : ""}
-${swotContext ? `Strategic context:\n${swotContext}` : ""}
+${bmcContext ? `\nBusiness context:\n${bmcContext}` : ""}
+${swotContext ? `\nStrategic context:\n${swotContext}` : ""}
 
 DMA Assessment Results:
 ${assessmentSummary}
+  `.trim();
 
-Your task: Analyse the quality and completeness of this DMA and provide:
+  // ── Call 1: Quality checks per topic ──────────────────────────────────────
+  const qualityPrompt = `
+You are a senior ESRS/CSRD sustainability advisor reviewing a Double Materiality Assessment (DMA).
 
-1. QUALITY CHECKS — For each assessed topic, flag issues a CSRD auditor would raise.
-   - "needs_fix": critical gaps that would fail compliance review
-   - "review": concerns worth reviewing but not blocking
-   - "ok": meets minimum ESRS requirements
-   Focus on: missing coverage of required sub-topics, scores that seem inconsistent with the company context, descriptions too vague for disclosure, and material topics with suspiciously low scores.
+${sharedContext}
 
-2. STRATEGIC INSIGHT — CEO-level summary in plain language (no ESRS jargon). What does this DMA mean for the business? What must they act on urgently?
+Task: For EACH topic listed above, determine the quality of the assessment.
+- "needs_fix": critical gap that would fail a CSRD compliance review
+- "review": worth reviewing but not blocking
+- "ok": meets minimum ESRS requirements
 
-3. RECOMMENDED ACTIONS — Prioritised list of concrete next steps.
-   - "fix": correct an incomplete or inconsistent assessment (source_type: "dma")
-   - "comply": meet a specific ESRS requirement for a material topic
-   - "improve": strategic opportunity beyond compliance
-
-Return ONLY valid JSON matching this exact structure:
-{
-  "qualityChecks": [
-    {
-      "topic": "E1",
-      "topicTitle": "Climate Change",
-      "status": "needs_fix",
-      "issues": [
-        {
-          "severity": "high",
-          "title": "Missing transition risk analysis",
-          "description": "...",
-          "esrs_ref": "ESRS E1-6",
-          "fix_suggestion": "..."
-        }
-      ]
-    }
-  ],
-  "strategicInsight": {
-    "summary": "...",
-    "keyRisks": ["...", "..."],
-    "opportunities": ["...", "..."],
-    "bottomLine": "..."
-  },
-  "recommendedActions": [
-    {
-      "id": "action-1",
-      "type": "fix",
-      "priority": "high",
-      "title": "...",
-      "description": "...",
-      "esrs_ref": "ESRS E1-6",
-      "source_type": "dma",
-      "source_id": "uuid-or-topic-code",
-      "estimated_time": "2 hours"
-    }
-  ]
-}
-
-No markdown, no backticks, no explanation outside the JSON.
+Flag issues like: missing coverage of required sub-topics, descriptions too vague for disclosure, scores inconsistent with the company context.
+Return one entry per topic from the assessment results above.
+Return ONLY valid JSON — no markdown, no backticks.
   `;
 
   const issueSchema = {
@@ -905,76 +862,113 @@ No markdown, no backticks, no explanation outside the JSON.
     },
   };
 
-  const response = await ai.models.generateContent({
-    model,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        required: ["qualityChecks", "strategicInsight", "recommendedActions"],
-        properties: {
-          qualityChecks: {
-            type: Type.ARRAY,
-            items: {
+  // ── Call 2: Strategic insight + recommended actions ────────────────────────
+  const insightPrompt = `
+You are a senior sustainability strategy advisor providing an executive briefing on a completed DMA.
+
+${sharedContext}
+
+Task 1 — STRATEGIC INSIGHT: Write a CEO-level summary in plain language (no ESRS jargon).
+  - summary: What this DMA reveals about the business (2-3 sentences)
+  - keyRisks: 3-5 material risks with potential business impact
+  - opportunities: 3-5 strategic opportunities identified
+  - bottomLine: One-sentence priority recommendation
+
+Task 2 — RECOMMENDED ACTIONS: List 5-8 concrete next steps.
+  - type "fix": correct an incomplete assessment (source_type: "dma")
+  - type "comply": meet a specific ESRS requirement for a material topic
+  - type "improve": strategic opportunity beyond compliance
+  - priority: "high", "medium", or "low"
+  - estimated_time: realistic time estimate (e.g. "2 hours", "1 day")
+
+Return ONLY valid JSON — no markdown, no backticks.
+  `;
+
+  const [qualityResp, insightResp] = await Promise.all([
+    ai.models.generateContent({
+      model,
+      contents: qualityPrompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            required: ["topic", "topicTitle", "status", "issues"],
+            properties: {
+              topic:      { type: Type.STRING },
+              topicTitle: { type: Type.STRING },
+              status:     { type: Type.STRING },
+              issues:     { type: Type.ARRAY, items: issueSchema },
+            },
+          },
+        },
+      },
+    }),
+    ai.models.generateContent({
+      model,
+      contents: insightPrompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          required: ["strategicInsight", "recommendedActions"],
+          properties: {
+            strategicInsight: {
               type: Type.OBJECT,
-              required: ["topic", "topicTitle", "status", "issues"],
+              required: ["summary", "keyRisks", "opportunities", "bottomLine"],
               properties: {
-                topic:      { type: Type.STRING },
-                topicTitle: { type: Type.STRING },
-                status:     { type: Type.STRING },
-                issues:     { type: Type.ARRAY, items: issueSchema },
+                summary:       { type: Type.STRING },
+                keyRisks:      { type: Type.ARRAY, items: { type: Type.STRING } },
+                opportunities: { type: Type.ARRAY, items: { type: Type.STRING } },
+                bottomLine:    { type: Type.STRING },
               },
             },
-          },
-          strategicInsight: {
-            type: Type.OBJECT,
-            required: ["summary", "keyRisks", "opportunities", "bottomLine"],
-            properties: {
-              summary:       { type: Type.STRING },
-              keyRisks:      { type: Type.ARRAY, items: { type: Type.STRING } },
-              opportunities: { type: Type.ARRAY, items: { type: Type.STRING } },
-              bottomLine:    { type: Type.STRING },
-            },
-          },
-          recommendedActions: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              required: ["id", "type", "priority", "title", "description", "esrs_ref", "source_type", "source_id", "estimated_time"],
-              properties: {
-                id:             { type: Type.STRING },
-                type:           { type: Type.STRING },
-                priority:       { type: Type.STRING },
-                title:          { type: Type.STRING },
-                description:    { type: Type.STRING },
-                esrs_ref:       { type: Type.STRING },
-                source_type:    { type: Type.STRING },
-                source_id:      { type: Type.STRING },
-                estimated_time: { type: Type.STRING },
+            recommendedActions: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                required: ["id", "type", "priority", "title", "description", "esrs_ref", "source_type", "source_id", "estimated_time"],
+                properties: {
+                  id:             { type: Type.STRING },
+                  type:           { type: Type.STRING },
+                  priority:       { type: Type.STRING },
+                  title:          { type: Type.STRING },
+                  description:    { type: Type.STRING },
+                  esrs_ref:       { type: Type.STRING },
+                  source_type:    { type: Type.STRING },
+                  source_id:      { type: Type.STRING },
+                  estimated_time: { type: Type.STRING },
+                },
               },
             },
           },
         },
       },
-    },
-  });
+    }),
+  ]);
 
-  const fallback = {
-    qualityChecks: [],
+  const qualityChecks = parseAIJson<any[]>(qualityResp.text, []);
+  const insightParsed = parseAIJson(insightResp.text, {
     strategicInsight: { summary: "", keyRisks: [], opportunities: [], bottomLine: "" },
     recommendedActions: [],
-  };
+  });
 
-  const parsed = parseAIJson(response.text, fallback);
+  const inputTokens =
+    Number(qualityResp.usageMetadata?.promptTokenCount ?? 0) +
+    Number(insightResp.usageMetadata?.promptTokenCount ?? 0);
+  const outputTokens =
+    Number(qualityResp.usageMetadata?.candidatesTokenCount ?? 0) +
+    Number(insightResp.usageMetadata?.candidatesTokenCount ?? 0);
 
   return {
     result: {
-      qualityChecks:      Array.isArray(parsed?.qualityChecks) ? parsed.qualityChecks : [],
-      strategicInsight:   parsed?.strategicInsight ?? fallback.strategicInsight,
-      recommendedActions: Array.isArray(parsed?.recommendedActions) ? parsed.recommendedActions : [],
+      qualityChecks:      Array.isArray(qualityChecks) ? qualityChecks : [],
+      strategicInsight:   insightParsed?.strategicInsight ?? { summary: "", keyRisks: [], opportunities: [], bottomLine: "" },
+      recommendedActions: Array.isArray(insightParsed?.recommendedActions) ? insightParsed.recommendedActions : [],
     },
-    ...extractTokens(response),
+    inputTokens,
+    outputTokens,
   };
 }
 
