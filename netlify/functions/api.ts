@@ -113,6 +113,7 @@ const handler = async (event: any) => {
   let outputTokens = 0;
   let success = true;
   let errorMessage: string | null = null;
+  let rawAiResponse: string | null = null;
   let upstreamStatus: number | null = null;
   let userFacingMessage = "Something went wrong while contacting the AI service.";
 
@@ -124,6 +125,7 @@ const handler = async (event: any) => {
   } catch (error: any) {
     console.error("API Error:", error);
     success = false;
+    rawAiResponse = error?.rawAiResponse ?? null;
     upstreamStatus =
       (typeof error?.status === "number" && error.status) ||
       (typeof error?.error?.code === "number" && error.error.code) ||
@@ -159,8 +161,30 @@ const handler = async (event: any) => {
       estimated_cost_usd: success ? Number(estimateCost(model, inputTokens, outputTokens).toFixed(6)) : 0,
     });
   } catch (logErr) {
-    // eslint-disable-next-line no-console
     console.warn("Failed to log AI usage:", logErr);
+  }
+
+  // On failure, write a richer row to error_log so admins can debug
+  if (!success) {
+    try {
+      await admin.from("error_log").insert({
+        organization_id,
+        user_id: user.id,
+        user_email: user.email ?? null,
+        source: "server",
+        context: "ai_function",
+        action,
+        error_message: errorMessage ?? "Unknown error",
+        http_status: upstreamStatus,
+        metadata: {
+          model,
+          duration_ms: durationMs,
+          raw_ai_response: rawAiResponse,
+        },
+      });
+    } catch (logErr) {
+      console.warn("Failed to write error_log:", logErr);
+    }
   }
 
   // ------------------------------------------------------------------
@@ -523,60 +547,104 @@ Return ONLY valid JSON, no markdown:
 }
   `;
 
-  const response = await ai.models.generateContent({
-    model,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          impact: {
-            type: Type.OBJECT,
-            properties: {
-              scale:          { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, reasoning: { type: Type.STRING } } },
-              scope:          { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, reasoning: { type: Type.STRING } } },
-              irremediability:{ type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, reasoning: { type: Type.STRING } } },
-              likelihood:     { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, reasoning: { type: Type.STRING } } },
+  const scoringCriterion = {
+    type: Type.OBJECT,
+    required: ["score", "reasoning"],
+    properties: {
+      score:     { type: Type.NUMBER },
+      reasoning: { type: Type.STRING },
+    },
+  };
+
+  let rawText = "";
+
+  try {
+    const response = await ai.models.generateContent({
+      model,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          required: ["impact", "financial"],
+          properties: {
+            impact: {
+              type: Type.OBJECT,
+              required: ["scale", "scope", "irremediability", "likelihood"],
+              properties: {
+                scale:           scoringCriterion,
+                scope:           scoringCriterion,
+                irremediability: scoringCriterion,
+                likelihood:      scoringCriterion,
+              },
             },
-          },
-          financial: {
-            type: Type.OBJECT,
-            properties: {
-              magnitude: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, reasoning: { type: Type.STRING } } },
-              likelihood:{ type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, reasoning: { type: Type.STRING } } },
+            financial: {
+              type: Type.OBJECT,
+              required: ["magnitude", "likelihood"],
+              properties: {
+                magnitude: scoringCriterion,
+                likelihood: scoringCriterion,
+              },
             },
           },
         },
       },
-    },
-  });
+    });
 
-  const fallback = {
-    impact: {
-      scale:          { score: 1, reasoning: "" },
-      scope:          { score: 1, reasoning: "" },
-      irremediability:{ score: 1, reasoning: "" },
-      likelihood:     { score: 1, reasoning: "" },
-    },
-    financial: {
-      magnitude: { score: 1, reasoning: "" },
-      likelihood:{ score: 1, reasoning: "" },
-    },
-  };
+    rawText = response.text ?? "";
 
-  const parsed = parseAIJson(response.text, fallback);
+    const fallback = {
+      impact: {
+        scale:           { score: 1, reasoning: "" },
+        scope:           { score: 1, reasoning: "" },
+        irremediability: { score: 1, reasoning: "" },
+        likelihood:      { score: 1, reasoning: "" },
+      },
+      financial: {
+        magnitude: { score: 1, reasoning: "" },
+        likelihood: { score: 1, reasoning: "" },
+      },
+    };
 
-  // Clamp all scores to 1–5
-  const clamp = (n: number) => Math.min(5, Math.max(1, Math.round(n)));
-  parsed.impact.scale.score           = clamp(parsed.impact.scale.score);
-  parsed.impact.scope.score           = clamp(parsed.impact.scope.score);
-  parsed.impact.irremediability.score = clamp(parsed.impact.irremediability.score);
-  parsed.impact.likelihood.score      = clamp(parsed.impact.likelihood.score);
-  parsed.financial.magnitude.score    = clamp(parsed.financial.magnitude.score);
-  parsed.financial.likelihood.score   = clamp(parsed.financial.likelihood.score);
+    const parsed = parseAIJson(rawText, fallback);
 
-  return { result: parsed, ...extractTokens(response) };
+    // Deep-merge with fallback so any missing nested field gets a safe default
+    // rather than throwing when Gemini omits a field despite the required schema.
+    const safeField = (field: any, fb: any) => ({
+      score:     typeof field?.score === "number" ? field.score : fb.score,
+      reasoning: typeof field?.reasoning === "string" ? field.reasoning : fb.reasoning,
+    });
+
+    const safe = {
+      impact: {
+        scale:           safeField(parsed?.impact?.scale,           fallback.impact.scale),
+        scope:           safeField(parsed?.impact?.scope,           fallback.impact.scope),
+        irremediability: safeField(parsed?.impact?.irremediability, fallback.impact.irremediability),
+        likelihood:      safeField(parsed?.impact?.likelihood,      fallback.impact.likelihood),
+      },
+      financial: {
+        magnitude: safeField(parsed?.financial?.magnitude, fallback.financial.magnitude),
+        likelihood: safeField(parsed?.financial?.likelihood, fallback.financial.likelihood),
+      },
+    };
+
+    // Clamp all scores to 1–5
+    const clamp = (n: number) => Math.min(5, Math.max(1, Math.round(Number(n) || 1)));
+    safe.impact.scale.score           = clamp(safe.impact.scale.score);
+    safe.impact.scope.score           = clamp(safe.impact.scope.score);
+    safe.impact.irremediability.score = clamp(safe.impact.irremediability.score);
+    safe.impact.likelihood.score      = clamp(safe.impact.likelihood.score);
+    safe.financial.magnitude.score    = clamp(safe.financial.magnitude.score);
+    safe.financial.likelihood.score   = clamp(safe.financial.likelihood.score);
+
+    return { result: safe, ...extractTokens(response) };
+
+  } catch (err: any) {
+    // Re-throw with the raw AI response attached so the handler can write it to error_log
+    const enriched = new Error(err instanceof Error ? err.message : String(err)) as any;
+    enriched.rawAiResponse = rawText.slice(0, 3000);
+    throw enriched;
+  }
 }
 
 async function generateSustainabilityStatement(
