@@ -224,6 +224,8 @@ async function runAction(
       return generateKPISuggestions(ai, model, params);
     case "generateSustainabilityStatement":
       return generateSustainabilityStatement(ai, model, params);
+    case "analyzeDMAQuality":
+      return analyzeDMAQuality(ai, model, params);
     default:
       throw new Error(`Unknown action: ${action}`);
   }
@@ -772,6 +774,207 @@ async function generateSustainabilityStatement(
     },
     inputTokens,
     outputTokens,
+  };
+}
+
+async function analyzeDMAQuality(
+  ai: GoogleGenAI,
+  model: string,
+  { assessments, bmcItems, swotItems, profile }: any
+) {
+  if (!assessments || assessments.length === 0) {
+    return {
+      result: { qualityChecks: [], strategicInsight: { summary: "", keyRisks: [], opportunities: [], bottomLine: "" }, recommendedActions: [] },
+      inputTokens: 0,
+      outputTokens: 0,
+    };
+  }
+
+  const companyCtx = profile ? buildCompanyContext(profile) : "";
+
+  const assessmentSummary = assessments
+    .map((a: any) => {
+      const impactScore = a.impactMaterialityValue ?? a.impact_score ?? 0;
+      const financialScore = a.financialMaterialityValue ?? a.financial_score ?? 0;
+      const material = a.isMaterial ?? a.is_material ?? false;
+      const impactDesc = a.impactDescription ?? a.impact_description ?? "";
+      const financialDesc = a.financialDescription ?? a.financial_description ?? "";
+      const scores = a.impactScore ?? {};
+      return [
+        `Topic: ${a.topic} (${a.topicTitle || ""})`,
+        `  Material: ${material ? "Yes" : "No"}`,
+        `  Impact score: ${impactScore}/100 — ${impactDesc}`,
+        `  Financial score: ${financialScore}/100 — ${financialDesc}`,
+        scores.scale ? `  Scores: scale=${scores.scale} scope=${scores.scope} irremediability=${scores.irremediability} likelihood=${scores.likelihood}` : "",
+      ].filter(Boolean).join("\n");
+    })
+    .join("\n\n");
+
+  const bmcContext = bmcItems
+    ? [
+        bmcItems.key_activities?.length ? `Key activities: ${joinField(bmcItems.key_activities)}` : "",
+        bmcItems.eco_social_costs?.length ? `Eco-social costs: ${joinField(bmcItems.eco_social_costs)}` : "",
+        bmcItems.eco_social_benefits?.length ? `Eco-social benefits: ${joinField(bmcItems.eco_social_benefits)}` : "",
+      ].filter(Boolean).join("\n")
+    : "";
+
+  const swotContext = swotItems
+    ? [
+        swotItems.threats?.length ? `Threats: ${joinField(swotItems.threats)}` : "",
+        swotItems.opportunities?.length ? `Opportunities: ${joinField(swotItems.opportunities)}` : "",
+      ].filter(Boolean).join("\n")
+    : "";
+
+  const prompt = `
+You are a senior ESRS/CSRD sustainability advisor performing a quality review of a Double Materiality Assessment (DMA) for an SME.
+
+${companyCtx}
+
+${bmcContext ? `Business context:\n${bmcContext}` : ""}
+${swotContext ? `Strategic context:\n${swotContext}` : ""}
+
+DMA Assessment Results:
+${assessmentSummary}
+
+Your task: Analyse the quality and completeness of this DMA and provide:
+
+1. QUALITY CHECKS — For each assessed topic, flag issues a CSRD auditor would raise.
+   - "needs_fix": critical gaps that would fail compliance review
+   - "review": concerns worth reviewing but not blocking
+   - "ok": meets minimum ESRS requirements
+   Focus on: missing coverage of required sub-topics, scores that seem inconsistent with the company context, descriptions too vague for disclosure, and material topics with suspiciously low scores.
+
+2. STRATEGIC INSIGHT — CEO-level summary in plain language (no ESRS jargon). What does this DMA mean for the business? What must they act on urgently?
+
+3. RECOMMENDED ACTIONS — Prioritised list of concrete next steps.
+   - "fix": correct an incomplete or inconsistent assessment (source_type: "dma")
+   - "comply": meet a specific ESRS requirement for a material topic
+   - "improve": strategic opportunity beyond compliance
+
+Return ONLY valid JSON matching this exact structure:
+{
+  "qualityChecks": [
+    {
+      "topic": "E1",
+      "topicTitle": "Climate Change",
+      "status": "needs_fix",
+      "issues": [
+        {
+          "severity": "high",
+          "title": "Missing transition risk analysis",
+          "description": "...",
+          "esrs_ref": "ESRS E1-6",
+          "fix_suggestion": "..."
+        }
+      ]
+    }
+  ],
+  "strategicInsight": {
+    "summary": "...",
+    "keyRisks": ["...", "..."],
+    "opportunities": ["...", "..."],
+    "bottomLine": "..."
+  },
+  "recommendedActions": [
+    {
+      "id": "action-1",
+      "type": "fix",
+      "priority": "high",
+      "title": "...",
+      "description": "...",
+      "esrs_ref": "ESRS E1-6",
+      "source_type": "dma",
+      "source_id": "uuid-or-topic-code",
+      "estimated_time": "2 hours"
+    }
+  ]
+}
+
+No markdown, no backticks, no explanation outside the JSON.
+  `;
+
+  const issueSchema = {
+    type: Type.OBJECT,
+    required: ["severity", "title", "description", "esrs_ref", "fix_suggestion"],
+    properties: {
+      severity:       { type: Type.STRING },
+      title:          { type: Type.STRING },
+      description:    { type: Type.STRING },
+      esrs_ref:       { type: Type.STRING },
+      fix_suggestion: { type: Type.STRING },
+    },
+  };
+
+  const response = await ai.models.generateContent({
+    model,
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        required: ["qualityChecks", "strategicInsight", "recommendedActions"],
+        properties: {
+          qualityChecks: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              required: ["topic", "topicTitle", "status", "issues"],
+              properties: {
+                topic:      { type: Type.STRING },
+                topicTitle: { type: Type.STRING },
+                status:     { type: Type.STRING },
+                issues:     { type: Type.ARRAY, items: issueSchema },
+              },
+            },
+          },
+          strategicInsight: {
+            type: Type.OBJECT,
+            required: ["summary", "keyRisks", "opportunities", "bottomLine"],
+            properties: {
+              summary:       { type: Type.STRING },
+              keyRisks:      { type: Type.ARRAY, items: { type: Type.STRING } },
+              opportunities: { type: Type.ARRAY, items: { type: Type.STRING } },
+              bottomLine:    { type: Type.STRING },
+            },
+          },
+          recommendedActions: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              required: ["id", "type", "priority", "title", "description", "esrs_ref", "source_type", "source_id", "estimated_time"],
+              properties: {
+                id:             { type: Type.STRING },
+                type:           { type: Type.STRING },
+                priority:       { type: Type.STRING },
+                title:          { type: Type.STRING },
+                description:    { type: Type.STRING },
+                esrs_ref:       { type: Type.STRING },
+                source_type:    { type: Type.STRING },
+                source_id:      { type: Type.STRING },
+                estimated_time: { type: Type.STRING },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const fallback = {
+    qualityChecks: [],
+    strategicInsight: { summary: "", keyRisks: [], opportunities: [], bottomLine: "" },
+    recommendedActions: [],
+  };
+
+  const parsed = parseAIJson(response.text, fallback);
+
+  return {
+    result: {
+      qualityChecks:      Array.isArray(parsed?.qualityChecks) ? parsed.qualityChecks : [],
+      strategicInsight:   parsed?.strategicInsight ?? fallback.strategicInsight,
+      recommendedActions: Array.isArray(parsed?.recommendedActions) ? parsed.recommendedActions : [],
+    },
+    ...extractTokens(response),
   };
 }
 

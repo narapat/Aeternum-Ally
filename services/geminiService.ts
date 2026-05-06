@@ -1,4 +1,4 @@
-import { ESRSTopic, SustainabilityBusinessModel, SwotAnalysis, BSCPerspective, AssessmentData, CompanyProfile, AssessmentScoring } from "../types";
+import { ESRSTopic, SustainabilityBusinessModel, SwotAnalysis, BSCPerspective, AssessmentData, CompanyProfile, AssessmentScoring, InsightHubResponse } from "../types";
 import { supabase } from "../lib/supabaseClient";
 
 const API_ENDPOINT = "/.netlify/functions/api";
@@ -143,4 +143,23 @@ export const generateSustainabilityStatement = async (
 ): Promise<GeneratedStatement> => {
   // Re-throws so the caller can show a real error message instead of a silent null.
   return await callApi("generateSustainabilityStatement", { profile, materialAssessments });
+};
+
+export const generateDMAInsight = async (
+  assessments: AssessmentData[],
+  bmcData: SustainabilityBusinessModel,
+  swotData: SwotAnalysis,
+  profile: CompanyProfile,
+): Promise<InsightHubResponse> => {
+  const bmcItems = {
+    key_activities: bmcData.keyActivities,
+    eco_social_costs: bmcData.ecoSocialCosts,
+    eco_social_benefits: bmcData.ecoSocialBenefits,
+  };
+  const swotItems = {
+    threats: swotData.threats,
+    opportunities: swotData.opportunities,
+  };
+  // Re-throws so the caller can show a meaningful error.
+  return await callApi("analyzeDMAQuality", { assessments, bmcItems, swotItems, profile });
 };
