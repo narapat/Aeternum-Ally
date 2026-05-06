@@ -149,87 +149,110 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
   const canRequestScores = (impactDesc.trim().length > 0 || financialDesc.trim().length > 0) && !loadingScoring && !loadingAI;
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 space-y-8 transition-colors h-full flex flex-col">
-      <div className="flex justify-between items-start">
-        <div>
+    <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 space-y-6 transition-colors h-full flex flex-col">
+
+      {/* ── Header row: title / step toolbar / close ── */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+
+        {/* Title */}
+        <div className="shrink-0">
           <h2 className="text-2xl font-bold text-slate-800 dark:text-white">{initialData ? 'Edit Assessment' : 'New Assessment'}</h2>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Evaluate impact and financial materiality for a specific ESRS topic.</p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-0.5">Evaluate impact and financial materiality for a specific ESRS topic.</p>
         </div>
-        <div className="flex gap-2">
+
+        {/* Step toolbar */}
+        <div className="flex items-center gap-2 flex-1 justify-center">
+          {/* Step 1 */}
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide shrink-0">
+            <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 text-xs font-bold">1</span>
+            Fill descriptions
+          </div>
           <button
             type="button"
             onClick={handleAutoFill}
             disabled={loadingAI || loadingScoring}
-            className="flex items-center gap-2 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-3 py-2 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors text-sm font-medium disabled:opacity-50"
-            title="AI writes descriptions then suggests scores"
+            className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-3 py-1.5 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors text-sm font-medium disabled:opacity-50 shrink-0"
+            title="AI writes descriptions then immediately suggests scores"
           >
             {loadingAI ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cpu className="w-4 h-4" />}
             AI Auto-Fill
           </button>
-          <button type="button" onClick={onCancel} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-            <X className="w-6 h-6" />
-          </button>
+
+          {/* Divider arrow */}
+          <span className="text-slate-300 dark:text-slate-600 text-lg shrink-0">→</span>
+
+          {/* Step 2 */}
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide shrink-0">
+            <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 text-xs font-bold">2</span>
+            AI scores
+          </div>
+
+          {/* Step 2 dynamic status */}
+          <div className="shrink-0">
+            {loadingScoring ? (
+              <div className="flex items-center gap-1.5 text-sm text-indigo-600 dark:text-indigo-400">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Suggesting scores...
+              </div>
+            ) : scoringError ? (
+              <div className="flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="w-4 h-4" />
+                Unavailable —{' '}
+                <button type="button" onClick={handleGetAIScores} className="underline hover:no-underline">Retry</button>
+              </div>
+            ) : aiScoring ? (
+              <div className="flex items-center gap-2">
+                <span className="flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400 font-medium">
+                  <Sparkles className="w-4 h-4" />
+                  Applied
+                </span>
+                {overrides.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={acceptAllSuggestions}
+                    className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Reset to AI
+                  </button>
+                )}
+              </div>
+            ) : canRequestScores ? (
+              <button
+                type="button"
+                onClick={handleGetAIScores}
+                className="flex items-center gap-1.5 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200"
+              >
+                <Sparkles className="w-4 h-4" />
+                Get Suggestions
+              </button>
+            ) : (
+              <span className="text-sm text-slate-400 dark:text-slate-600 italic">fill descriptions first</span>
+            )}
+          </div>
         </div>
+
+        {/* Close */}
+        <button type="button" onClick={onCancel} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0">
+          <X className="w-6 h-6" />
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">ESRS Topic</label>
-          <select
-            value={topic}
-            onChange={(e) => {
-              setTopic(e.target.value as ESRSTopic);
-              setAiScoring(null);
-              setScoringError(false);
-              setOverrides(new Set());
-            }}
-            className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-esg-500 focus:border-esg-500 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
-          >
-            {TOPICS.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-
-        {/* AI Scoring status */}
-        <div className="flex items-end pb-1">
-          {loadingScoring ? (
-            <div className="flex items-center gap-2 text-sm text-indigo-600 dark:text-indigo-400">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Suggesting scores...
-            </div>
-          ) : scoringError ? (
-            <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
-              <AlertTriangle className="w-4 h-4" />
-              AI scoring unavailable
-              <button type="button" onClick={handleGetAIScores} className="underline hover:no-underline">Retry</button>
-            </div>
-          ) : aiScoring ? (
-            <div className="flex items-center gap-3">
-              <span className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
-                <Sparkles className="w-4 h-4" />
-                AI scores applied
-              </span>
-              {overrides.size > 0 && (
-                <button
-                  type="button"
-                  onClick={acceptAllSuggestions}
-                  className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  Reset to AI
-                </button>
-              )}
-            </div>
-          ) : canRequestScores ? (
-            <button
-              type="button"
-              onClick={handleGetAIScores}
-              className="flex items-center gap-1.5 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200"
-            >
-              <Sparkles className="w-4 h-4" />
-              Get AI Score Suggestions
-            </button>
-          ) : null}
-        </div>
+      {/* ── Topic selector ── */}
+      <div className="max-w-sm space-y-1.5">
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">ESRS Topic</label>
+        <select
+          value={topic}
+          onChange={(e) => {
+            setTopic(e.target.value as ESRSTopic);
+            setAiScoring(null);
+            setScoringError(false);
+            setOverrides(new Set());
+          }}
+          className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-esg-500 focus:border-esg-500 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+        >
+          {TOPICS.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 overflow-y-auto">

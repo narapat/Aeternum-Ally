@@ -437,7 +437,7 @@ const App: React.FC = () => {
                         </div>
                       </div>
                     ) : (
-                      <div className="max-w-4xl mx-auto">
+                      <div className="w-full h-full">
                         <AssessmentForm
                           profile={profile.data}
                           bmcData={canvas.data}
