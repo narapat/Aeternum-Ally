@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AssessmentData, ESRSTopic, ImpactScore, FinancialScore, CompanyProfile, SustainabilityBusinessModel, SwotAnalysis, AssessmentScoring } from '../types';
 import { SCALE_OPTIONS, LIKELIHOOD_OPTIONS, calculateImpactMateriality, calculateFinancialMateriality, TOPICS } from '../constants';
 import { generateAssessmentSuggestions, generateAssessmentScoring } from '../services/geminiService';
-import { AlertCircle, TrendingUp, Cpu, Loader2, Save, X, Sparkles, RotateCcw } from 'lucide-react';
+import { AlertCircle, TrendingUp, Cpu, Loader2, Save, X, Sparkles, RotateCcw, AlertTriangle } from 'lucide-react';
 
 interface Props {
   profile: CompanyProfile;
@@ -22,6 +22,7 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
   const [financialDesc, setFinancialDesc] = useState('');
   const [loadingAI, setLoadingAI] = useState(false);
   const [loadingScoring, setLoadingScoring] = useState(false);
+  const [scoringError, setScoringError] = useState(false);
   const [aiScoring, setAiScoring] = useState<AssessmentScoring | null>(null);
   const [overrides, setOverrides] = useState<Set<OverrideKey>>(new Set());
 
@@ -30,6 +31,13 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
   });
   const [financialScore, setFinancialScore] = useState<FinancialScore>({
     magnitude: 1, likelihood: 1,
+  });
+
+  // Use a ref so fetchAIScoring always captures the latest props/state
+  // without needing to be re-created on every prop change.
+  const latestContextRef = useRef({ profile, bmcData, swotData, initialData });
+  useEffect(() => {
+    latestContextRef.current = { profile, bmcData, swotData, initialData };
   });
 
   useEffect(() => {
@@ -47,18 +55,23 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
       setFinancialScore({ magnitude: 1, likelihood: 1 });
     }
     setAiScoring(null);
+    setScoringError(false);
     setOverrides(new Set());
   }, [initialData]);
 
   const fetchAIScoring = useCallback(async (t: ESRSTopic) => {
+    const { profile: p, bmcData: b, swotData: s, initialData: init } = latestContextRef.current;
     setLoadingScoring(true);
     setAiScoring(null);
+    setScoringError(false);
     setOverrides(new Set());
-    const result = await generateAssessmentScoring(t, profile, bmcData, swotData);
+
+    const result = await generateAssessmentScoring(t, p, b, s);
+
     if (result) {
       setAiScoring(result);
-      // Pre-populate scores with AI suggestions (unless editing existing data)
-      if (!initialData) {
+      // Pre-populate scores with AI suggestions when creating a new assessment
+      if (!init) {
         setImpactScore({
           scale: result.impact.scale.score,
           scope: result.impact.scope.score,
@@ -70,15 +83,17 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
           likelihood: result.financial.likelihood.score,
         });
       }
+    } else {
+      setScoringError(true);
     }
-    setLoadingScoring(false);
-  }, [profile, bmcData, swotData, initialData]);
 
-  // Fetch AI scoring on mount and topic change
+    setLoadingScoring(false);
+  }, []); // stable — reads latest context via ref
+
+  // Fetch AI scoring whenever topic changes (including on mount)
   useEffect(() => {
     fetchAIScoring(topic);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topic]);
+  }, [topic, fetchAIScoring]);
 
   const handleTopicChange = (t: ESRSTopic) => {
     setTopic(t);
@@ -148,9 +163,10 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
             onClick={handleAutoFill}
             disabled={loadingAI}
             className="flex items-center gap-2 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-3 py-2 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors text-sm font-medium"
+            title="AI fills the description text fields"
           >
             {loadingAI ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cpu className="w-4 h-4" />}
-            AI Auto-Fill
+            AI Auto-Fill Descriptions
           </button>
           <button type="button" onClick={onCancel} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
             <X className="w-6 h-6" />
@@ -171,17 +187,29 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
         </div>
 
         {/* AI Scoring status */}
-        <div className="flex items-end">
+        <div className="flex items-end pb-1">
           {loadingScoring ? (
             <div className="flex items-center gap-2 text-sm text-indigo-600 dark:text-indigo-400">
               <Loader2 className="w-4 h-4 animate-spin" />
               Analyzing your business context...
             </div>
+          ) : scoringError ? (
+            <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="w-4 h-4" />
+              AI scoring unavailable — score manually
+              <button
+                type="button"
+                onClick={() => fetchAIScoring(topic)}
+                className="underline hover:no-underline"
+              >
+                Retry
+              </button>
+            </div>
           ) : aiScoring ? (
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
                 <Sparkles className="w-4 h-4" />
-                AI scores ready
+                AI scores applied
               </div>
               {overrides.size > 0 && (
                 <button
@@ -335,7 +363,8 @@ interface ScoreSelectProps {
 
 const ScoreSelect: React.FC<ScoreSelectProps> = ({ label, value, onChange, options, suggestion, isOverridden, onAccept }) => {
   const [showReasoning, setShowReasoning] = useState(false);
-  const hasSuggestion = !!suggestion?.reasoning;
+  // Show badge whenever a suggestion exists (score present), not gated on reasoning text
+  const hasSuggestion = suggestion !== undefined && suggestion !== null;
 
   return (
     <div className="space-y-1.5">
@@ -357,14 +386,16 @@ const ScoreSelect: React.FC<ScoreSelectProps> = ({ label, value, onChange, optio
                 AI: {suggestion!.score}
               </span>
             )}
-            <button
-              type="button"
-              onClick={() => setShowReasoning(r => !r)}
-              className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 ml-0.5"
-              title="View reasoning"
-            >
-              ?
-            </button>
+            {suggestion!.reasoning && (
+              <button
+                type="button"
+                onClick={() => setShowReasoning(r => !r)}
+                className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 ml-0.5"
+                title="View AI reasoning"
+              >
+                {showReasoning ? '▲' : '?'}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -375,7 +406,7 @@ const ScoreSelect: React.FC<ScoreSelectProps> = ({ label, value, onChange, optio
         className={`w-full p-2 text-sm border rounded bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:ring-1 focus:ring-esg-500 ${
           isOverridden
             ? 'border-amber-400 dark:border-amber-600'
-            : suggestion && !isOverridden
+            : hasSuggestion
             ? 'border-emerald-400 dark:border-emerald-600'
             : 'border-slate-300 dark:border-slate-600'
         }`}
@@ -385,9 +416,9 @@ const ScoreSelect: React.FC<ScoreSelectProps> = ({ label, value, onChange, optio
         ))}
       </select>
 
-      {showReasoning && hasSuggestion && (
+      {showReasoning && suggestion?.reasoning && (
         <p className="text-xs text-slate-500 dark:text-slate-400 italic bg-slate-100 dark:bg-slate-900 p-2 rounded leading-snug">
-          {suggestion!.reasoning}
+          {suggestion.reasoning}
         </p>
       )}
     </div>
