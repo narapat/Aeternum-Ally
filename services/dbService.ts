@@ -4,6 +4,7 @@ import type {
   SustainabilityBusinessModel,
   SwotAnalysis,
   AssessmentData,
+  AssessmentScoring,
   ESRSTopic,
   KPI,
   BSCPerspective,
@@ -297,6 +298,7 @@ export const fromDbAssessment = (row: any): AssessmentData => ({
   impactMaterialityValue: Number(row.impact_materiality_value ?? 0),
   financialMaterialityValue: Number(row.financial_materiality_value ?? 0),
   isMaterial: !!row.is_material,
+  aiScoringSuggestion: (row.ai_scoring_suggestion as (AssessmentScoring & { suggestedAt: string }) | null) ?? null,
 });
 
 const toDbAssessment = (data: AssessmentData, orgId: string) => ({
@@ -310,6 +312,7 @@ const toDbAssessment = (data: AssessmentData, orgId: string) => ({
   impact_materiality_value: data.impactMaterialityValue,
   financial_materiality_value: data.financialMaterialityValue,
   is_material: data.isMaterial,
+  ai_scoring_suggestion: data.aiScoringSuggestion ?? null,
 });
 
 export async function fetchAssessments(orgId: string): Promise<AssessmentData[]> {

@@ -24,6 +24,24 @@ export interface FinancialScore {
   likelihood: number; // 1-5
 }
 
+export interface AssessmentScoringSuggestion {
+  score: number;
+  reasoning: string;
+}
+
+export interface AssessmentScoring {
+  impact: {
+    scale: AssessmentScoringSuggestion;
+    scope: AssessmentScoringSuggestion;
+    irremediability: AssessmentScoringSuggestion;
+    likelihood: AssessmentScoringSuggestion;
+  };
+  financial: {
+    magnitude: AssessmentScoringSuggestion;
+    likelihood: AssessmentScoringSuggestion;
+  };
+}
+
 export interface AssessmentData {
   id: string;
   topic: ESRSTopic;
@@ -34,6 +52,7 @@ export interface AssessmentData {
   impactMaterialityValue: number; // Calculated
   financialMaterialityValue: number; // Calculated
   isMaterial: boolean;
+  aiScoringSuggestion?: (AssessmentScoring & { suggestedAt: string }) | null;
 }
 
 export interface User {

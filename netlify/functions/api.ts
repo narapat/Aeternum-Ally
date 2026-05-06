@@ -113,6 +113,7 @@ const handler = async (event: any) => {
   let outputTokens = 0;
   let success = true;
   let errorMessage: string | null = null;
+  let rawAiResponse: string | null = null;
   let upstreamStatus: number | null = null;
   let userFacingMessage = "Something went wrong while contacting the AI service.";
 
@@ -124,6 +125,7 @@ const handler = async (event: any) => {
   } catch (error: any) {
     console.error("API Error:", error);
     success = false;
+    rawAiResponse = error?.rawAiResponse ?? null;
     upstreamStatus =
       (typeof error?.status === "number" && error.status) ||
       (typeof error?.error?.code === "number" && error.error.code) ||
@@ -159,8 +161,30 @@ const handler = async (event: any) => {
       estimated_cost_usd: success ? Number(estimateCost(model, inputTokens, outputTokens).toFixed(6)) : 0,
     });
   } catch (logErr) {
-    // eslint-disable-next-line no-console
     console.warn("Failed to log AI usage:", logErr);
+  }
+
+  // On failure, write a richer row to error_log so admins can debug
+  if (!success) {
+    try {
+      await admin.from("error_log").insert({
+        organization_id,
+        user_id: user.id,
+        user_email: user.email ?? null,
+        source: "server",
+        context: "ai_function",
+        action,
+        error_message: errorMessage ?? "Unknown error",
+        http_status: upstreamStatus,
+        metadata: {
+          model,
+          duration_ms: durationMs,
+          raw_ai_response: rawAiResponse,
+        },
+      });
+    } catch (logErr) {
+      console.warn("Failed to write error_log:", logErr);
+    }
   }
 
   // ------------------------------------------------------------------
@@ -188,6 +212,8 @@ async function runAction(
   switch (action) {
     case "generateAssessmentSuggestions":
       return generateAssessmentSuggestions(ai, model, params);
+    case "generateAssessmentScoring":
+      return generateAssessmentScoring(ai, model, params);
     case "generateCanvasSuggestion":
       return generateCanvasSuggestion(ai, model, params);
     case "generateSwotInternal":
@@ -466,6 +492,159 @@ async function generateKPISuggestions(
     result: parseAIJson<object[]>(response.text, []),
     ...extractTokens(response),
   };
+}
+
+async function generateAssessmentScoring(
+  ai: GoogleGenAI,
+  model: string,
+  { topic, topicTitle, profile, bmcData, swotData, impactDescription, financialDescription }: any
+) {
+  const keyActivities = joinField(bmcData?.keyActivities);
+  const ecoSocialCosts = joinField(bmcData?.ecoSocialCosts);
+  const ecoSocialBenefits = joinField(bmcData?.ecoSocialBenefits);
+  const threats = joinField(swotData?.threats);
+  const opportunities = joinField(swotData?.opportunities);
+
+  const prompt = `
+You are an ESRS materiality expert helping SMEs assess ${topic} ${topicTitle}.
+
+${buildCompanyContext(profile)}
+
+Business context:
+- Key activities: ${keyActivities || "Not provided"}
+- Eco-social costs: ${ecoSocialCosts || "Not provided"}
+- Eco-social benefits: ${ecoSocialBenefits || "Not provided"}
+- Business threats: ${threats || "Not provided"}
+- Business opportunities: ${opportunities || "Not provided"}
+
+${impactDescription ? `User's impact description: "${impactDescription}"` : ""}
+${financialDescription ? `User's financial risk/opportunity description: "${financialDescription}"` : ""}
+
+Task: Suggest materiality scores (1-5 scale) for each criterion. If the user provided descriptions above, align scores with what they described — scores should reflect the severity/likelihood implied in the descriptions.
+
+Scoring guidelines:
+- Impact Scale: 1=minimal severity, 3=moderate, 5=severe
+- Impact Scope: 1=internal only, 3=regional/industry, 5=global
+- Irremediability: 1=fully reversible, 3=partially reversible, 5=irreversible
+- Impact Likelihood: 1=rare/unlikely, 3=possible, 5=certain/ongoing
+- Financial Magnitude: 1=less than 0.5% of revenue, 3=0.5–2%, 5=greater than 5%
+- Financial Likelihood: 1=unlikely within 3 years, 3=possible, 5=almost certain
+
+Be specific in reasoning — reference the industry, activities, and descriptions provided.
+
+Return ONLY valid JSON, no markdown:
+{
+  "impact": {
+    "scale": { "score": number, "reasoning": string },
+    "scope": { "score": number, "reasoning": string },
+    "irremediability": { "score": number, "reasoning": string },
+    "likelihood": { "score": number, "reasoning": string }
+  },
+  "financial": {
+    "magnitude": { "score": number, "reasoning": string },
+    "likelihood": { "score": number, "reasoning": string }
+  }
+}
+  `;
+
+  const scoringCriterion = {
+    type: Type.OBJECT,
+    required: ["score", "reasoning"],
+    properties: {
+      score:     { type: Type.NUMBER },
+      reasoning: { type: Type.STRING },
+    },
+  };
+
+  let rawText = "";
+
+  try {
+    const response = await ai.models.generateContent({
+      model,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          required: ["impact", "financial"],
+          properties: {
+            impact: {
+              type: Type.OBJECT,
+              required: ["scale", "scope", "irremediability", "likelihood"],
+              properties: {
+                scale:           scoringCriterion,
+                scope:           scoringCriterion,
+                irremediability: scoringCriterion,
+                likelihood:      scoringCriterion,
+              },
+            },
+            financial: {
+              type: Type.OBJECT,
+              required: ["magnitude", "likelihood"],
+              properties: {
+                magnitude: scoringCriterion,
+                likelihood: scoringCriterion,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    rawText = response.text ?? "";
+
+    const fallback = {
+      impact: {
+        scale:           { score: 1, reasoning: "" },
+        scope:           { score: 1, reasoning: "" },
+        irremediability: { score: 1, reasoning: "" },
+        likelihood:      { score: 1, reasoning: "" },
+      },
+      financial: {
+        magnitude: { score: 1, reasoning: "" },
+        likelihood: { score: 1, reasoning: "" },
+      },
+    };
+
+    const parsed = parseAIJson(rawText, fallback);
+
+    // Deep-merge with fallback so any missing nested field gets a safe default
+    // rather than throwing when Gemini omits a field despite the required schema.
+    const safeField = (field: any, fb: any) => ({
+      score:     typeof field?.score === "number" ? field.score : fb.score,
+      reasoning: typeof field?.reasoning === "string" ? field.reasoning : fb.reasoning,
+    });
+
+    const safe = {
+      impact: {
+        scale:           safeField(parsed?.impact?.scale,           fallback.impact.scale),
+        scope:           safeField(parsed?.impact?.scope,           fallback.impact.scope),
+        irremediability: safeField(parsed?.impact?.irremediability, fallback.impact.irremediability),
+        likelihood:      safeField(parsed?.impact?.likelihood,      fallback.impact.likelihood),
+      },
+      financial: {
+        magnitude: safeField(parsed?.financial?.magnitude, fallback.financial.magnitude),
+        likelihood: safeField(parsed?.financial?.likelihood, fallback.financial.likelihood),
+      },
+    };
+
+    // Clamp all scores to 1–5
+    const clamp = (n: number) => Math.min(5, Math.max(1, Math.round(Number(n) || 1)));
+    safe.impact.scale.score           = clamp(safe.impact.scale.score);
+    safe.impact.scope.score           = clamp(safe.impact.scope.score);
+    safe.impact.irremediability.score = clamp(safe.impact.irremediability.score);
+    safe.impact.likelihood.score      = clamp(safe.impact.likelihood.score);
+    safe.financial.magnitude.score    = clamp(safe.financial.magnitude.score);
+    safe.financial.likelihood.score   = clamp(safe.financial.likelihood.score);
+
+    return { result: safe, ...extractTokens(response) };
+
+  } catch (err: any) {
+    // Re-throw with the raw AI response attached so the handler can write it to error_log
+    const enriched = new Error(err instanceof Error ? err.message : String(err)) as any;
+    enriched.rawAiResponse = rawText.slice(0, 3000);
+    throw enriched;
+  }
 }
 
 async function generateSustainabilityStatement(
