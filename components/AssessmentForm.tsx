@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { AssessmentData, ESRSTopic, ImpactScore, FinancialScore, CompanyProfile, SustainabilityBusinessModel, SwotAnalysis, AssessmentScoring } from '../types';
 import { SCALE_OPTIONS, LIKELIHOOD_OPTIONS, calculateImpactMateriality, calculateFinancialMateriality, TOPICS } from '../constants';
 import { generateAssessmentSuggestions, generateAssessmentScoring } from '../services/geminiService';
@@ -380,6 +381,59 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
   );
 };
 
+// ── Reasoning modal (portal so it floats above the form) ──────────────────────
+interface ReasoningModalProps {
+  label: string;
+  score: number;
+  reasoning: string;
+  onClose: () => void;
+}
+
+const ReasoningModal: React.FC<ReasoningModalProps> = ({ label, score, reasoning, onClose }) => {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-6 space-y-4"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-1">AI Reasoning</p>
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white">{label}</h3>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="flex items-center gap-1 text-sm font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2.5 py-1 rounded-full">
+              <Sparkles className="w-3.5 h-3.5" />
+              AI suggests: {score} / 5
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+          {reasoning}
+        </p>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+// ── Score selector with reasoning modal trigger ────────────────────────────────
 interface ScoreSelectProps {
   label: string;
   value: number;
@@ -391,7 +445,7 @@ interface ScoreSelectProps {
 }
 
 const ScoreSelect: React.FC<ScoreSelectProps> = ({ label, value, onChange, options, suggestion, isOverridden, onAccept }) => {
-  const [showReasoning, setShowReasoning] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const hasSuggestion = suggestion !== undefined && suggestion !== null;
 
   return (
@@ -417,11 +471,11 @@ const ScoreSelect: React.FC<ScoreSelectProps> = ({ label, value, onChange, optio
             {suggestion!.reasoning && (
               <button
                 type="button"
-                onClick={() => setShowReasoning(r => !r)}
-                className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 ml-0.5"
+                onClick={() => setShowModal(true)}
+                className="flex items-center justify-center w-4 h-4 rounded-full text-xs text-slate-400 hover:text-white hover:bg-indigo-500 border border-slate-300 dark:border-slate-600 hover:border-indigo-500 transition-colors ml-0.5"
                 title="View AI reasoning"
               >
-                {showReasoning ? '▲' : '?'}
+                ?
               </button>
             )}
           </div>
@@ -444,10 +498,13 @@ const ScoreSelect: React.FC<ScoreSelectProps> = ({ label, value, onChange, optio
         ))}
       </select>
 
-      {showReasoning && suggestion?.reasoning && (
-        <p className="text-xs text-slate-500 dark:text-slate-400 italic bg-slate-100 dark:bg-slate-900 p-2 rounded leading-snug">
-          {suggestion.reasoning}
-        </p>
+      {showModal && suggestion?.reasoning && (
+        <ReasoningModal
+          label={label}
+          score={suggestion.score}
+          reasoning={suggestion.reasoning}
+          onClose={() => setShowModal(false)}
+        />
       )}
     </div>
   );
