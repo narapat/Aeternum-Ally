@@ -280,6 +280,52 @@ export interface EvidenceAttachment {
   uploaded_at: string;
 }
 
+// --- DMA Insight Hub ---
+
+export type QualityCheckStatus = 'needs_fix' | 'review' | 'ok';
+export type InsightActionType = 'fix' | 'comply' | 'improve';
+export type InsightActionPriority = 'high' | 'medium' | 'low';
+
+export interface QualityIssue {
+  severity: 'high' | 'medium' | 'low';
+  title: string;
+  description: string;
+  esrs_ref: string;
+  fix_suggestion: string;
+}
+
+export interface QualityCheck {
+  topic: string;
+  topicTitle: string;
+  status: QualityCheckStatus;
+  issues: QualityIssue[];
+}
+
+export interface StrategicInsight {
+  summary: string;
+  keyRisks: string[];
+  opportunities: string[];
+  bottomLine: string;
+}
+
+export interface RecommendedAction {
+  id: string;
+  type: InsightActionType;
+  priority: InsightActionPriority;
+  title: string;
+  description: string;
+  esrs_ref: string;
+  source_type: string;
+  source_id: string;
+  estimated_time: string;
+}
+
+export interface InsightHubResponse {
+  qualityChecks: QualityCheck[];
+  strategicInsight: StrategicInsight;
+  recommendedActions: RecommendedAction[];
+}
+
 // --- Notifications ---
 
 export type NotificationChannelType = 'in_app' | 'email' | 'line' | 'slack' | 'webhook';
