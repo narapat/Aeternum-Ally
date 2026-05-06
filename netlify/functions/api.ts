@@ -792,24 +792,6 @@ async function analyzeDMAQuality(
 
   const companyCtx = profile ? buildCompanyContext(profile) : "";
 
-  const assessmentSummary = assessments
-    .map((a: any) => {
-      const impactScore = a.impactMaterialityValue ?? a.impact_score ?? 0;
-      const financialScore = a.financialMaterialityValue ?? a.financial_score ?? 0;
-      const material = a.isMaterial ?? a.is_material ?? false;
-      const impactDesc = a.impactDescription ?? a.impact_description ?? "";
-      const financialDesc = a.financialDescription ?? a.financial_description ?? "";
-      const scores = a.impactScore ?? {};
-      return [
-        `Topic: ${a.topic} (${a.topicTitle || ""})`,
-        `  Material: ${material ? "Yes" : "No"}`,
-        `  Impact score: ${impactScore}/100 — ${impactDesc || "No description"}`,
-        `  Financial score: ${financialScore}/100 — ${financialDesc || "No description"}`,
-        scores.scale ? `  Scores: scale=${scores.scale} scope=${scores.scope} irremediability=${scores.irremediability} likelihood=${scores.likelihood}` : "",
-      ].filter(Boolean).join("\n");
-    })
-    .join("\n\n");
-
   const bmcContext = bmcItems
     ? [
         bmcItems.key_activities?.length ? `Key activities: ${joinField(bmcItems.key_activities)}` : "",
@@ -825,30 +807,19 @@ async function analyzeDMAQuality(
       ].filter(Boolean).join("\n")
     : "";
 
-  const sharedContext = `
-${companyCtx}
-${bmcContext ? `\nBusiness context:\n${bmcContext}` : ""}
-${swotContext ? `\nStrategic context:\n${swotContext}` : ""}
+  const companySection = [
+    companyCtx,
+    bmcContext ? `Business context:\n${bmcContext}` : "",
+    swotContext ? `Strategic context:\n${swotContext}` : "",
+  ].filter(Boolean).join("\n\n");
 
-DMA Assessment Results:
-${assessmentSummary}
-  `.trim();
-
-  // ── Call 1: Quality checks per topic ──────────────────────────────────────
-  const qualityPrompt = `
-You are a senior ESRS/CSRD sustainability advisor reviewing a Double Materiality Assessment (DMA).
-
-${sharedContext}
-
-Task: For EACH topic listed above, determine the quality of the assessment.
-- "needs_fix": critical gap that would fail a CSRD compliance review
-- "review": worth reviewing but not blocking
-- "ok": meets minimum ESRS requirements
-
-Flag issues like: missing coverage of required sub-topics, descriptions too vague for disclosure, scores inconsistent with the company context.
-Return one entry per topic from the assessment results above.
-Return ONLY valid JSON — no markdown, no backticks.
-  `;
+  // ── Build a mini-summary of ALL topics (for the insight call context) ──────
+  const allTopicsSummary = assessments.map((a: any) => {
+    const impactScore = a.impactMaterialityValue ?? 0;
+    const financialScore = a.financialMaterialityValue ?? 0;
+    const material = a.isMaterial ?? false;
+    return `${a.topic}: material=${material ? "yes" : "no"} impact=${impactScore}/100 financial=${financialScore}/100`;
+  }).join(" | ");
 
   const issueSchema = {
     type: Type.OBJECT,
@@ -862,108 +833,145 @@ Return ONLY valid JSON — no markdown, no backticks.
     },
   };
 
-  // ── Call 2: Strategic insight + recommended actions ────────────────────────
+  const qualityCheckSchema = {
+    type: Type.OBJECT,
+    required: ["topic", "topicTitle", "status", "issues"],
+    properties: {
+      topic:      { type: Type.STRING },
+      topicTitle: { type: Type.STRING },
+      status:     { type: Type.STRING },
+      issues:     { type: Type.ARRAY, items: issueSchema },
+    },
+  };
+
+  // ── One tiny call per topic (all in parallel) ─────────────────────────────
+  const topicQualityCalls = assessments.map((a: any) => {
+    const impactScore = a.impactMaterialityValue ?? 0;
+    const financialScore = a.financialMaterialityValue ?? 0;
+    const material = a.isMaterial ?? false;
+    const impactDesc = a.impactDescription ?? "";
+    const financialDesc = a.financialDescription ?? "";
+    const topicCode = String(a.topic).split(" ")[0];
+    const topicTitle = String(a.topic).replace(/^[A-Z0-9]+ /, "");
+    const scores = a.impactScore ?? {};
+
+    const prompt = `
+You are a senior ESRS/CSRD auditor reviewing one topic in a Double Materiality Assessment.
+
+${companySection}
+
+Topic under review: ${a.topic}
+Material: ${material ? "Yes" : "No"}
+Impact score: ${impactScore}/100 — "${impactDesc || "No description provided"}"
+Financial score: ${financialScore}/100 — "${financialDesc || "No description provided"}"
+${scores.scale ? `Sub-scores: scale=${scores.scale} scope=${scores.scope} irremediability=${scores.irremediability} likelihood=${scores.likelihood}` : ""}
+
+Assess quality:
+- "needs_fix": critical gap that would fail a CSRD compliance review
+- "review": minor concern worth addressing, not blocking
+- "ok": meets minimum ESRS requirements for this topic
+
+Flag issues only if genuinely present. Return at most 2 issues. Keep descriptions concise (under 30 words each).
+Return ONLY valid JSON — no markdown, no backticks.
+    `.trim();
+
+    return ai.models.generateContent({
+      model,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          ...qualityCheckSchema,
+          properties: {
+            ...qualityCheckSchema.properties,
+            topic:      { type: Type.STRING, description: topicCode },
+            topicTitle: { type: Type.STRING, description: topicTitle },
+          },
+        },
+      },
+    });
+  });
+
+  // ── Insight + actions call (fires in parallel with topic calls) ───────────
   const insightPrompt = `
-You are a senior sustainability strategy advisor providing an executive briefing on a completed DMA.
+You are a senior sustainability strategy advisor briefing a CEO on their completed DMA.
 
-${sharedContext}
+${companySection}
 
-Task 1 — STRATEGIC INSIGHT: Write a CEO-level summary in plain language (no ESRS jargon).
-  - summary: What this DMA reveals about the business (2-3 sentences)
-  - keyRisks: 3-5 material risks with potential business impact
-  - opportunities: 3-5 strategic opportunities identified
-  - bottomLine: One-sentence priority recommendation
+All topics summary: ${allTopicsSummary}
 
-Task 2 — RECOMMENDED ACTIONS: List 5-8 concrete next steps.
-  - type "fix": correct an incomplete assessment (source_type: "dma")
-  - type "comply": meet a specific ESRS requirement for a material topic
-  - type "improve": strategic opportunity beyond compliance
-  - priority: "high", "medium", or "low"
-  - estimated_time: realistic time estimate (e.g. "2 hours", "1 day")
+Write a CEO-level briefing in plain language (no ESRS jargon) and a short action list.
 
 Return ONLY valid JSON — no markdown, no backticks.
-  `;
+  `.trim();
 
-  const [qualityResp, insightResp] = await Promise.all([
-    ai.models.generateContent({
-      model,
-      contents: qualityPrompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
+  const insightCall = ai.models.generateContent({
+    model,
+    contents: insightPrompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        required: ["strategicInsight", "recommendedActions"],
+        properties: {
+          strategicInsight: {
             type: Type.OBJECT,
-            required: ["topic", "topicTitle", "status", "issues"],
+            required: ["summary", "keyRisks", "opportunities", "bottomLine"],
             properties: {
-              topic:      { type: Type.STRING },
-              topicTitle: { type: Type.STRING },
-              status:     { type: Type.STRING },
-              issues:     { type: Type.ARRAY, items: issueSchema },
+              summary:       { type: Type.STRING },
+              keyRisks:      { type: Type.ARRAY, items: { type: Type.STRING } },
+              opportunities: { type: Type.ARRAY, items: { type: Type.STRING } },
+              bottomLine:    { type: Type.STRING },
             },
           },
-        },
-      },
-    }),
-    ai.models.generateContent({
-      model,
-      contents: insightPrompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          required: ["strategicInsight", "recommendedActions"],
-          properties: {
-            strategicInsight: {
+          recommendedActions: {
+            type: Type.ARRAY,
+            items: {
               type: Type.OBJECT,
-              required: ["summary", "keyRisks", "opportunities", "bottomLine"],
+              required: ["id", "type", "priority", "title", "description", "esrs_ref", "source_type", "source_id", "estimated_time"],
               properties: {
-                summary:       { type: Type.STRING },
-                keyRisks:      { type: Type.ARRAY, items: { type: Type.STRING } },
-                opportunities: { type: Type.ARRAY, items: { type: Type.STRING } },
-                bottomLine:    { type: Type.STRING },
-              },
-            },
-            recommendedActions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                required: ["id", "type", "priority", "title", "description", "esrs_ref", "source_type", "source_id", "estimated_time"],
-                properties: {
-                  id:             { type: Type.STRING },
-                  type:           { type: Type.STRING },
-                  priority:       { type: Type.STRING },
-                  title:          { type: Type.STRING },
-                  description:    { type: Type.STRING },
-                  esrs_ref:       { type: Type.STRING },
-                  source_type:    { type: Type.STRING },
-                  source_id:      { type: Type.STRING },
-                  estimated_time: { type: Type.STRING },
-                },
+                id:             { type: Type.STRING },
+                type:           { type: Type.STRING },
+                priority:       { type: Type.STRING },
+                title:          { type: Type.STRING },
+                description:    { type: Type.STRING },
+                esrs_ref:       { type: Type.STRING },
+                source_type:    { type: Type.STRING },
+                source_id:      { type: Type.STRING },
+                estimated_time: { type: Type.STRING },
               },
             },
           },
         },
       },
-    }),
-  ]);
+    },
+  });
 
-  const qualityChecks = parseAIJson<any[]>(qualityResp.text, []);
+  // Fire all calls in parallel
+  const allResps = await Promise.all([...topicQualityCalls, insightCall]);
+  const topicResps = allResps.slice(0, assessments.length);
+  const insightResp = allResps[assessments.length];
+
+  const qualityChecks = topicResps.map((r, i) => {
+    const a = assessments[i];
+    const topicCode = String(a.topic).split(" ")[0];
+    const topicTitle = String(a.topic).replace(/^[A-Z0-9]+ /, "");
+    const parsed = parseAIJson<any>(r.text, { topic: topicCode, topicTitle, status: "ok", issues: [] });
+    // Ensure topic/topicTitle are always correct regardless of AI output
+    return { ...parsed, topic: topicCode, topicTitle };
+  });
+
   const insightParsed = parseAIJson(insightResp.text, {
     strategicInsight: { summary: "", keyRisks: [], opportunities: [], bottomLine: "" },
     recommendedActions: [],
   });
 
-  const inputTokens =
-    Number(qualityResp.usageMetadata?.promptTokenCount ?? 0) +
-    Number(insightResp.usageMetadata?.promptTokenCount ?? 0);
-  const outputTokens =
-    Number(qualityResp.usageMetadata?.candidatesTokenCount ?? 0) +
-    Number(insightResp.usageMetadata?.candidatesTokenCount ?? 0);
+  const inputTokens = allResps.reduce((s, r) => s + Number(r.usageMetadata?.promptTokenCount ?? 0), 0);
+  const outputTokens = allResps.reduce((s, r) => s + Number(r.usageMetadata?.candidatesTokenCount ?? 0), 0);
 
   return {
     result: {
-      qualityChecks:      Array.isArray(qualityChecks) ? qualityChecks : [],
+      qualityChecks,
       strategicInsight:   insightParsed?.strategicInsight ?? { summary: "", keyRisks: [], opportunities: [], bottomLine: "" },
       recommendedActions: Array.isArray(insightParsed?.recommendedActions) ? insightParsed.recommendedActions : [],
     },
