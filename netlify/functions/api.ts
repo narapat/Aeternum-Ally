@@ -473,7 +473,7 @@ async function generateKPISuggestions(
 async function generateAssessmentScoring(
   ai: GoogleGenAI,
   model: string,
-  { topic, topicTitle, profile, bmcData, swotData }: any
+  { topic, topicTitle, profile, bmcData, swotData, impactDescription, financialDescription }: any
 ) {
   const keyActivities = joinField(bmcData?.keyActivities);
   const ecoSocialCosts = joinField(bmcData?.ecoSocialCosts);
@@ -493,7 +493,10 @@ Business context:
 - Business threats: ${threats || "Not provided"}
 - Business opportunities: ${opportunities || "Not provided"}
 
-Task: Suggest materiality scores (1-5 scale) for each criterion based on the company's ACTUAL operations.
+${impactDescription ? `User's impact description: "${impactDescription}"` : ""}
+${financialDescription ? `User's financial risk/opportunity description: "${financialDescription}"` : ""}
+
+Task: Suggest materiality scores (1-5 scale) for each criterion. If the user provided descriptions above, align scores with what they described — scores should reflect the severity/likelihood implied in the descriptions.
 
 Scoring guidelines:
 - Impact Scale: 1=minimal severity, 3=moderate, 5=severe
@@ -503,7 +506,7 @@ Scoring guidelines:
 - Financial Magnitude: 1=less than 0.5% of revenue, 3=0.5–2%, 5=greater than 5%
 - Financial Likelihood: 1=unlikely within 3 years, 3=possible, 5=almost certain
 
-Base each score AND reasoning on the ACTUAL company context above. Be specific — reference the industry, activities, and costs/benefits mentioned.
+Be specific in reasoning — reference the industry, activities, and descriptions provided.
 
 Return ONLY valid JSON, no markdown:
 {

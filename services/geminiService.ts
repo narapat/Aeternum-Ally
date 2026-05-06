@@ -71,11 +71,17 @@ export const generateAssessmentScoring = async (
   topic: ESRSTopic,
   profile: CompanyProfile,
   bmcData: SustainabilityBusinessModel,
-  swotData: SwotAnalysis
+  swotData: SwotAnalysis,
+  impactDescription?: string,
+  financialDescription?: string,
 ): Promise<AssessmentScoring | null> => {
   const topicTitle = String(topic).replace(/^[A-Z0-9]+ /, "");
   try {
-    return await callApi("generateAssessmentScoring", { topic, topicTitle, profile, bmcData, swotData });
+    return await callApi("generateAssessmentScoring", {
+      topic, topicTitle, profile, bmcData, swotData,
+      impactDescription: impactDescription || "",
+      financialDescription: financialDescription || "",
+    });
   } catch {
     return null;
   }

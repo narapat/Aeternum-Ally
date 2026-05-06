@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AssessmentData, ESRSTopic, ImpactScore, FinancialScore, CompanyProfile, SustainabilityBusinessModel, SwotAnalysis, AssessmentScoring } from '../types';
 import { SCALE_OPTIONS, LIKELIHOOD_OPTIONS, calculateImpactMateriality, calculateFinancialMateriality, TOPICS } from '../constants';
 import { generateAssessmentSuggestions, generateAssessmentScoring } from '../services/geminiService';
@@ -33,12 +33,9 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
     magnitude: 1, likelihood: 1,
   });
 
-  // Use a ref so fetchAIScoring always captures the latest props/state
-  // without needing to be re-created on every prop change.
-  const latestContextRef = useRef({ profile, bmcData, swotData, initialData });
-  useEffect(() => {
-    latestContextRef.current = { profile, bmcData, swotData, initialData };
-  });
+  // Always-fresh ref so fetchAIScoring doesn't need to be recreated on prop changes
+  const latestRef = useRef({ profile, bmcData, swotData });
+  useEffect(() => { latestRef.current = { profile, bmcData, swotData }; });
 
   useEffect(() => {
     if (initialData) {
@@ -59,19 +56,19 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
     setOverrides(new Set());
   }, [initialData]);
 
-  const fetchAIScoring = useCallback(async (t: ESRSTopic) => {
-    const { profile: p, bmcData: b, swotData: s, initialData: init } = latestContextRef.current;
+  const runAIScoring = async (impactD: string, financialD: string, t: ESRSTopic) => {
+    const { profile: p, bmcData: b, swotData: s } = latestRef.current;
     setLoadingScoring(true);
     setAiScoring(null);
     setScoringError(false);
     setOverrides(new Set());
 
-    const result = await generateAssessmentScoring(t, p, b, s);
+    const result = await generateAssessmentScoring(t, p, b, s, impactD, financialD);
 
     if (result) {
       setAiScoring(result);
-      // Pre-populate scores with AI suggestions when creating a new assessment
-      if (!init) {
+      // Only pre-populate when creating new (editing keeps user's existing scores)
+      if (!initialData) {
         setImpactScore({
           scale: result.impact.scale.score,
           scope: result.impact.scope.score,
@@ -88,15 +85,22 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
     }
 
     setLoadingScoring(false);
-  }, []); // stable — reads latest context via ref
+  };
 
-  // Fetch AI scoring whenever topic changes (including on mount)
-  useEffect(() => {
-    fetchAIScoring(topic);
-  }, [topic, fetchAIScoring]);
+  // AI Auto-Fill: generate descriptions then immediately score based on them
+  const handleAutoFill = async () => {
+    setLoadingAI(true);
+    const suggestions = await generateAssessmentSuggestions(profile, topic);
+    setImpactDesc(suggestions.impactSuggestion);
+    setFinancialDesc(suggestions.financialSuggestion);
+    setLoadingAI(false);
+    // Trigger scoring with the freshly generated descriptions
+    await runAIScoring(suggestions.impactSuggestion, suggestions.financialSuggestion, topic);
+  };
 
-  const handleTopicChange = (t: ESRSTopic) => {
-    setTopic(t);
+  // Manual trigger: user typed their own descriptions and wants AI score suggestions
+  const handleGetAIScores = () => {
+    runAIScoring(impactDesc, financialDesc, topic);
   };
 
   const handleImpactScore = (key: keyof ImpactScore, value: number, overrideKey: OverrideKey) => {
@@ -124,14 +128,6 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
     setOverrides(new Set());
   };
 
-  const handleAutoFill = async () => {
-    setLoadingAI(true);
-    const suggestions = await generateAssessmentSuggestions(profile, topic);
-    setImpactDesc(suggestions.impactSuggestion);
-    setFinancialDesc(suggestions.financialSuggestion);
-    setLoadingAI(false);
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const imValue = calculateImpactMateriality(impactScore);
@@ -150,6 +146,8 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
     onSave(data);
   };
 
+  const canRequestScores = (impactDesc.trim().length > 0 || financialDesc.trim().length > 0) && !loadingScoring && !loadingAI;
+
   return (
     <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 space-y-8 transition-colors h-full flex flex-col">
       <div className="flex justify-between items-start">
@@ -161,12 +159,12 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
           <button
             type="button"
             onClick={handleAutoFill}
-            disabled={loadingAI}
-            className="flex items-center gap-2 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-3 py-2 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors text-sm font-medium"
-            title="AI fills the description text fields"
+            disabled={loadingAI || loadingScoring}
+            className="flex items-center gap-2 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-3 py-2 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors text-sm font-medium disabled:opacity-50"
+            title="AI writes descriptions then suggests scores"
           >
             {loadingAI ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cpu className="w-4 h-4" />}
-            AI Auto-Fill Descriptions
+            AI Auto-Fill
           </button>
           <button type="button" onClick={onCancel} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
             <X className="w-6 h-6" />
@@ -179,7 +177,12 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">ESRS Topic</label>
           <select
             value={topic}
-            onChange={(e) => handleTopicChange(e.target.value as ESRSTopic)}
+            onChange={(e) => {
+              setTopic(e.target.value as ESRSTopic);
+              setAiScoring(null);
+              setScoringError(false);
+              setOverrides(new Set());
+            }}
             className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-esg-500 focus:border-esg-500 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
           >
             {TOPICS.map(t => <option key={t} value={t}>{t}</option>)}
@@ -191,26 +194,20 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
           {loadingScoring ? (
             <div className="flex items-center gap-2 text-sm text-indigo-600 dark:text-indigo-400">
               <Loader2 className="w-4 h-4 animate-spin" />
-              Analyzing your business context...
+              Suggesting scores...
             </div>
           ) : scoringError ? (
             <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
               <AlertTriangle className="w-4 h-4" />
-              AI scoring unavailable — score manually
-              <button
-                type="button"
-                onClick={() => fetchAIScoring(topic)}
-                className="underline hover:no-underline"
-              >
-                Retry
-              </button>
+              AI scoring unavailable
+              <button type="button" onClick={handleGetAIScores} className="underline hover:no-underline">Retry</button>
             </div>
           ) : aiScoring ? (
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
+              <span className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
                 <Sparkles className="w-4 h-4" />
                 AI scores applied
-              </div>
+              </span>
               {overrides.size > 0 && (
                 <button
                   type="button"
@@ -222,6 +219,15 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
                 </button>
               )}
             </div>
+          ) : canRequestScores ? (
+            <button
+              type="button"
+              onClick={handleGetAIScores}
+              className="flex items-center gap-1.5 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200"
+            >
+              <Sparkles className="w-4 h-4" />
+              Get AI Score Suggestions
+            </button>
           ) : null}
         </div>
       </div>
@@ -238,7 +244,7 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Impact Description</label>
             <textarea
               value={impactDesc}
-              onChange={e => setImpactDesc(e.target.value)}
+              onChange={e => { setImpactDesc(e.target.value); setAiScoring(null); setScoringError(false); }}
               className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg h-24 text-sm bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600"
               placeholder="Describe the impact on people/environment..."
               required
@@ -303,7 +309,7 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Risks & Opportunities</label>
             <textarea
               value={financialDesc}
-              onChange={e => setFinancialDesc(e.target.value)}
+              onChange={e => { setFinancialDesc(e.target.value); setAiScoring(null); setScoringError(false); }}
               className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg h-24 text-sm bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600"
               placeholder="Describe financial risks or opportunities..."
               required
@@ -363,7 +369,6 @@ interface ScoreSelectProps {
 
 const ScoreSelect: React.FC<ScoreSelectProps> = ({ label, value, onChange, options, suggestion, isOverridden, onAccept }) => {
   const [showReasoning, setShowReasoning] = useState(false);
-  // Show badge whenever a suggestion exists (score present), not gated on reasoning text
   const hasSuggestion = suggestion !== undefined && suggestion !== null;
 
   return (
