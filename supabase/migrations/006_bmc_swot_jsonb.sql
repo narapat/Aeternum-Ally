@@ -56,35 +56,53 @@ BEGIN
 END;
 $$;
 
--- Step 2: Migrate business_model_canvases columns text → jsonb
+-- Step 2: Drop existing text defaults, migrate columns text → jsonb, set new defaults
 ALTER TABLE business_model_canvases
-  ALTER COLUMN key_partners       TYPE jsonb USING parse_bullet_to_jsonb(key_partners),
-  ALTER COLUMN key_activities     TYPE jsonb USING parse_bullet_to_jsonb(key_activities),
-  ALTER COLUMN key_resources      TYPE jsonb USING parse_bullet_to_jsonb(key_resources),
-  ALTER COLUMN value_proposition  TYPE jsonb USING parse_bullet_to_jsonb(value_proposition),
+  ALTER COLUMN key_partners           DROP DEFAULT,
+  ALTER COLUMN key_activities         DROP DEFAULT,
+  ALTER COLUMN key_resources          DROP DEFAULT,
+  ALTER COLUMN value_proposition      DROP DEFAULT,
+  ALTER COLUMN customer_relationships DROP DEFAULT,
+  ALTER COLUMN channels               DROP DEFAULT,
+  ALTER COLUMN customer_segments      DROP DEFAULT,
+  ALTER COLUMN cost_structure         DROP DEFAULT,
+  ALTER COLUMN revenue_streams        DROP DEFAULT,
+  ALTER COLUMN eco_social_costs       DROP DEFAULT,
+  ALTER COLUMN eco_social_benefits    DROP DEFAULT;
+
+ALTER TABLE business_model_canvases
+  ALTER COLUMN key_partners           TYPE jsonb USING parse_bullet_to_jsonb(key_partners),
+  ALTER COLUMN key_activities         TYPE jsonb USING parse_bullet_to_jsonb(key_activities),
+  ALTER COLUMN key_resources          TYPE jsonb USING parse_bullet_to_jsonb(key_resources),
+  ALTER COLUMN value_proposition      TYPE jsonb USING parse_bullet_to_jsonb(value_proposition),
   ALTER COLUMN customer_relationships TYPE jsonb USING parse_bullet_to_jsonb(customer_relationships),
-  ALTER COLUMN channels           TYPE jsonb USING parse_bullet_to_jsonb(channels),
-  ALTER COLUMN customer_segments  TYPE jsonb USING parse_bullet_to_jsonb(customer_segments),
-  ALTER COLUMN cost_structure     TYPE jsonb USING parse_bullet_to_jsonb(cost_structure),
-  ALTER COLUMN revenue_streams    TYPE jsonb USING parse_bullet_to_jsonb(revenue_streams),
-  ALTER COLUMN eco_social_costs   TYPE jsonb USING parse_bullet_to_jsonb(eco_social_costs),
-  ALTER COLUMN eco_social_benefits TYPE jsonb USING parse_bullet_to_jsonb(eco_social_benefits);
+  ALTER COLUMN channels               TYPE jsonb USING parse_bullet_to_jsonb(channels),
+  ALTER COLUMN customer_segments      TYPE jsonb USING parse_bullet_to_jsonb(customer_segments),
+  ALTER COLUMN cost_structure         TYPE jsonb USING parse_bullet_to_jsonb(cost_structure),
+  ALTER COLUMN revenue_streams        TYPE jsonb USING parse_bullet_to_jsonb(revenue_streams),
+  ALTER COLUMN eco_social_costs       TYPE jsonb USING parse_bullet_to_jsonb(eco_social_costs),
+  ALTER COLUMN eco_social_benefits    TYPE jsonb USING parse_bullet_to_jsonb(eco_social_benefits);
 
--- Set defaults so new rows get empty arrays instead of null
 ALTER TABLE business_model_canvases
-  ALTER COLUMN key_partners           SET DEFAULT '[]',
-  ALTER COLUMN key_activities         SET DEFAULT '[]',
-  ALTER COLUMN key_resources          SET DEFAULT '[]',
-  ALTER COLUMN value_proposition      SET DEFAULT '[]',
-  ALTER COLUMN customer_relationships SET DEFAULT '[]',
-  ALTER COLUMN channels               SET DEFAULT '[]',
-  ALTER COLUMN customer_segments      SET DEFAULT '[]',
-  ALTER COLUMN cost_structure         SET DEFAULT '[]',
-  ALTER COLUMN revenue_streams        SET DEFAULT '[]',
-  ALTER COLUMN eco_social_costs       SET DEFAULT '[]',
-  ALTER COLUMN eco_social_benefits    SET DEFAULT '[]';
+  ALTER COLUMN key_partners           SET DEFAULT '[]'::jsonb,
+  ALTER COLUMN key_activities         SET DEFAULT '[]'::jsonb,
+  ALTER COLUMN key_resources          SET DEFAULT '[]'::jsonb,
+  ALTER COLUMN value_proposition      SET DEFAULT '[]'::jsonb,
+  ALTER COLUMN customer_relationships SET DEFAULT '[]'::jsonb,
+  ALTER COLUMN channels               SET DEFAULT '[]'::jsonb,
+  ALTER COLUMN customer_segments      SET DEFAULT '[]'::jsonb,
+  ALTER COLUMN cost_structure         SET DEFAULT '[]'::jsonb,
+  ALTER COLUMN revenue_streams        SET DEFAULT '[]'::jsonb,
+  ALTER COLUMN eco_social_costs       SET DEFAULT '[]'::jsonb,
+  ALTER COLUMN eco_social_benefits    SET DEFAULT '[]'::jsonb;
 
--- Step 3: Migrate swot_analyses columns text → jsonb
+-- Step 3: Drop existing text defaults, migrate swot_analyses columns text → jsonb, set new defaults
+ALTER TABLE swot_analyses
+  ALTER COLUMN strengths     DROP DEFAULT,
+  ALTER COLUMN weaknesses    DROP DEFAULT,
+  ALTER COLUMN opportunities DROP DEFAULT,
+  ALTER COLUMN threats       DROP DEFAULT;
+
 ALTER TABLE swot_analyses
   ALTER COLUMN strengths     TYPE jsonb USING parse_bullet_to_jsonb(strengths),
   ALTER COLUMN weaknesses    TYPE jsonb USING parse_bullet_to_jsonb(weaknesses),
@@ -92,7 +110,7 @@ ALTER TABLE swot_analyses
   ALTER COLUMN threats       TYPE jsonb USING parse_bullet_to_jsonb(threats);
 
 ALTER TABLE swot_analyses
-  ALTER COLUMN strengths     SET DEFAULT '[]',
-  ALTER COLUMN weaknesses    SET DEFAULT '[]',
-  ALTER COLUMN opportunities SET DEFAULT '[]',
-  ALTER COLUMN threats       SET DEFAULT '[]';
+  ALTER COLUMN strengths     SET DEFAULT '[]'::jsonb,
+  ALTER COLUMN weaknesses    SET DEFAULT '[]'::jsonb,
+  ALTER COLUMN opportunities SET DEFAULT '[]'::jsonb,
+  ALTER COLUMN threats       SET DEFAULT '[]'::jsonb;
