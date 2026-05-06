@@ -45,14 +45,16 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
       setFinancialDesc(initialData.financialDescription);
       setImpactScore(initialData.impactScore);
       setFinancialScore(initialData.financialScore);
+      // Restore persisted AI suggestion so ? badges and reasoning are visible on re-open
+      setAiScoring(initialData.aiScoringSuggestion ?? null);
     } else {
       setTopic(ESRSTopic.E1);
       setImpactDesc('');
       setFinancialDesc('');
       setImpactScore({ scale: 1, scope: 1, irremediability: 1, likelihood: 1 });
       setFinancialScore({ magnitude: 1, likelihood: 1 });
+      setAiScoring(null);
     }
-    setAiScoring(null);
     setScoringError(false);
     setOverrides(new Set());
   }, [initialData]);
