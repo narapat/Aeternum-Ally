@@ -184,11 +184,14 @@ export interface Task {
   organization_id: string;
   title: string;
   description: string | null;
+  notes: string | null;
   type: TaskType;
   status: TaskStatus;
   priority: TaskPriority;
   due_date: string | null;
   assignee_id: string | null;
+  assigned_by: string | null;
+  assigned_at: string | null;
   source_type: TaskSourceType | null;
   source_id: string | null;
   esrs_ref: string | null;

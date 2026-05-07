@@ -12,7 +12,7 @@ import {
   Sparkles, ListChecks, RefreshCw, CheckCircle2, Circle, Clock,
   AlertCircle, Loader2, ChevronDown, ChevronUp, Trash2, ArrowUpRight,
   Filter, Plus, CheckSquare, Square, User, CalendarDays, Tag, Shield, TrendingUp,
-  ArrowUpDown,
+  ArrowUpDown, MessageSquare, UserPlus, ChevronRight,
 } from 'lucide-react';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -433,16 +433,21 @@ const GeneratorTab: React.FC<GeneratorProps> = ({
 interface ManagerProps {
   orgId: string;
   members: OrgMember[];
+  currentUserId: string;
   refreshTrigger: number;
 }
 
-const ManagerTab: React.FC<ManagerProps> = ({ orgId, members, refreshTrigger }) => {
+const ManagerTab: React.FC<ManagerProps> = ({ orgId, members, currentUserId, refreshTrigger }) => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<TaskStatus | 'all'>('all');
   const [filterType, setFilterType] = useState<TaskType | 'all'>('all');
   const [sortBy, setSortBy] = useState<ManagerSort>('created');
   const [showAddModal, setShowAddModal] = useState(false);
+  // Track which task's note is being edited (expanded state)
+  const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
+  // Draft note text per task (unsaved until blur)
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -469,6 +474,37 @@ const ManagerTab: React.FC<ManagerProps> = ({ orgId, members, refreshTrigger }) 
     await deleteTask(id);
     setTasks(prev => prev.filter(t => t.id !== id));
   };
+
+  const toggleNote = (id: string, currentNote: string | null) => {
+    setExpandedNotes(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) { n.delete(id); } else {
+        n.add(id);
+        setNoteDrafts(d => ({ ...d, [id]: currentNote ?? '' }));
+      }
+      return n;
+    });
+  };
+
+  const saveNote = async (task: Task) => {
+    const draft = noteDrafts[task.id] ?? task.notes ?? '';
+    if (draft === (task.notes ?? '')) return; // no change
+    const updated = await upsertTask(orgId, { ...task, notes: draft || null });
+    setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
+  };
+
+  const handleAssign = async (task: Task, assigneeId: string | null) => {
+    const now = new Date().toISOString();
+    const updated = await upsertTask(orgId, {
+      ...task,
+      assignee_id: assigneeId,
+      assigned_by: assigneeId ? currentUserId : null,
+      assigned_at: assigneeId ? now : null,
+    });
+    setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
+  };
+
+  const handlePickUp = (task: Task) => handleAssign(task, currentUserId);
 
   const filtered = sortTasks(
     tasks.filter(t =>
@@ -579,58 +615,132 @@ const ManagerTab: React.FC<ManagerProps> = ({ orgId, members, refreshTrigger }) 
         <div className="space-y-2">
           {filtered.map(task => {
             const sm = STATUS_META[task.status];
+            const noteExpanded = expandedNotes.has(task.id);
+            const noteDraft = noteDrafts[task.id] ?? task.notes ?? '';
+            const assigneeName = memberEmail(task.assignee_id);
+            const assignedByName = memberEmail(task.assigned_by);
+            const isSelfAssigned = task.assignee_id === currentUserId;
+
             return (
               <div
                 key={task.id}
-                className={`bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 flex items-start gap-3 transition-opacity ${task.status === 'done' ? 'opacity-60' : ''}`}
+                className={`bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 transition-opacity ${task.status === 'done' ? 'opacity-60' : ''}`}
               >
-                {/* Status toggle */}
-                <button
-                  onClick={() => cycleStatus(task)}
-                  className={`mt-0.5 flex-shrink-0 ${sm.color} hover:scale-110 transition-transform`}
-                  title={`Status: ${sm.label} — click to advance`}
-                >
-                  {sm.icon}
-                </button>
+                {/* Main row */}
+                <div className="p-4 flex items-start gap-3">
+                  {/* Status toggle */}
+                  <button
+                    onClick={() => cycleStatus(task)}
+                    className={`mt-0.5 flex-shrink-0 ${sm.color} hover:scale-110 transition-transform`}
+                    title={`Status: ${sm.label} — click to advance`}
+                  >
+                    {sm.icon}
+                  </button>
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`font-medium text-sm ${task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-800 dark:text-white'}`}>
-                      {task.title}
-                    </span>
-                    <TypeBadge type={task.type} />
-                    <PriorityDot priority={task.priority} />
-                    {task.esrs_ref && (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-mono">
-                        {task.esrs_ref}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`font-medium text-sm ${task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-800 dark:text-white'}`}>
+                        {task.title}
                       </span>
+                      <TypeBadge type={task.type} />
+                      <PriorityDot priority={task.priority} />
+                      {task.esrs_ref && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-mono">
+                          {task.esrs_ref}
+                        </span>
+                      )}
+                    </div>
+
+                    {task.description && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">{task.description}</p>
                     )}
+
+                    {/* Meta row */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
+                      {/* Assignee selector */}
+                      <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                        <User className="w-3 h-3" />
+                        <select
+                          className="bg-transparent outline-none cursor-pointer hover:text-esg-600 dark:hover:text-esg-400 transition-colors max-w-[140px] truncate"
+                          value={task.assignee_id ?? ''}
+                          onChange={e => handleAssign(task, e.target.value || null)}
+                        >
+                          <option value="">Unassigned</option>
+                          {members.map(m => (
+                            <option key={m.user_id} value={m.user_id}>{m.email ?? m.user_id}</option>
+                          ))}
+                        </select>
+                        {/* "Pick up" shortcut for unassigned tasks */}
+                        {!task.assignee_id && (
+                          <button
+                            onClick={() => handlePickUp(task)}
+                            className="ml-1 flex items-center gap-0.5 text-xs text-esg-500 hover:text-esg-700 dark:text-esg-400 transition-colors font-medium"
+                            title="Assign to me"
+                          >
+                            <UserPlus className="w-3 h-3" />Pick up
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Assignment audit trail */}
+                      {task.assigned_by && task.assigned_at && (
+                        <span className="text-xs text-slate-400 dark:text-slate-500">
+                          by {assignedByName} · {new Date(task.assigned_at).toLocaleDateString()}
+                        </span>
+                      )}
+
+                      {task.due_date && (
+                        <span className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
+                          <CalendarDays className="w-3 h-3" />{new Date(task.due_date).toLocaleDateString()}
+                        </span>
+                      )}
+                      {task.source_id && (
+                        <span className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
+                          <Tag className="w-3 h-3" />{task.source_id}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  {task.description && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">{task.description}</p>
-                  )}
-
-                  <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-slate-400 dark:text-slate-500">
-                    {task.assignee_id && (
-                      <span className="flex items-center gap-1"><User className="w-3 h-3" />{memberEmail(task.assignee_id)}</span>
-                    )}
-                    {task.due_date && (
-                      <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3" />{new Date(task.due_date).toLocaleDateString()}</span>
-                    )}
-                    {task.source_id && (
-                      <span className="flex items-center gap-1"><Tag className="w-3 h-3" />{task.source_id}</span>
-                    )}
+                  {/* Actions */}
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => toggleNote(task.id, task.notes)}
+                      className={`p-1.5 rounded-lg transition-colors ${
+                        noteExpanded || task.notes
+                          ? 'text-esg-500 dark:text-esg-400 bg-esg-50 dark:bg-esg-900/20'
+                          : 'text-slate-300 hover:text-slate-500 dark:text-slate-600 dark:hover:text-slate-400'
+                      }`}
+                      title={noteExpanded ? 'Hide notes' : 'Add / view notes'}
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(task.id)}
+                      className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 dark:text-slate-600 dark:hover:text-red-400 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
-                <button
-                  onClick={() => handleDelete(task.id)}
-                  className="flex-shrink-0 text-slate-300 hover:text-red-500 dark:text-slate-600 dark:hover:text-red-400 transition-colors"
-                  title="Delete"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {/* Notes panel — expands inline */}
+                {noteExpanded && (
+                  <div className="px-4 pb-4 border-t border-slate-100 dark:border-slate-700 pt-3">
+                    <textarea
+                      className="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-esg-500 resize-none placeholder:text-slate-400"
+                      rows={3}
+                      placeholder="Add notes, links, context… (saved on blur)"
+                      value={noteDraft}
+                      onChange={e => setNoteDrafts(d => ({ ...d, [task.id]: e.target.value }))}
+                      onBlur={() => saveNote(task)}
+                    />
+                    {task.notes && noteDraft === task.notes && (
+                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Saved</p>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -662,6 +772,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ orgId, members, onClose, on
   const [form, setForm] = useState({
     title: '',
     description: '',
+    notes: '',
     type: 'comply' as TaskType,
     priority: 'medium' as TaskPriority,
     due_date: '',
@@ -679,6 +790,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ orgId, members, onClose, on
       const task = await upsertTask(orgId, {
         title: form.title.trim(),
         description: form.description.trim() || null,
+        notes: form.notes.trim() || null,
         type: form.type,
         status: 'todo',
         priority: form.priority,
@@ -720,6 +832,16 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ orgId, members, onClose, on
               value={form.description}
               onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
               placeholder="Optional description"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">Notes</label>
+            <textarea
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-esg-500 resize-none"
+              rows={2}
+              value={form.notes}
+              onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+              placeholder="Links, context, references… (optional)"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -855,6 +977,7 @@ const TaskManagement: React.FC<Props> = ({
         <ManagerTab
           orgId={orgId}
           members={members}
+          currentUserId={currentUserId}
           refreshTrigger={managerRefresh}
         />
       )}
