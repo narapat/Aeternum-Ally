@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Layout, Mail, Lock, Loader2, AlertCircle, Info, Send } from "lucide-react";
+import { Mail, Lock, Loader2, AlertCircle, Info, Send } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 
 const AuthScreen: React.FC = () => {
@@ -74,34 +74,85 @@ const AuthScreen: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50 dark:bg-slate-900">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-gray-50 dark:bg-slate-900">
       {/* Branding panel */}
-      <div className="lg:w-1/2 bg-gradient-to-br from-esg-700 via-esg-600 to-emerald-800 text-white p-8 lg:p-16 flex flex-col justify-between">
-        <div className="flex items-center gap-3">
-          <Layout className="w-8 h-8" />
-          <span className="text-2xl font-bold">Aeternum Ally</span>
+      <div
+        className="lg:w-1/2 text-white p-8 lg:p-16 flex flex-col justify-between"
+        style={{ backgroundColor: "#004d4d" }}
+      >
+        <div>
+          <img
+            src="/AeternumAlly-Logo-Full.png"
+            alt="AeternumAlly"
+            className="w-56 lg:w-72 h-auto object-contain"
+          />
         </div>
-        <div className="my-12">
-          <h1 className="text-3xl lg:text-5xl font-serif font-bold mb-6 leading-tight">
-            Turn Sustainability Compliance into Business Strategy with AI
-          </h1>
-          <p className="text-lg opacity-90 max-w-lg">
-            SaaS platform that helps SMEs manage CSRD and ESRS reporting easily, quickly, and cost-effectively with Generative AI.
-          </p>
+        <div className="my-10 flex flex-col gap-6">
+          {/* Headline */}
+          <div>
+            <h1 className="text-3xl lg:text-4xl font-heading font-bold leading-tight mb-3" style={{ color: "#ccff00" }}>
+              Turn Sustainability Compliance<br />into Business Actions with AI
+            </h1>
+            <p className="text-base lg:text-lg opacity-80 font-sans leading-relaxed">
+              AI-powered platform for SMEs navigating<br className="hidden lg:block" /> CSRD and ESRS reporting — from your<br className="hidden lg:block" /> business context to carbon accounting and reports.
+            </p>
+          </div>
+
+          {/* Divider */}
+          <div className="w-10 h-0.5 rounded-full" style={{ backgroundColor: "#ccff00", opacity: 0.6 }} />
+
+          {/* Feature list */}
+          <div className="flex flex-col gap-2 font-sans text-sm lg:text-base">
+            {[
+              "Sustainability Business Canvas Model",
+              "Internal & External Analysis",
+              "Double Materiality Assessment",
+              "InsightHub & Recommendations",
+              "KPI Dashboard & Goal Setting",
+              "Task Management",
+            ].map((f) => (
+              <div key={f} className="flex items-center gap-2.5">
+                <span className="flex-shrink-0 text-base font-bold" style={{ color: "#ccff00" }}>✓</span>
+                <span className="opacity-90">{f}</span>
+              </div>
+            ))}
+            {[
+              "Carbon Accounting",
+              "Evidence Vault",
+            ].map((f) => (
+              <div key={f} className="flex items-center gap-2.5 opacity-50">
+                <span className="flex-shrink-0 text-base">—</span>
+                <span>{f}</span>
+                <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full border border-white/30 tracking-wide uppercase">
+                  Q3 2026
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="text-sm opacity-70">
-          ESRS · GRI · Double Materiality · Balanced Scorecard
+
+        {/* Footer badges */}
+        <div className="flex flex-wrap gap-2 font-sans">
+          {["CSRD/ESRS Ready", "GRI Compatible"].map((tag) => (
+            <span
+              key={tag}
+              className="text-xs font-semibold px-3 py-1 rounded-full border"
+              style={{ borderColor: "rgba(204,255,0,0.4)", color: "rgba(255,255,255,0.7)" }}
+            >
+              {tag}
+            </span>
+          ))}
         </div>
       </div>
 
       {/* Form panel */}
-      <div className="lg:w-1/2 flex items-center justify-center p-6 lg:p-12">
+      <div className="lg:w-1/2 flex items-center justify-center p-6 lg:p-12 bg-gray-50 dark:bg-slate-900">
         <div className="w-full max-w-md">
           <div className="mb-8">
-            <h2 className="text-3xl font-bold text-slate-800 dark:text-white mb-2">
+            <h2 className="text-3xl font-heading font-bold text-slate-800 dark:text-white mb-2">
               {mode === "signin" ? "Welcome back" : "Create your account"}
             </h2>
-            <p className="text-slate-500 dark:text-slate-400">
+            <p className="text-slate-500 dark:text-slate-400 font-sans">
               {mode === "signin"
                 ? "Sign in to continue your sustainability journey."
                 : "Start managing your ESG reporting today."}
@@ -172,7 +223,10 @@ const AuthScreen: React.FC = () => {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:ring-2 focus:ring-esg-500 focus:border-esg-500"
+                  className="w-full pl-10 p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:border-transparent"
+                  style={{ "--tw-ring-color": "#004d4d" } as React.CSSProperties}
+                  onFocus={(e) => { e.target.style.boxShadow = "0 0 0 2px #004d4d"; e.target.style.borderColor = "#004d4d"; }}
+                  onBlur={(e) => { e.target.style.boxShadow = ""; e.target.style.borderColor = ""; }}
                   placeholder="you@company.com"
                 />
               </div>
@@ -189,7 +243,9 @@ const AuthScreen: React.FC = () => {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:ring-2 focus:ring-esg-500 focus:border-esg-500"
+                  className="w-full pl-10 p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none"
+                  onFocus={(e) => { e.target.style.boxShadow = "0 0 0 2px #004d4d"; e.target.style.borderColor = "#004d4d"; }}
+                  onBlur={(e) => { e.target.style.boxShadow = ""; e.target.style.borderColor = ""; }}
                   placeholder="At least 6 characters"
                 />
               </div>
@@ -207,7 +263,9 @@ const AuthScreen: React.FC = () => {
                     required
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full pl-10 p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:ring-2 focus:ring-esg-500 focus:border-esg-500"
+                    className="w-full pl-10 p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none"
+                    onFocus={(e) => { e.target.style.boxShadow = "0 0 0 2px #004d4d"; e.target.style.borderColor = "#004d4d"; }}
+                    onBlur={(e) => { e.target.style.boxShadow = ""; e.target.style.borderColor = ""; }}
                     placeholder="Repeat your password"
                   />
                 </div>
@@ -217,7 +275,10 @@ const AuthScreen: React.FC = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 bg-esg-600 text-white py-3 rounded-lg font-medium hover:bg-esg-700 shadow-lg shadow-esg-600/20 transition-all disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-lg font-heading font-semibold transition-all disabled:opacity-50 shadow-md"
+              style={{ backgroundColor: "#ccff00", color: "#004d4d" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#aadd00"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#ccff00"; }}
             >
               {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
               {mode === "signin" ? "Sign in" : "Create account"}
@@ -234,7 +295,8 @@ const AuthScreen: React.FC = () => {
                     setError(null);
                     setInfo(null);
                   }}
-                  className="text-esg-600 dark:text-esg-400 font-medium hover:underline"
+                  className="font-semibold hover:underline"
+                  style={{ color: "#004d4d" }}
                 >
                   Create one
                 </button>
@@ -248,7 +310,8 @@ const AuthScreen: React.FC = () => {
                     setError(null);
                     setInfo(null);
                   }}
-                  className="text-esg-600 dark:text-esg-400 font-medium hover:underline"
+                  className="font-semibold hover:underline"
+                  style={{ color: "#004d4d" }}
                 >
                   Sign in
                 </button>
