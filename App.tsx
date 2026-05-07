@@ -25,7 +25,7 @@ import {
   saveQualityCheck, saveDMAInsight, clearDMAInsight, loadDMAInsight, saveDMASuggestedTasks,
 } from './services/dbService';
 import { setOrganizationContext } from './services/geminiService';
-import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2, ListChecks, Zap } from 'lucide-react';
+import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, ChevronDown, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2, ListChecks, Zap } from 'lucide-react';
 import type { InsightHubResponse, QualityCheck } from './types';
 
 const DEFAULT_PROFILE: CompanyProfile = {
@@ -81,6 +81,11 @@ const App: React.FC = () => {
   // Quality check context for the topic being edited from the hub — passed to AssessmentForm
   // so AI auto-fill knows which issues to address
   const [hubQualityCheck, setHubQualityCheck] = useState<QualityCheck | null>(null);
+
+  // Sidebar nav group open/close state
+  const [myBusinessOpen, setMyBusinessOpen] = useState(true);
+  const [doubleMaterialityOpen, setDoubleMaterialityOpen] = useState(true);
+  const [measurementOpen, setMeasurementOpen] = useState(true);
 
   // DB-backed singleton data (auto-save + manual save)
   const orgId = organization?.id ?? null;
@@ -234,27 +239,25 @@ const App: React.FC = () => {
               <NavItem active={view === 'overview'} collapsed={isSidebarCollapsed} onClick={() => setView('overview')} icon={<Home />} label="Overview" />
             </div>
 
-            <div className="space-y-2">
-              {!isSidebarCollapsed && <div className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">My Business</div>}
-              {isSidebarCollapsed && <div className="h-px bg-slate-800 my-2 mx-2" />}
-              <div className="space-y-1">
-                <NavItem active={view === 'profile'} collapsed={isSidebarCollapsed} onClick={() => setView('profile')} icon={<Building2 />} label="Company Profile" />
-                <NavItem active={view === 'canvas'} collapsed={isSidebarCollapsed} onClick={() => setView('canvas')} icon={<Grid />} label="Business Model" />
-                <NavItem active={view === 'swot'} collapsed={isSidebarCollapsed} onClick={() => setView('swot')} icon={<Target />} label="SWOT Analysis" />
-                <NavItem active={view === 'kpi'} collapsed={isSidebarCollapsed} onClick={() => setView('kpi')} icon={<TrendingUp />} label="Performance (KPI)" />
-              </div>
-            </div>
+            <NavSection label="My Business" open={myBusinessOpen} onToggle={() => setMyBusinessOpen(v => !v)} sidebarCollapsed={isSidebarCollapsed}>
+              <NavItem active={view === 'profile'} collapsed={isSidebarCollapsed} onClick={() => setView('profile')} icon={<Building2 />} label="Company Profile" />
+              <NavItem active={view === 'canvas'} collapsed={isSidebarCollapsed} onClick={() => setView('canvas')} icon={<Grid />} label="Business Model" />
+              <NavItem active={view === 'swot'} collapsed={isSidebarCollapsed} onClick={() => setView('swot')} icon={<Target />} label="SWOT Analysis" />
+            </NavSection>
 
-            <div className="space-y-2">
-              {!isSidebarCollapsed && <div className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Double Materiality</div>}
-              {isSidebarCollapsed && <div className="h-px bg-slate-800 my-2 mx-2" />}
-              <div className="space-y-1">
-                <NavItem active={view === 'dm_dashboard'} collapsed={isSidebarCollapsed} onClick={() => setView('dm_dashboard')} icon={<BarChart3 />} label="Dashboard" />
-                <NavItem active={view === 'assess'} collapsed={isSidebarCollapsed} onClick={() => { setView('assess'); setIsFormOpen(false); setEditingAssessment(null); }} icon={<Plus />} label="Assessments" />
-                <NavItem active={view === 'insight_hub'} collapsed={isSidebarCollapsed} onClick={() => setView('insight_hub')} icon={<Zap className="w-5 h-5" />} label="Insight Hub" />
-                <NavItem active={view === 'tasks'} collapsed={isSidebarCollapsed} onClick={() => setView('tasks')} icon={<ListChecks />} label="Tasks" />
-                <NavItem active={view === 'report'} collapsed={isSidebarCollapsed} onClick={() => setView('report')} icon={<FileText />} label="Reports" />
-              </div>
+            <NavSection label="Double Materiality" open={doubleMaterialityOpen} onToggle={() => setDoubleMaterialityOpen(v => !v)} sidebarCollapsed={isSidebarCollapsed}>
+              <NavItem active={view === 'dm_dashboard'} collapsed={isSidebarCollapsed} onClick={() => setView('dm_dashboard')} icon={<BarChart3 />} label="Dashboard" />
+              <NavItem active={view === 'assess'} collapsed={isSidebarCollapsed} onClick={() => { setView('assess'); setIsFormOpen(false); setEditingAssessment(null); }} icon={<Plus />} label="Assessments" />
+              <NavItem active={view === 'insight_hub'} collapsed={isSidebarCollapsed} onClick={() => setView('insight_hub')} icon={<Zap className="w-5 h-5" />} label="Insight Hub" />
+            </NavSection>
+
+            <NavSection label="Measurement" open={measurementOpen} onToggle={() => setMeasurementOpen(v => !v)} sidebarCollapsed={isSidebarCollapsed}>
+              <NavItem active={view === 'kpi'} collapsed={isSidebarCollapsed} onClick={() => setView('kpi')} icon={<TrendingUp />} label="Performance (KPI)" />
+              <NavItem active={view === 'tasks'} collapsed={isSidebarCollapsed} onClick={() => setView('tasks')} icon={<ListChecks />} label="Tasks" />
+            </NavSection>
+
+            <div className="space-y-1">
+              <NavItem active={view === 'report'} collapsed={isSidebarCollapsed} onClick={() => setView('report')} icon={<FileText />} label="Reports" />
             </div>
           </nav>
 
@@ -579,6 +582,26 @@ const NavItem = ({ active, onClick, icon, label, collapsed }: { active: boolean,
     <span className={`transition-colors ${active ? 'text-white' : 'text-slate-400 group-hover:text-white'}`}>{icon}</span>
     {!collapsed && <span className="whitespace-nowrap">{label}</span>}
   </button>
+);
+
+const NavSection = ({ label, open, onToggle, sidebarCollapsed, children }: {
+  label: string; open: boolean; onToggle: () => void; sidebarCollapsed: boolean; children: React.ReactNode;
+}) => (
+  <div className="space-y-1">
+    {sidebarCollapsed
+      ? <div className="h-px bg-slate-800 my-2 mx-2" />
+      : (
+        <button
+          onClick={onToggle}
+          className="w-full flex items-center justify-between px-4 py-1 text-xs font-bold text-slate-500 uppercase tracking-wider hover:text-slate-300 transition-colors"
+        >
+          {label}
+          <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${open ? '' : '-rotate-90'}`} />
+        </button>
+      )
+    }
+    {(sidebarCollapsed || open) && <div className="space-y-1">{children}</div>}
+  </div>
 );
 
 const StatCard = ({ title, value, icon }: { title: string, value: string, icon: React.ReactNode }) => (
