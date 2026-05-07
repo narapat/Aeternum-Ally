@@ -483,13 +483,14 @@ interface ManagerProps {
   members: OrgMember[];
   currentUserId: string;
   refreshTrigger: number;
+  onGoToGenerator: () => void;
   onNavigateToDMA?: () => void;
   onNavigateToInsightHub?: () => void;
   onNavigateToKPI?: () => void;
 }
 
 const ManagerTab: React.FC<ManagerProps> = ({
-  orgId, members, currentUserId, refreshTrigger,
+  orgId, members, currentUserId, refreshTrigger, onGoToGenerator,
   onNavigateToDMA, onNavigateToInsightHub, onNavigateToKPI,
 }) => {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -674,10 +675,21 @@ const ManagerTab: React.FC<ManagerProps> = ({
 
       {/* Task list */}
       {filtered.length === 0 ? (
-        <div className="text-center py-16 text-slate-400 dark:text-slate-500">
-          <ListChecks className="w-8 h-8 mx-auto mb-3 opacity-40" />
-          <p className="font-medium">No tasks yet</p>
-          <p className="text-sm mt-1">Use the Generator tab to create AI-suggested tasks, or add one manually.</p>
+        <div className="flex flex-col items-center py-16 text-center">
+          <ListChecks className="w-10 h-10 text-slate-300 dark:text-slate-600 mb-4" />
+          <p className="font-semibold text-slate-700 dark:text-slate-200 text-base">No tasks yet</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 mb-5 max-w-xs">
+            Let AI analyse your DMA quality checks and material topics to suggest an action plan.
+          </p>
+          <button
+            onClick={onGoToGenerator}
+            className="flex items-center gap-2 px-4 py-2 bg-esg-600 hover:bg-esg-700 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            <Sparkles className="w-4 h-4" />Go to Generator
+          </button>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-4">
+            Or add a task manually using the button above.
+          </p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -1005,7 +1017,7 @@ const TaskManagement: React.FC<Props> = ({
   members, currentUserId, isSidebarCollapsed,
   onNavigateToInsightHub, onNavigateToDMA, onNavigateToKPI,
 }) => {
-  const [activeTab, setActiveTab] = useState<Tab>('generator');
+  const [activeTab, setActiveTab] = useState<Tab>('manager');
   const [managerRefresh, setManagerRefresh] = useState(0);
 
   return (
@@ -1055,6 +1067,7 @@ const TaskManagement: React.FC<Props> = ({
           members={members}
           currentUserId={currentUserId}
           refreshTrigger={managerRefresh}
+          onGoToGenerator={() => setActiveTab('generator')}
           onNavigateToDMA={onNavigateToDMA}
           onNavigateToInsightHub={onNavigateToInsightHub}
           onNavigateToKPI={onNavigateToKPI}
