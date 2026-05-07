@@ -255,6 +255,8 @@ async function runAction(
       return analyzeDMASynthesis(ai, model, params);
     case "analyzeDMAQuality":
       return analyzeDMAQuality(ai, model, params);
+    case "generateTasks":
+      return generateTasks(ai, model, params);
     default:
       throw new Error(`Unknown action: ${action}`);
   }
@@ -1345,6 +1347,121 @@ Return ONLY valid JSON — no markdown, no backticks.
     inputTokens,
     outputTokens,
   };
+}
+
+// =============================================================
+// generateTasks — produce fix/comply/improve tasks from DMA data
+// =============================================================
+
+async function generateTasks(
+  ai: GoogleGenAI,
+  model: string,
+  { qualityChecks, assessments, kpis, swotItems, profile }: any
+) {
+  const companyCtx = profile ? buildCompanyContext(profile) : "";
+
+  // Material topics for comply tasks
+  const materialTopics = (assessments ?? [])
+    .filter((a: any) => a.isMaterial)
+    .map((a: any) => `${a.topic} (impact=${a.impactMaterialityValue}/100, financial=${a.financialMaterialityValue}/100)`)
+    .join("; ");
+
+  // Quality issues for fix tasks
+  const fixContext = (qualityChecks ?? [])
+    .filter((q: any) => q.status !== "ok")
+    .map((q: any) => {
+      const issues = (q.issues ?? []).map((i: any) => `    - [${i.severity}] ${i.title}: ${i.fix_suggestion}`).join("\n");
+      return `${q.topic} ${q.topicTitle} (${q.status}):\n${issues}`;
+    })
+    .join("\n");
+
+  // KPI data for improve tasks
+  const kpiContext = (kpis ?? [])
+    .slice(0, 8)
+    .map((k: any) => `${k.name} (${k.perspective}): current=${k.currentValue}${k.unit}, target=${k.targetValue}${k.unit}`)
+    .join("; ");
+
+  // SWOT for improve tasks
+  const swotContext = swotItems
+    ? [
+        swotItems.strengths?.length ? `Strengths: ${joinField(swotItems.strengths)}` : "",
+        swotItems.opportunities?.length ? `Opportunities: ${joinField(swotItems.opportunities)}` : "",
+        swotItems.weaknesses?.length ? `Weaknesses: ${joinField(swotItems.weaknesses)}` : "",
+      ].filter(Boolean).join("\n")
+    : "";
+
+  const prompt = `
+You are an ESRS/CSRD compliance and sustainability strategy expert generating an actionable task list for an SME.
+
+COMPANY:
+${companyCtx}
+
+MATERIAL TOPICS (for "comply" tasks):
+${materialTopics || "None identified yet"}
+
+QUALITY ISSUES TO FIX (for "fix" tasks):
+${fixContext || "None — all quality checks passed"}
+
+KPI PERFORMANCE (for "improve" tasks):
+${kpiContext || "No KPI data"}
+
+SWOT CONTEXT (for "improve" tasks):
+${swotContext || "No SWOT data"}
+
+TASK TYPES:
+- "fix": Correct incomplete or low-quality DMA assessments (from quality issues above)
+- "comply": Meet ESRS reporting requirements for each material topic
+- "improve": Strategic sustainability improvements based on KPIs, opportunities, and weaknesses
+
+INSTRUCTIONS:
+Generate 8 to 15 tasks total. Include ALL THREE types. Prioritise based on materiality and severity.
+- At least 2 "fix" tasks (if quality issues exist)
+- At least 3 "comply" tasks (one per material topic, max 5)
+- At least 2 "improve" tasks (from SWOT opportunities and KPI gaps)
+
+Each task MUST have ALL fields:
+- title: concise action title (max 10 words)
+- description: what to do and measurable outcome (max 30 words)
+- type: "fix" | "comply" | "improve"
+- priority: "high" | "medium" | "low"
+- esrs_ref: relevant standard code (e.g. "ESRS E1-6", "ESRS S1-1") or "" if none
+- source_type: "insight_hub" for fix, "dma" for comply, "kpi" for improve
+- source_id: ESRS topic code (e.g. "E1") or KPI name
+- estimated_time: realistic time (e.g. "2 hours", "3 days", "1 week")
+
+Return ONLY a valid JSON array of task objects. No markdown, no backticks, no explanation.
+  `.trim();
+
+  const response = await ai.models.generateContent({
+    model,
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          required: ["title", "description", "type", "priority", "esrs_ref", "source_type", "source_id", "estimated_time"],
+          properties: {
+            title:          { type: Type.STRING },
+            description:    { type: Type.STRING },
+            type:           { type: Type.STRING },
+            priority:       { type: Type.STRING },
+            esrs_ref:       { type: Type.STRING },
+            source_type:    { type: Type.STRING },
+            source_id:      { type: Type.STRING },
+            estimated_time: { type: Type.STRING },
+          },
+        },
+      },
+      ...noThinkingConfig(model),
+    },
+  });
+
+  const tasks = parseAIJson<any[]>(response.text, []);
+  const { inputTokens, outputTokens } = extractTokens(response);
+
+  return { result: tasks, inputTokens, outputTokens };
 }
 
 export { handler };

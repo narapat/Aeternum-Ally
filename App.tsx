@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AssessmentData, ESRSTopic, SustainabilityBusinessModel, SwotAnalysis, CompanyProfile, KPI, BSCPerspective } from './types';
 import AssessmentForm from './components/AssessmentForm';
 import DMAInsightHub from './components/DMAInsightHub';
+import TaskManagement from './components/TaskManagement';
 import MaterialityMatrix from './components/MaterialityMatrix';
 import BusinessModelCanvas from './components/BusinessModelCanvas';
 import SwotAnalysisWizard from './components/SwotAnalysisWizard';
@@ -24,7 +25,7 @@ import {
   saveQualityCheck, saveDMAInsight, clearDMAInsight, loadDMAInsight, saveDMASuggestedTasks,
 } from './services/dbService';
 import { setOrganizationContext } from './services/geminiService';
-import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2 } from 'lucide-react';
+import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2, ListChecks, Zap } from 'lucide-react';
 import type { InsightHubResponse, QualityCheck } from './types';
 
 const DEFAULT_PROFILE: CompanyProfile = {
@@ -69,7 +70,7 @@ const App: React.FC = () => {
   };
 
   // UI state
-  const [view, setView] = useState<'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub'>('overview');
+  const [view, setView] = useState<'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub' | 'tasks'>('overview');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [editingAssessment, setEditingAssessment] = useState<AssessmentData | null>(null);
@@ -250,6 +251,8 @@ const App: React.FC = () => {
               <div className="space-y-1">
                 <NavItem active={view === 'dm_dashboard'} collapsed={isSidebarCollapsed} onClick={() => setView('dm_dashboard')} icon={<BarChart3 />} label="Dashboard" />
                 <NavItem active={view === 'assess'} collapsed={isSidebarCollapsed} onClick={() => { setView('assess'); setIsFormOpen(false); setEditingAssessment(null); }} icon={<Plus />} label="Assessments" />
+                <NavItem active={view === 'insight_hub'} collapsed={isSidebarCollapsed} onClick={() => setView('insight_hub')} icon={<Zap className="w-5 h-5" />} label="Insight Hub" />
+                <NavItem active={view === 'tasks'} collapsed={isSidebarCollapsed} onClick={() => setView('tasks')} icon={<ListChecks />} label="Tasks" />
                 <NavItem active={view === 'report'} collapsed={isSidebarCollapsed} onClick={() => setView('report')} icon={<FileText />} label="Reports" />
               </div>
             </div>
@@ -311,6 +314,7 @@ const App: React.FC = () => {
                   {view === 'overview' && 'Overview'}
                   {(view === 'profile' || view === 'canvas' || view === 'swot' || view === 'kpi') && 'My Business'}
                   {(view === 'dm_dashboard' || view === 'assess' || view === 'report' || view === 'insight_hub') && 'Double Materiality'}
+                  {view === 'tasks' && 'Action Plan'}
                 </span>
                 <ChevronRight className="w-4 h-4 hidden sm:block" />
                 <span className="truncate">
@@ -323,6 +327,7 @@ const App: React.FC = () => {
                   {view === 'assess' && 'Materiality Assessments'}
                   {view === 'report' && 'Sustainability Statement'}
                   {view === 'insight_hub' && 'DMA Insight Hub'}
+                  {view === 'tasks' && 'Task Management'}
                 </span>
               </div>
             </div>
@@ -501,7 +506,7 @@ const App: React.FC = () => {
                     bmcData={canvas.data}
                     swotData={swot.data}
                     onBack={() => setView('assess')}
-                    onContinue={() => setView('kpi')}
+                    onContinue={() => setView('tasks')}
                     cachedInsight={cachedInsight}
                     onInsightReady={(result) => {
                       setCachedInsight(result);
@@ -523,6 +528,20 @@ const App: React.FC = () => {
                       setEditFromHub(true);
                       setView('assess');
                     }}
+                  />
+                )}
+
+                {view === 'tasks' && (
+                  <TaskManagement
+                    orgId={organization.id}
+                    assessments={assessments}
+                    kpis={kpis}
+                    swotData={swot.data}
+                    profile={profile.data}
+                    cachedInsight={cachedInsight}
+                    members={members}
+                    currentUserId={user.id}
+                    onNavigateToInsightHub={() => setView('insight_hub')}
                   />
                 )}
               </>

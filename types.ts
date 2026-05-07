@@ -206,8 +206,9 @@ export interface SuggestedTask {
   type: TaskType;
   priority: TaskPriority;
   source_type: string;
-  source_id: string;
+  source_id: string | null;
   esrs_ref: string | null;
+  estimated_time: string | null;
   dismissed: boolean;
   dismissed_at: string | null;
   dismissed_by: string | null;
