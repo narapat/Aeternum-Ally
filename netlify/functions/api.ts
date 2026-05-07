@@ -7,16 +7,19 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
 
-// Approximate Gemini pricing per 1M tokens (USD).
-// Source: https://ai.google.dev/pricing
-const PRICING: Record<string, { input: number; output: number }> = {
-  "gemini-2.5-flash-lite": { input: 0.10, output: 0.40 },
-  "gemini-2.5-flash":      { input: 0.30, output: 2.50 },
-  "gemini-2.5-pro":        { input: 1.25, output: 10.00 },
+// Per-model capabilities and pricing.
+// Update this table whenever a new model is added to the admin model picker.
+// canDisableThinking: true  → thinkingBudget:0 is valid (Flash family)
+// canDisableThinking: false → model always thinks; don't pass thinkingConfig (Pro family)
+// canDisableThinking: null  → unknown/BYOK model; falls back to name heuristic below
+const MODEL_REGISTRY: Record<string, { input: number; output: number; canDisableThinking: boolean }> = {
+  "gemini-2.5-flash-lite": { input: 0.10, output: 0.40,  canDisableThinking: true  },
+  "gemini-2.5-flash":      { input: 0.30, output: 2.50,  canDisableThinking: true  },
+  "gemini-2.5-pro":        { input: 1.25, output: 10.00, canDisableThinking: false },
 };
 
 function estimateCost(model: string, inputTokens: number, outputTokens: number): number {
-  const p = PRICING[model];
+  const p = MODEL_REGISTRY[model];
   if (!p) return 0;
   return (inputTokens * p.input + outputTokens * p.output) / 1_000_000;
 }
@@ -117,22 +120,44 @@ const handler = async (event: any) => {
   let upstreamStatus: number | null = null;
   let userFacingMessage = "Something went wrong while contacting the AI service.";
 
+  // Internal fence at 9 s — Netlify kills the process at 10 s with no chance to log.
+  // Rejecting one second early lets the catch block write to ai_usage_log + error_log
+  // before the hard deadline hits.
+  const FENCE_MS = 9_000;
+  let fenceId: ReturnType<typeof setTimeout>;
+  const fencePromise = new Promise<never>((_, reject) => {
+    fenceId = setTimeout(() => {
+      const err = new Error(`Action '${action}' exceeded the ${FENCE_MS / 1000}s timeout`);
+      (err as any).isTimeout = true;
+      reject(err);
+    }, FENCE_MS);
+  });
+
   try {
-    const outcome = await runAction(ai, model, action, params);
+    const outcome = await Promise.race([
+      runAction(ai, model, action, params),
+      fencePromise,
+    ]);
+    clearTimeout(fenceId!);
     result = outcome.result;
     inputTokens = outcome.inputTokens;
     outputTokens = outcome.outputTokens;
   } catch (error: any) {
+    clearTimeout(fenceId!);
     console.error("API Error:", error);
     success = false;
     rawAiResponse = error?.rawAiResponse ?? null;
     upstreamStatus =
-      (typeof error?.status === "number" && error.status) ||
-      (typeof error?.error?.code === "number" && error.error.code) ||
-      null;
+      error?.isTimeout
+        ? 504
+        : (typeof error?.status === "number" && error.status) ||
+          (typeof error?.error?.code === "number" && error.error.code) ||
+          null;
     errorMessage = error?.error?.message || (error instanceof Error ? error.message : String(error));
     userFacingMessage =
-      upstreamStatus === 503
+      error?.isTimeout
+        ? "The AI request timed out. Please try again — complex topics occasionally need a second attempt."
+        : upstreamStatus === 503
         ? "The AI service is temporarily overloaded. Please try again in a moment."
         : upstreamStatus === 429
         ? "AI rate limit reached. Please wait a minute and try again."
@@ -224,11 +249,24 @@ async function runAction(
       return generateKPISuggestions(ai, model, params);
     case "generateSustainabilityStatement":
       return generateSustainabilityStatement(ai, model, params);
+    case "analyzeTopicQuality":
+      return analyzeTopicQuality(ai, model, params);
+    case "analyzeDMASynthesis":
+      return analyzeDMASynthesis(ai, model, params);
     case "analyzeDMAQuality":
       return analyzeDMAQuality(ai, model, params);
     default:
       throw new Error(`Unknown action: ${action}`);
   }
+}
+
+// Returns { thinkingConfig: { thinkingBudget: 0 } } for models that support disabling thinking,
+// or {} for models that don't (Pro) or are unknown (BYOK).
+// Prefer MODEL_REGISTRY lookup; fall back to name heuristic for unknown future models.
+function noThinkingConfig(model: string): object {
+  const entry = MODEL_REGISTRY[model];
+  const canDisable = entry != null ? entry.canDisableThinking : model.includes("flash");
+  return canDisable ? { thinkingConfig: { thinkingBudget: 0 } } : {};
 }
 
 // Pull token counts out of Gemini's response in a tolerant way.
@@ -283,41 +321,131 @@ const joinField = (v: string | string[]): string =>
 // Action implementations
 // =============================================================
 
+// ESRS topic-specific required disclosure areas (used in auto-fill prompt to ensure quality-check compliance)
+const ESRS_TOPIC_GUIDANCE: Record<string, { impactAreas: string; financialAreas: string }> = {
+  "E1": {
+    impactAreas: "GHG emissions (Scope 1, 2, 3), energy consumption mix, climate transition plan, carbon reduction targets, physical climate risks to operations and value chain",
+    financialAreas: "carbon pricing exposure, stranded asset risk, energy cost volatility, regulatory compliance costs (EU ETS, carbon border adjustment), green financing opportunities",
+  },
+  "E2": {
+    impactAreas: "air pollutants (NOx, SOx, PM), water and soil contamination, hazardous substance releases, impact on human health and ecosystems near operations",
+    financialAreas: "regulatory fines and cleanup liability, licence-to-operate risk, pollution insurance costs, market access restrictions for polluting products",
+  },
+  "E3": {
+    impactAreas: "water withdrawal volumes and sources, wastewater quality and discharge, impact on water-stressed catchments, effects on marine ecosystems",
+    financialAreas: "water scarcity risk to production continuity, regulatory permit costs, water treatment capex, reputational risk in water-stressed regions",
+  },
+  "E4": {
+    impactAreas: "land use change, habitat fragmentation, use of threatened species, impacts on ecosystem services (pollination, soil health, carbon sequestration)",
+    financialAreas: "deforestation-linked supply chain disruptions, biodiversity regulation compliance costs (EU Nature Restoration Law), ecosystem service dependency risk",
+  },
+  "E5": {
+    impactAreas: "primary material consumption, product end-of-life (landfill vs. recyclable), packaging waste, waste generation rates, circular design adoption",
+    financialAreas: "raw material price volatility, extended producer responsibility (EPR) costs, waste disposal costs, circular revenue models, resource efficiency savings",
+  },
+  "S1": {
+    impactAreas: "employee health & safety (injury rates, occupational diseases), fair wages and living wage alignment, diversity & inclusion metrics, training hours per employee, freedom of association",
+    financialAreas: "talent attraction and retention costs, absenteeism and turnover impact, legal exposure from labour violations, productivity link to workforce wellbeing",
+  },
+  "S2": {
+    impactAreas: "supplier labour conditions (forced/child labour risk), safety in Tier-1 and Tier-2 supply chain, supplier audit coverage, remediation mechanisms",
+    financialAreas: "supply chain disruption from supplier non-compliance, reputational risk from negative supplier incidents, cost of supplier audits vs. sourcing risk reduction",
+  },
+  "S3": {
+    impactAreas: "community consultation processes, land rights and displacement risk, local economic contribution vs. harm, access to essential services affected by operations",
+    financialAreas: "social licence-to-operate risk, community litigation or protest costs, local partnership opportunities, impact on permits and expansion plans",
+  },
+  "S4": {
+    impactAreas: "product safety and recall history, data privacy and user rights, accessibility for vulnerable consumers, transparent marketing practices, responsible use of AI or data",
+    financialAreas: "product liability and recall costs, consumer protection regulatory fines (GDPR, etc.), brand value erosion from safety incidents, customer loyalty linked to trust",
+  },
+  "G1": {
+    impactAreas: "anti-corruption policies and training coverage, lobbying transparency, whistleblower protection mechanisms, supplier code of conduct compliance, political contributions",
+    financialAreas: "corruption investigation and penalty exposure, governance-linked cost of capital, contract exclusion risk from procurement rules, ESG rating impact on investor access",
+  },
+};
+
 async function generateAssessmentSuggestions(
   ai: GoogleGenAI,
   model: string,
-  { profile, topic }: any
+  { profile, topic, qualityCheckContext }: any
 ) {
-  const prompt = `
-    Act as a senior sustainability consultant specializing in ESRS (European Sustainability Reporting Standards).
+  const topicCode = String(topic).split(" ")[0];
+  const guidance = ESRS_TOPIC_GUIDANCE[topicCode];
+  const companyName = profile.name || "this company";
+  const industryCtx = [profile.industry, profile.isicCode].filter(Boolean).join(", ISIC: ");
+  const companyCtx = buildCompanyContext(profile);
 
-    ${buildCompanyContext(profile)}
+  // If quality check issues are provided, convert them to explicit AI instructions
+  const qualityFixBlock = qualityCheckContext?.issues?.length
+    ? `
+QUALITY CHECK FEEDBACK — the previous description failed review on these points.
+Your new description MUST explicitly address each one:
+${(qualityCheckContext.issues as any[]).map((i: any) =>
+  `• [${(i.severity ?? "").toUpperCase()}] ${i.title}: ${i.description} — Fix: ${i.fix_suggestion} (${i.esrs_ref})`
+).join('\n')}
+`.trim()
+    : "";
 
-    For the ESRS Topic: "${topic}", provide:
-    1. A summary of potential "Impacts" (Inside-out): How the company impacts people and the environment regarding this topic.
-    2. A summary of potential "Risks & Opportunities" (Outside-in): How this sustainability matter triggers financial effects on the company.
+  const sharedRules = `
+    Ground every sentence in ${companyName}'s actual industry (${industryCtx}), business model,
+    products/services, and operations described above.
+    Select only the ESRS areas genuinely material for a company of this type — skip irrelevant ones.
+    Name specific activities, processes, or products. Do not write generic statements.
+    Do NOT use vague hedging ("may have", "could affect"). Be direct. Length: 80–120 words.
+  `.trim();
 
-    Keep descriptions concise (under 50 words each) and specific to the company's industry and products/services.
+  const impactPrompt = `
+    You are a senior sustainability consultant writing a CSRD/ESRS Double Materiality Assessment.
+
+    --- COMPANY CONTEXT ---
+    ${companyCtx}
+    -----------------------
+    ESRS Topic: "${topic}"
+
+    Write the IMPACT DESCRIPTION (Inside-out / Impact Materiality):
+    Describe how ${companyName} impacts people and the environment on this topic.
+    ${guidance ? `ESRS disclosure areas to address (select relevant ones): ${guidance.impactAreas}` : "Cover key environmental and social impact pathways."}
+    ${qualityFixBlock ? `\n${qualityFixBlock}` : ""}
+
+    ${sharedRules}
+    Return ONLY the plain text description. No JSON, no markdown, no label.
   `;
 
-  const response = await ai.models.generateContent({
-    model,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          impactSuggestion: { type: Type.STRING },
-          financialSuggestion: { type: Type.STRING },
-        },
-      },
-    },
-  });
+  const financialPrompt = `
+    You are a senior sustainability consultant writing a CSRD/ESRS Double Materiality Assessment.
+
+    --- COMPANY CONTEXT ---
+    ${companyCtx}
+    -----------------------
+    ESRS Topic: "${topic}"
+
+    Write the FINANCIAL DESCRIPTION (Outside-in / Financial Materiality):
+    Describe how this sustainability topic creates financial risks or opportunities for ${companyName}.
+    Name regulatory frameworks, cost lines, or market mechanisms relevant to its industry.
+    ${guidance ? `ESRS financial exposure areas to address (select relevant ones): ${guidance.financialAreas}` : "Cover key financial risks and opportunities."}
+    ${qualityFixBlock ? `\n${qualityFixBlock}` : ""}
+
+    ${sharedRules}
+    Return ONLY the plain text description. No JSON, no markdown, no label.
+  `;
+
+  // Run both descriptions in parallel — halves latency vs a single combined call.
+  const [impactResp, financialResp] = await Promise.all([
+    ai.models.generateContent({ model, contents: impactPrompt, config: noThinkingConfig(model) }),
+    ai.models.generateContent({ model, contents: financialPrompt, config: noThinkingConfig(model) }),
+  ]);
+
+  const impactTokens = extractTokens(impactResp);
+  const financialTokens = extractTokens(financialResp);
 
   return {
-    result: parseAIJson(response.text, { impactSuggestion: "", financialSuggestion: "" }),
-    ...extractTokens(response),
+    result: {
+      impactSuggestion: impactResp.text?.trim() ?? "",
+      financialSuggestion: financialResp.text?.trim() ?? "",
+    },
+    inputTokens: impactTokens.inputTokens + financialTokens.inputTokens,
+    outputTokens: impactTokens.outputTokens + financialTokens.outputTokens,
   };
 }
 
@@ -565,6 +693,7 @@ Return ONLY valid JSON, no markdown:
       model,
       contents: prompt,
       config: {
+        ...noThinkingConfig(model),
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -777,39 +906,10 @@ async function generateSustainabilityStatement(
   };
 }
 
-async function analyzeDMAQuality(
-  ai: GoogleGenAI,
-  model: string,
-  { assessments, bmcItems, swotItems, profile }: any
-) {
-  if (!assessments || assessments.length === 0) {
-    return {
-      result: { qualityChecks: [], strategicInsight: { summary: "", keyRisks: [], opportunities: [], bottomLine: "" }, recommendedActions: [] },
-      inputTokens: 0,
-      outputTokens: 0,
-    };
-  }
+// ── Shared helpers for DMA analysis ──────────────────────────────────────────
 
+function buildDMACompanySection(profile: any, bmcItems: any, swotItems: any): string {
   const companyCtx = profile ? buildCompanyContext(profile) : "";
-
-  const assessmentSummary = assessments
-    .map((a: any) => {
-      const impactScore = a.impactMaterialityValue ?? a.impact_score ?? 0;
-      const financialScore = a.financialMaterialityValue ?? a.financial_score ?? 0;
-      const material = a.isMaterial ?? a.is_material ?? false;
-      const impactDesc = a.impactDescription ?? a.impact_description ?? "";
-      const financialDesc = a.financialDescription ?? a.financial_description ?? "";
-      const scores = a.impactScore ?? {};
-      return [
-        `Topic: ${a.topic} (${a.topicTitle || ""})`,
-        `  Material: ${material ? "Yes" : "No"}`,
-        `  Impact score: ${impactScore}/100 — ${impactDesc}`,
-        `  Financial score: ${financialScore}/100 — ${financialDesc}`,
-        scores.scale ? `  Scores: scale=${scores.scale} scope=${scores.scope} irremediability=${scores.irremediability} likelihood=${scores.likelihood}` : "",
-      ].filter(Boolean).join("\n");
-    })
-    .join("\n\n");
-
   const bmcContext = bmcItems
     ? [
         bmcItems.key_activities?.length ? `Key activities: ${joinField(bmcItems.key_activities)}` : "",
@@ -817,81 +917,50 @@ async function analyzeDMAQuality(
         bmcItems.eco_social_benefits?.length ? `Eco-social benefits: ${joinField(bmcItems.eco_social_benefits)}` : "",
       ].filter(Boolean).join("\n")
     : "";
-
   const swotContext = swotItems
     ? [
         swotItems.threats?.length ? `Threats: ${joinField(swotItems.threats)}` : "",
         swotItems.opportunities?.length ? `Opportunities: ${joinField(swotItems.opportunities)}` : "",
       ].filter(Boolean).join("\n")
     : "";
-
-  const prompt = `
-You are a senior ESRS/CSRD sustainability advisor performing a quality review of a Double Materiality Assessment (DMA) for an SME.
-
-${companyCtx}
-
-${bmcContext ? `Business context:\n${bmcContext}` : ""}
-${swotContext ? `Strategic context:\n${swotContext}` : ""}
-
-DMA Assessment Results:
-${assessmentSummary}
-
-Your task: Analyse the quality and completeness of this DMA and provide:
-
-1. QUALITY CHECKS — For each assessed topic, flag issues a CSRD auditor would raise.
-   - "needs_fix": critical gaps that would fail compliance review
-   - "review": concerns worth reviewing but not blocking
-   - "ok": meets minimum ESRS requirements
-   Focus on: missing coverage of required sub-topics, scores that seem inconsistent with the company context, descriptions too vague for disclosure, and material topics with suspiciously low scores.
-
-2. STRATEGIC INSIGHT — CEO-level summary in plain language (no ESRS jargon). What does this DMA mean for the business? What must they act on urgently?
-
-3. RECOMMENDED ACTIONS — Prioritised list of concrete next steps.
-   - "fix": correct an incomplete or inconsistent assessment (source_type: "dma")
-   - "comply": meet a specific ESRS requirement for a material topic
-   - "improve": strategic opportunity beyond compliance
-
-Return ONLY valid JSON matching this exact structure:
-{
-  "qualityChecks": [
-    {
-      "topic": "E1",
-      "topicTitle": "Climate Change",
-      "status": "needs_fix",
-      "issues": [
-        {
-          "severity": "high",
-          "title": "Missing transition risk analysis",
-          "description": "...",
-          "esrs_ref": "ESRS E1-6",
-          "fix_suggestion": "..."
-        }
-      ]
-    }
-  ],
-  "strategicInsight": {
-    "summary": "...",
-    "keyRisks": ["...", "..."],
-    "opportunities": ["...", "..."],
-    "bottomLine": "..."
-  },
-  "recommendedActions": [
-    {
-      "id": "action-1",
-      "type": "fix",
-      "priority": "high",
-      "title": "...",
-      "description": "...",
-      "esrs_ref": "ESRS E1-6",
-      "source_type": "dma",
-      "source_id": "uuid-or-topic-code",
-      "estimated_time": "2 hours"
-    }
-  ]
+  return [
+    companyCtx,
+    bmcContext ? `Business context:\n${bmcContext}` : "",
+    swotContext ? `Strategic context:\n${swotContext}` : "",
+  ].filter(Boolean).join("\n\n");
 }
 
-No markdown, no backticks, no explanation outside the JSON.
-  `;
+// Pass 1 — single topic quality check. One call per topic from the frontend.
+async function analyzeTopicQuality(
+  ai: GoogleGenAI,
+  model: string,
+  { assessment, profile, bmcItems, swotItems }: any
+) {
+  const a = assessment;
+  const topicCode  = String(a.topic).split(" ")[0];
+  const topicTitle = String(a.topic).replace(/^[A-Z0-9]+ /, "");
+  const companySection = buildDMACompanySection(profile, bmcItems, swotItems);
+  const scores = a.impactScore ?? {};
+
+  const prompt = `
+You are a senior ESRS/CSRD auditor reviewing one topic in a Double Materiality Assessment.
+
+${companySection}
+
+Topic under review: ${a.topic}
+Material: ${(a.isMaterial ?? false) ? "Yes" : "No"}
+Impact score: ${a.impactMaterialityValue ?? 0}/100 — "${a.impactDescription || "No description provided"}"
+Financial score: ${a.financialMaterialityValue ?? 0}/100 — "${a.financialDescription || "No description provided"}"
+${scores.scale ? `Sub-scores: scale=${scores.scale} scope=${scores.scope} irremediability=${scores.irremediability} likelihood=${scores.likelihood}` : ""}
+
+Assess quality:
+- "needs_fix": critical gap that would fail a CSRD compliance review
+- "review": minor concern worth addressing, not blocking
+- "ok": meets minimum ESRS requirements for this topic
+
+Flag issues only if genuinely present. Return at most 2 issues. Keep descriptions concise (under 30 words each).
+Return ONLY valid JSON — no markdown, no backticks.
+  `.trim();
 
   const issueSchema = {
     type: Type.OBJECT,
@@ -909,24 +978,97 @@ No markdown, no backticks, no explanation outside the JSON.
     model,
     contents: prompt,
     config: {
+      ...noThinkingConfig(model),
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
-        required: ["qualityChecks", "strategicInsight", "recommendedActions"],
+        required: ["topic", "topicTitle", "status", "issues"],
         properties: {
-          qualityChecks: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              required: ["topic", "topicTitle", "status", "issues"],
-              properties: {
-                topic:      { type: Type.STRING },
-                topicTitle: { type: Type.STRING },
-                status:     { type: Type.STRING },
-                issues:     { type: Type.ARRAY, items: issueSchema },
-              },
-            },
-          },
+          topic:      { type: Type.STRING },
+          topicTitle: { type: Type.STRING },
+          status:     { type: Type.STRING },
+          issues:     { type: Type.ARRAY, items: issueSchema },
+        },
+      },
+    },
+  });
+
+  const parsed = parseAIJson<any>(response.text, { topic: topicCode, topicTitle, status: "ok", issues: [] });
+  // Always override topic/topicTitle from source data to prevent AI drift
+  return {
+    result: { ...parsed, topic: topicCode, topicTitle },
+    ...extractTokens(response),
+  };
+}
+
+// Pass 2 — holistic synthesis. Fired once after all topic calls complete.
+async function analyzeDMASynthesis(
+  ai: GoogleGenAI,
+  model: string,
+  { qualityChecks, assessments, profile, bmcItems, swotItems }: any
+) {
+  const companySection = buildDMACompanySection(profile, bmcItems, swotItems);
+
+  const allTopicsSummary = (assessments ?? []).map((a: any) =>
+    `${a.topic}: material=${(a.isMaterial ?? false) ? "yes" : "no"} impact=${a.impactMaterialityValue ?? 0}/100 financial=${a.financialMaterialityValue ?? 0}/100`
+  ).join(" | ");
+
+  const materialTopics = (assessments ?? [])
+    .filter((a: any) => a.isMaterial ?? false)
+    .map((a: any) => String(a.topic).split(" ")[0])
+    .join(", ") || "none identified";
+
+  // Summarise quality check results for the synthesis prompt
+  const qualitySummary = (qualityChecks ?? []).map((c: any) =>
+    `${c.topic} (${c.status})${c.issues?.length ? ": " + c.issues.map((i: any) => i.title).join("; ") : ""}`
+  ).join("\n");
+
+  const prompt = `
+You are a senior sustainability strategy advisor briefing a CEO on their completed Double Materiality Assessment (DMA).
+
+${companySection}
+
+All ESRS topics summary (topic: material? impact/100 financial/100):
+${allTopicsSummary}
+
+Material topics: ${materialTopics}
+
+Quality check results per topic:
+${qualitySummary}
+
+TASK 1 — STRATEGIC INSIGHT (plain language, no ESRS jargon):
+- summary: 2-3 sentences on what this DMA reveals about the business
+- keyRisks: exactly 3-5 strings, each describing a specific material risk with business impact
+- opportunities: exactly 3-5 strings, each describing a concrete strategic opportunity
+- bottomLine: one sentence — the single most important thing this company must do now
+
+TASK 2 — RECOMMENDED ACTIONS: Generate exactly 5 to 8 actions covering all three types.
+Each action MUST have ALL of these fields:
+- id: "action-1", "action-2", etc.
+- type: "fix" (correct an incomplete assessment), "comply" (meet ESRS requirement for material topic), or "improve" (strategic opportunity)
+- priority: "high", "medium", or "low"
+- title: short action title (under 10 words)
+- description: what to do and why (under 25 words)
+- esrs_ref: relevant ESRS standard (e.g. "ESRS E1-6", "ESRS S1-1")
+- source_type: "dma"
+- source_id: the ESRS topic code this action relates to (e.g. "E1", "S1")
+- estimated_time: realistic estimate (e.g. "2 hours", "1 day", "1 week")
+
+Distribute actions: at least 1 "fix", 2 "comply", 1 "improve". Prioritise material topics and topics with needs_fix status.
+
+Return ONLY valid JSON — no markdown, no backticks.
+  `.trim();
+
+  const response = await ai.models.generateContent({
+    model,
+    contents: prompt,
+    config: {
+      ...noThinkingConfig(model),
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        required: ["strategicInsight", "recommendedActions"],
+        properties: {
           strategicInsight: {
             type: Type.OBJECT,
             required: ["summary", "keyRisks", "opportunities", "bottomLine"],
@@ -960,21 +1102,248 @@ No markdown, no backticks, no explanation outside the JSON.
     },
   });
 
-  const fallback = {
-    qualityChecks: [],
+  const parsed = parseAIJson(response.text, {
     strategicInsight: { summary: "", keyRisks: [], opportunities: [], bottomLine: "" },
     recommendedActions: [],
-  };
-
-  const parsed = parseAIJson(response.text, fallback);
+  });
 
   return {
     result: {
-      qualityChecks:      Array.isArray(parsed?.qualityChecks) ? parsed.qualityChecks : [],
-      strategicInsight:   parsed?.strategicInsight ?? fallback.strategicInsight,
+      strategicInsight:   parsed?.strategicInsight  ?? { summary: "", keyRisks: [], opportunities: [], bottomLine: "" },
       recommendedActions: Array.isArray(parsed?.recommendedActions) ? parsed.recommendedActions : [],
     },
     ...extractTokens(response),
+  };
+}
+
+// Legacy single-call version — kept for backward compat but no longer called by the UI.
+async function analyzeDMAQuality(
+  ai: GoogleGenAI,
+  model: string,
+  { assessments, bmcItems, swotItems, profile }: any
+) {
+  if (!assessments || assessments.length === 0) {
+    return {
+      result: { qualityChecks: [], strategicInsight: { summary: "", keyRisks: [], opportunities: [], bottomLine: "" }, recommendedActions: [] },
+      inputTokens: 0,
+      outputTokens: 0,
+    };
+  }
+
+  const companyCtx = profile ? buildCompanyContext(profile) : "";
+
+  const bmcContext = bmcItems
+    ? [
+        bmcItems.key_activities?.length ? `Key activities: ${joinField(bmcItems.key_activities)}` : "",
+        bmcItems.eco_social_costs?.length ? `Eco-social costs: ${joinField(bmcItems.eco_social_costs)}` : "",
+        bmcItems.eco_social_benefits?.length ? `Eco-social benefits: ${joinField(bmcItems.eco_social_benefits)}` : "",
+      ].filter(Boolean).join("\n")
+    : "";
+
+  const swotContext = swotItems
+    ? [
+        swotItems.threats?.length ? `Threats: ${joinField(swotItems.threats)}` : "",
+        swotItems.opportunities?.length ? `Opportunities: ${joinField(swotItems.opportunities)}` : "",
+      ].filter(Boolean).join("\n")
+    : "";
+
+  const companySection = [
+    companyCtx,
+    bmcContext ? `Business context:\n${bmcContext}` : "",
+    swotContext ? `Strategic context:\n${swotContext}` : "",
+  ].filter(Boolean).join("\n\n");
+
+  // ── Build a mini-summary of ALL topics (for the insight call context) ──────
+  const allTopicsSummary = assessments.map((a: any) => {
+    const impactScore = a.impactMaterialityValue ?? 0;
+    const financialScore = a.financialMaterialityValue ?? 0;
+    const material = a.isMaterial ?? false;
+    return `${a.topic}: material=${material ? "yes" : "no"} impact=${impactScore}/100 financial=${financialScore}/100`;
+  }).join(" | ");
+
+  const issueSchema = {
+    type: Type.OBJECT,
+    required: ["severity", "title", "description", "esrs_ref", "fix_suggestion"],
+    properties: {
+      severity:       { type: Type.STRING },
+      title:          { type: Type.STRING },
+      description:    { type: Type.STRING },
+      esrs_ref:       { type: Type.STRING },
+      fix_suggestion: { type: Type.STRING },
+    },
+  };
+
+  const qualityCheckSchema = {
+    type: Type.OBJECT,
+    required: ["topic", "topicTitle", "status", "issues"],
+    properties: {
+      topic:      { type: Type.STRING },
+      topicTitle: { type: Type.STRING },
+      status:     { type: Type.STRING },
+      issues:     { type: Type.ARRAY, items: issueSchema },
+    },
+  };
+
+  // ── One tiny call per topic (all in parallel) ─────────────────────────────
+  const topicQualityCalls = assessments.map((a: any) => {
+    const impactScore = a.impactMaterialityValue ?? 0;
+    const financialScore = a.financialMaterialityValue ?? 0;
+    const material = a.isMaterial ?? false;
+    const impactDesc = a.impactDescription ?? "";
+    const financialDesc = a.financialDescription ?? "";
+    const topicCode = String(a.topic).split(" ")[0];
+    const topicTitle = String(a.topic).replace(/^[A-Z0-9]+ /, "");
+    const scores = a.impactScore ?? {};
+
+    const prompt = `
+You are a senior ESRS/CSRD auditor reviewing one topic in a Double Materiality Assessment.
+
+${companySection}
+
+Topic under review: ${a.topic}
+Material: ${material ? "Yes" : "No"}
+Impact score: ${impactScore}/100 — "${impactDesc || "No description provided"}"
+Financial score: ${financialScore}/100 — "${financialDesc || "No description provided"}"
+${scores.scale ? `Sub-scores: scale=${scores.scale} scope=${scores.scope} irremediability=${scores.irremediability} likelihood=${scores.likelihood}` : ""}
+
+Assess quality:
+- "needs_fix": critical gap that would fail a CSRD compliance review
+- "review": minor concern worth addressing, not blocking
+- "ok": meets minimum ESRS requirements for this topic
+
+Flag issues only if genuinely present. Return at most 2 issues. Keep descriptions concise (under 30 words each).
+Return ONLY valid JSON — no markdown, no backticks.
+    `.trim();
+
+    return ai.models.generateContent({
+      model,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          ...qualityCheckSchema,
+          properties: {
+            ...qualityCheckSchema.properties,
+            topic:      { type: Type.STRING, description: topicCode },
+            topicTitle: { type: Type.STRING, description: topicTitle },
+          },
+        },
+      },
+    });
+  });
+
+  // ── Insight + actions call (fires in parallel with topic calls) ───────────
+  const materialTopics = assessments
+    .filter((a: any) => a.isMaterial ?? false)
+    .map((a: any) => String(a.topic).split(" ")[0])
+    .join(", ") || "none identified";
+
+  const insightPrompt = `
+You are a senior sustainability strategy advisor briefing a CEO on their completed Double Materiality Assessment (DMA).
+
+${companySection}
+
+All 10 ESRS topics summary (topic: material? impact/100 financial/100):
+${allTopicsSummary}
+
+Material topics: ${materialTopics}
+
+TASK 1 — STRATEGIC INSIGHT (plain language, no ESRS jargon):
+- summary: 2-3 sentences on what this DMA reveals about the business
+- keyRisks: exactly 3-5 strings, each describing a specific material risk with business impact
+- opportunities: exactly 3-5 strings, each describing a concrete strategic opportunity
+- bottomLine: one sentence — the single most important thing this company must do now
+
+TASK 2 — RECOMMENDED ACTIONS: Generate exactly 5 to 8 actions covering all three types.
+Each action MUST have ALL of these fields:
+- id: "action-1", "action-2", etc.
+- type: one of "fix" (correct an incomplete assessment), "comply" (meet an ESRS requirement for a material topic), or "improve" (strategic opportunity)
+- priority: "high", "medium", or "low"
+- title: short action title (under 10 words)
+- description: what to do and why (under 25 words)
+- esrs_ref: relevant ESRS standard (e.g. "ESRS E1-6", "ESRS S1-1")
+- source_type: "dma"
+- source_id: the ESRS topic code this action relates to (e.g. "E1", "S1")
+- estimated_time: realistic estimate (e.g. "2 hours", "1 day", "1 week")
+
+Distribute actions: include at least 1 "fix", 2 "comply", and 1 "improve".
+Prioritise material topics.
+
+Return ONLY valid JSON — no markdown, no backticks.
+  `.trim();
+
+  const insightCall = ai.models.generateContent({
+    model,
+    contents: insightPrompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        required: ["strategicInsight", "recommendedActions"],
+        properties: {
+          strategicInsight: {
+            type: Type.OBJECT,
+            required: ["summary", "keyRisks", "opportunities", "bottomLine"],
+            properties: {
+              summary:       { type: Type.STRING },
+              keyRisks:      { type: Type.ARRAY, items: { type: Type.STRING } },
+              opportunities: { type: Type.ARRAY, items: { type: Type.STRING } },
+              bottomLine:    { type: Type.STRING },
+            },
+          },
+          recommendedActions: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              required: ["id", "type", "priority", "title", "description", "esrs_ref", "source_type", "source_id", "estimated_time"],
+              properties: {
+                id:             { type: Type.STRING },
+                type:           { type: Type.STRING },
+                priority:       { type: Type.STRING },
+                title:          { type: Type.STRING },
+                description:    { type: Type.STRING },
+                esrs_ref:       { type: Type.STRING },
+                source_type:    { type: Type.STRING },
+                source_id:      { type: Type.STRING },
+                estimated_time: { type: Type.STRING },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // Fire all calls in parallel
+  const allResps = await Promise.all([...topicQualityCalls, insightCall]);
+  const topicResps = allResps.slice(0, assessments.length);
+  const insightResp = allResps[assessments.length];
+
+  const qualityChecks = topicResps.map((r, i) => {
+    const a = assessments[i];
+    const topicCode = String(a.topic).split(" ")[0];
+    const topicTitle = String(a.topic).replace(/^[A-Z0-9]+ /, "");
+    const parsed = parseAIJson<any>(r.text, { topic: topicCode, topicTitle, status: "ok", issues: [] });
+    // Ensure topic/topicTitle are always correct regardless of AI output
+    return { ...parsed, topic: topicCode, topicTitle };
+  });
+
+  const insightParsed = parseAIJson(insightResp.text, {
+    strategicInsight: { summary: "", keyRisks: [], opportunities: [], bottomLine: "" },
+    recommendedActions: [],
+  });
+
+  const inputTokens = allResps.reduce((s, r) => s + Number(r.usageMetadata?.promptTokenCount ?? 0), 0);
+  const outputTokens = allResps.reduce((s, r) => s + Number(r.usageMetadata?.candidatesTokenCount ?? 0), 0);
+
+  return {
+    result: {
+      qualityChecks,
+      strategicInsight:   insightParsed?.strategicInsight ?? { summary: "", keyRisks: [], opportunities: [], bottomLine: "" },
+      recommendedActions: Array.isArray(insightParsed?.recommendedActions) ? insightParsed.recommendedActions : [],
+    },
+    inputTokens,
+    outputTokens,
   };
 }
 

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { AssessmentData, ESRSTopic, ImpactScore, FinancialScore, CompanyProfile, SustainabilityBusinessModel, SwotAnalysis, AssessmentScoring } from '../types';
+import { AssessmentData, ESRSTopic, ImpactScore, FinancialScore, CompanyProfile, SustainabilityBusinessModel, SwotAnalysis, AssessmentScoring, QualityCheck } from '../types';
 import { SCALE_OPTIONS, LIKELIHOOD_OPTIONS, calculateImpactMateriality, calculateFinancialMateriality, TOPICS } from '../constants';
 import { generateAssessmentSuggestions, generateAssessmentScoring } from '../services/geminiService';
 import { AlertCircle, TrendingUp, Cpu, Loader2, Save, X, Sparkles, RotateCcw, AlertTriangle } from 'lucide-react';
@@ -13,11 +13,12 @@ interface Props {
   onSave: (data: AssessmentData) => void;
   onCancel: () => void;
   initialData?: AssessmentData | null;
+  qualityCheckContext?: QualityCheck | null;
 }
 
 type OverrideKey = 'impact.scale' | 'impact.scope' | 'impact.irremediability' | 'impact.likelihood' | 'financial.magnitude' | 'financial.likelihood';
 
-const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, onCancel, initialData }) => {
+const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, onCancel, initialData, qualityCheckContext }) => {
   const [topic, setTopic] = useState<ESRSTopic>(ESRSTopic.E1);
   const [impactDesc, setImpactDesc] = useState('');
   const [financialDesc, setFinancialDesc] = useState('');
@@ -90,15 +91,27 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
     setLoadingScoring(false);
   };
 
-  // AI Auto-Fill: generate descriptions then immediately score based on them
+  const [autoFillError, setAutoFillError] = useState<string | null>(null);
+
+  // AI Auto-Fill: populate description fields and keep the form open for review.
+  // Scoring is NOT triggered — the "Get Suggestions" button becomes available once
+  // descriptions are present; user can click it manually after reviewing.
   const handleAutoFill = async () => {
     setLoadingAI(true);
-    const suggestions = await generateAssessmentSuggestions(profile, topic);
-    setImpactDesc(suggestions.impactSuggestion);
-    setFinancialDesc(suggestions.financialSuggestion);
-    setLoadingAI(false);
-    // Trigger scoring with the freshly generated descriptions
-    await runAIScoring(suggestions.impactSuggestion, suggestions.financialSuggestion, topic);
+    setAutoFillError(null);
+    try {
+      const suggestions = await generateAssessmentSuggestions(profile, topic, qualityCheckContext ?? undefined);
+      setImpactDesc(suggestions.impactSuggestion);
+      setFinancialDesc(suggestions.financialSuggestion);
+      // Reset any prior scoring so "Get Suggestions" button reappears
+      setAiScoring(null);
+      setScoringError(false);
+      setOverrides(new Set());
+    } catch (err: any) {
+      setAutoFillError(err?.message ?? "AI auto-fill failed. Please try again.");
+    } finally {
+      setLoadingAI(false);
+    }
   };
 
   // Manual trigger: user typed their own descriptions and wants AI score suggestions
@@ -179,7 +192,7 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
             onClick={handleAutoFill}
             disabled={loadingAI || loadingScoring}
             className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-3 py-1.5 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors text-sm font-medium disabled:opacity-50 shrink-0"
-            title="AI writes descriptions then immediately suggests scores"
+            title="AI writes descriptions and auto-saves. Request AI scores separately."
           >
             {loadingAI ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cpu className="w-4 h-4" />}
             AI Auto-Fill
@@ -244,6 +257,29 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
           <X className="w-6 h-6" />
         </button>
       </div>
+
+      {/* ── Quality check context banner ── */}
+      {qualityCheckContext && qualityCheckContext.issues.length > 0 && (
+        <div className="flex items-start gap-2 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-800 dark:text-amber-300">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-semibold">Quality check context loaded — </span>
+            {qualityCheckContext.issues.length} issue{qualityCheckContext.issues.length > 1 ? 's' : ''} found for {qualityCheckContext.topic}.
+            {' '}AI Auto-Fill will address these when regenerating descriptions.
+          </div>
+        </div>
+      )}
+
+      {/* ── Auto-fill error banner ── */}
+      {autoFillError && (
+        <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span>{autoFillError}</span>
+          <button type="button" onClick={() => setAutoFillError(null)} className="ml-auto text-red-400 hover:text-red-600">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* ── Topic selector ── */}
       <div className="max-w-sm space-y-1.5">

@@ -53,6 +53,7 @@ export interface AssessmentData {
   financialMaterialityValue: number; // Calculated
   isMaterial: boolean;
   aiScoringSuggestion?: (AssessmentScoring & { suggestedAt: string }) | null;
+  updatedAt?: string;
 }
 
 export interface User {

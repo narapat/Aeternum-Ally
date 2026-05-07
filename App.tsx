@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AssessmentData, ESRSTopic, SustainabilityBusinessModel, SwotAnalysis, CompanyProfile, KPI, BSCPerspective } from './types';
 import AssessmentForm from './components/AssessmentForm';
+import DMAInsightHub from './components/DMAInsightHub';
 import MaterialityMatrix from './components/MaterialityMatrix';
 import BusinessModelCanvas from './components/BusinessModelCanvas';
 import SwotAnalysisWizard from './components/SwotAnalysisWizard';
@@ -20,9 +21,11 @@ import {
   fromDbSwot, toDbSwot,
   fetchAssessments, upsertAssessment, deleteAssessment,
   fetchKpis, upsertKpi, deleteKpi,
+  saveQualityCheck, saveDMAInsight, clearDMAInsight, loadDMAInsight, saveDMASuggestedTasks,
 } from './services/dbService';
 import { setOrganizationContext } from './services/geminiService';
 import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2 } from 'lucide-react';
+import type { InsightHubResponse, QualityCheck } from './types';
 
 const DEFAULT_PROFILE: CompanyProfile = {
   name: '', taxId: '', industry: '', isicCode: '', foundingYear: '',
@@ -66,10 +69,17 @@ const App: React.FC = () => {
   };
 
   // UI state
-  const [view, setView] = useState<'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report'>('overview');
+  const [view, setView] = useState<'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub'>('overview');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [editingAssessment, setEditingAssessment] = useState<AssessmentData | null>(null);
+  // Cached insight hub result — cleared when user explicitly re-analyses or assessments change
+  const [cachedInsight, setCachedInsight] = useState<InsightHubResponse | null>(null);
+  // Whether the assessment form was opened from the insight hub (to enable "back to hub" navigation)
+  const [editFromHub, setEditFromHub] = useState(false);
+  // Quality check context for the topic being edited from the hub — passed to AssessmentForm
+  // so AI auto-fill knows which issues to address
+  const [hubQualityCheck, setHubQualityCheck] = useState<QualityCheck | null>(null);
 
   // DB-backed singleton data (auto-save + manual save)
   const orgId = organization?.id ?? null;
@@ -95,11 +105,12 @@ const App: React.FC = () => {
     if (!orgId) { setArrayLoading(false); return; }
     let cancelled = false;
     setArrayLoading(true);
-    Promise.all([fetchAssessments(orgId), fetchKpis(orgId)])
-      .then(([a, k]) => {
+    Promise.all([fetchAssessments(orgId), fetchKpis(orgId), loadDMAInsight(orgId)])
+      .then(([a, k, insight]) => {
         if (cancelled) return;
         setAssessments(a);
         setKpis(k);
+        setCachedInsight(insight);
       })
       .catch(err => {
         // eslint-disable-next-line no-console
@@ -126,7 +137,16 @@ const App: React.FC = () => {
         setAssessments(prev => [saved, ...prev]);
       }
       setIsFormOpen(false);
-      setView('dm_dashboard');
+      // Assessments changed — clear cached insight so hub re-analyses fresh on next visit.
+      setCachedInsight(null);
+      if (orgId) clearDMAInsight(orgId);
+      if (editFromHub) {
+        setEditFromHub(false);
+        setHubQualityCheck(null);
+        setView('insight_hub');
+      } else {
+        setView('dm_dashboard');
+      }
     } catch (e: any) {
       alert(`Failed to save assessment: ${e?.message ?? 'Unknown error'}`);
     }
@@ -290,7 +310,7 @@ const App: React.FC = () => {
                 <span className="font-medium text-slate-800 dark:text-white hidden sm:inline">
                   {view === 'overview' && 'Overview'}
                   {(view === 'profile' || view === 'canvas' || view === 'swot' || view === 'kpi') && 'My Business'}
-                  {(view === 'dm_dashboard' || view === 'assess' || view === 'report') && 'Double Materiality'}
+                  {(view === 'dm_dashboard' || view === 'assess' || view === 'report' || view === 'insight_hub') && 'Double Materiality'}
                 </span>
                 <ChevronRight className="w-4 h-4 hidden sm:block" />
                 <span className="truncate">
@@ -302,6 +322,7 @@ const App: React.FC = () => {
                   {view === 'dm_dashboard' && 'Materiality Dashboard'}
                   {view === 'assess' && 'Materiality Assessments'}
                   {view === 'report' && 'Sustainability Statement'}
+                  {view === 'insight_hub' && 'DMA Insight Hub'}
                 </span>
               </div>
             </div>
@@ -426,6 +447,15 @@ const App: React.FC = () => {
                         <div className="mt-12 text-left w-full">
                           <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-4 mb-4">
                             <h3 className="font-bold text-slate-800 dark:text-white">Assessment History</h3>
+                            {assessments.length > 0 && (
+                              <button
+                                onClick={() => setView('insight_hub')}
+                                className="flex items-center gap-2 bg-esg-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-esg-700 transition-colors"
+                              >
+                                Review &amp; Continue
+                                <ChevronRight className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                           {assessments.length === 0 ? (
                             <div className="p-8 text-center border border-dashed border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-slate-400">No assessments recorded yet.</div>
@@ -443,8 +473,17 @@ const App: React.FC = () => {
                           bmcData={canvas.data}
                           swotData={swot.data}
                           onSave={handleSaveAssessment}
-                          onCancel={() => { setIsFormOpen(false); setEditingAssessment(null); }}
+                          onCancel={() => {
+                            setIsFormOpen(false);
+                            setEditingAssessment(null);
+                            if (editFromHub) {
+                              setEditFromHub(false);
+                              setHubQualityCheck(null);
+                              setView('insight_hub');
+                            }
+                          }}
                           initialData={editingAssessment}
+                          qualityCheckContext={editFromHub ? hubQualityCheck : null}
                         />
                       </div>
                     )}
@@ -453,6 +492,38 @@ const App: React.FC = () => {
 
                 {view === 'report' && (
                   <SustainabilityStatement profile={profile.data} assessments={assessments} canvas={canvas.data} organizationId={organization.id} />
+                )}
+
+                {view === 'insight_hub' && (
+                  <DMAInsightHub
+                    assessments={assessments}
+                    profile={profile.data}
+                    bmcData={canvas.data}
+                    swotData={swot.data}
+                    onBack={() => setView('assess')}
+                    onContinue={() => setView('kpi')}
+                    cachedInsight={cachedInsight}
+                    onInsightReady={(result) => {
+                      setCachedInsight(result);
+                      if (orgId) {
+                        saveDMAInsight(orgId, result.strategicInsight, result.recommendedActions);
+                        saveDMASuggestedTasks(orgId, result.recommendedActions, assessments);
+                      }
+                    }}
+                    onQualityCheckReady={(assessmentId, check) => {
+                      if (orgId) saveQualityCheck(assessmentId, orgId, check);
+                    }}
+                    onEditTopic={(topicCode, assessmentId, qualityCheck) => {
+                      // Prefer the exact record that was analyzed (by ID); fall back to topic code match.
+                      const match = assessments.find(a => a.id === assessmentId)
+                        ?? assessments.find(a => String(a.topic).startsWith(topicCode));
+                      setEditingAssessment(match ?? null);
+                      setHubQualityCheck(qualityCheck ?? null);
+                      setIsFormOpen(true);
+                      setEditFromHub(true);
+                      setView('assess');
+                    }}
+                  />
                 )}
               </>
             )}
