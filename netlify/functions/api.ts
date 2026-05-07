@@ -283,21 +283,89 @@ const joinField = (v: string | string[]): string =>
 // Action implementations
 // =============================================================
 
+// ESRS topic-specific required disclosure areas (used in auto-fill prompt to ensure quality-check compliance)
+const ESRS_TOPIC_GUIDANCE: Record<string, { impactAreas: string; financialAreas: string }> = {
+  "E1": {
+    impactAreas: "GHG emissions (Scope 1, 2, 3), energy consumption mix, climate transition plan, carbon reduction targets, physical climate risks to operations and value chain",
+    financialAreas: "carbon pricing exposure, stranded asset risk, energy cost volatility, regulatory compliance costs (EU ETS, carbon border adjustment), green financing opportunities",
+  },
+  "E2": {
+    impactAreas: "air pollutants (NOx, SOx, PM), water and soil contamination, hazardous substance releases, impact on human health and ecosystems near operations",
+    financialAreas: "regulatory fines and cleanup liability, licence-to-operate risk, pollution insurance costs, market access restrictions for polluting products",
+  },
+  "E3": {
+    impactAreas: "water withdrawal volumes and sources, wastewater quality and discharge, impact on water-stressed catchments, effects on marine ecosystems",
+    financialAreas: "water scarcity risk to production continuity, regulatory permit costs, water treatment capex, reputational risk in water-stressed regions",
+  },
+  "E4": {
+    impactAreas: "land use change, habitat fragmentation, use of threatened species, impacts on ecosystem services (pollination, soil health, carbon sequestration)",
+    financialAreas: "deforestation-linked supply chain disruptions, biodiversity regulation compliance costs (EU Nature Restoration Law), ecosystem service dependency risk",
+  },
+  "E5": {
+    impactAreas: "primary material consumption, product end-of-life (landfill vs. recyclable), packaging waste, waste generation rates, circular design adoption",
+    financialAreas: "raw material price volatility, extended producer responsibility (EPR) costs, waste disposal costs, circular revenue models, resource efficiency savings",
+  },
+  "S1": {
+    impactAreas: "employee health & safety (injury rates, occupational diseases), fair wages and living wage alignment, diversity & inclusion metrics, training hours per employee, freedom of association",
+    financialAreas: "talent attraction and retention costs, absenteeism and turnover impact, legal exposure from labour violations, productivity link to workforce wellbeing",
+  },
+  "S2": {
+    impactAreas: "supplier labour conditions (forced/child labour risk), safety in Tier-1 and Tier-2 supply chain, supplier audit coverage, remediation mechanisms",
+    financialAreas: "supply chain disruption from supplier non-compliance, reputational risk from negative supplier incidents, cost of supplier audits vs. sourcing risk reduction",
+  },
+  "S3": {
+    impactAreas: "community consultation processes, land rights and displacement risk, local economic contribution vs. harm, access to essential services affected by operations",
+    financialAreas: "social licence-to-operate risk, community litigation or protest costs, local partnership opportunities, impact on permits and expansion plans",
+  },
+  "S4": {
+    impactAreas: "product safety and recall history, data privacy and user rights, accessibility for vulnerable consumers, transparent marketing practices, responsible use of AI or data",
+    financialAreas: "product liability and recall costs, consumer protection regulatory fines (GDPR, etc.), brand value erosion from safety incidents, customer loyalty linked to trust",
+  },
+  "G1": {
+    impactAreas: "anti-corruption policies and training coverage, lobbying transparency, whistleblower protection mechanisms, supplier code of conduct compliance, political contributions",
+    financialAreas: "corruption investigation and penalty exposure, governance-linked cost of capital, contract exclusion risk from procurement rules, ESG rating impact on investor access",
+  },
+};
+
 async function generateAssessmentSuggestions(
   ai: GoogleGenAI,
   model: string,
   { profile, topic }: any
 ) {
+  // Extract topic code (e.g. "E1" from "E1 Climate Change")
+  const topicCode = String(topic).split(" ")[0];
+  const guidance = ESRS_TOPIC_GUIDANCE[topicCode];
+  const impactGuidance = guidance
+    ? `Cover these ESRS-required disclosure areas: ${guidance.impactAreas}.`
+    : "Cover the key environmental or social impacts relevant to this topic.";
+  const financialGuidance = guidance
+    ? `Cover these ESRS-required financial exposure areas: ${guidance.financialAreas}.`
+    : "Cover key financial risks and opportunities linked to this topic.";
+
   const prompt = `
-    Act as a senior sustainability consultant specializing in ESRS (European Sustainability Reporting Standards).
+    You are a senior sustainability consultant writing a Double Materiality Assessment for a CSRD/ESRS report.
 
     ${buildCompanyContext(profile)}
 
-    For the ESRS Topic: "${topic}", provide:
-    1. A summary of potential "Impacts" (Inside-out): How the company impacts people and the environment regarding this topic.
-    2. A summary of potential "Risks & Opportunities" (Outside-in): How this sustainability matter triggers financial effects on the company.
+    ESRS Topic: "${topic}"
 
-    Keep descriptions concise (under 50 words each) and specific to the company's industry and products/services.
+    Write two descriptions that will PASS an ESRS quality review:
+
+    1. Impact Description (Inside-out / Impact Materiality):
+    Describe how ${profile.name || "this company"} impacts people and the environment on this topic.
+    ${impactGuidance}
+    Be concrete: name specific activities, processes, or products. Reference actual impact pathways.
+    Do NOT use vague language like "may have impacts" or "could affect". State what the company does and what impact that has.
+    Length: 80–120 words.
+
+    2. Financial Description (Outside-in / Financial Materiality):
+    Describe how this sustainability topic creates financial risks or opportunities for ${profile.name || "this company"}.
+    ${financialGuidance}
+    Be concrete: name regulatory frameworks, market mechanisms, cost/revenue lines, or time horizons.
+    Do NOT use vague language. Quantify where possible (e.g. "energy costs represent X% of OPEX" if known).
+    Length: 80–120 words.
+
+    Return ONLY a JSON object. No markdown, no backticks, no explanation.
   `;
 
   const response = await ai.models.generateContent({

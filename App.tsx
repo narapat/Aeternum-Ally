@@ -24,6 +24,7 @@ import {
 } from './services/dbService';
 import { setOrganizationContext } from './services/geminiService';
 import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2 } from 'lucide-react';
+import type { InsightHubResponse } from './types';
 
 const DEFAULT_PROFILE: CompanyProfile = {
   name: '', taxId: '', industry: '', isicCode: '', foundingYear: '',
@@ -71,6 +72,10 @@ const App: React.FC = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [editingAssessment, setEditingAssessment] = useState<AssessmentData | null>(null);
+  // Cached insight hub result — cleared when user explicitly re-analyses or assessments change
+  const [cachedInsight, setCachedInsight] = useState<InsightHubResponse | null>(null);
+  // Whether the assessment form was opened from the insight hub (to enable "back to hub" navigation)
+  const [editFromHub, setEditFromHub] = useState(false);
 
   // DB-backed singleton data (auto-save + manual save)
   const orgId = organization?.id ?? null;
@@ -127,7 +132,14 @@ const App: React.FC = () => {
         setAssessments(prev => [saved, ...prev]);
       }
       setIsFormOpen(false);
-      setView('dm_dashboard');
+      // Assessments changed — clear cached insight so hub re-analyses next visit
+      setCachedInsight(null);
+      if (editFromHub) {
+        setEditFromHub(false);
+        setView('insight_hub');
+      } else {
+        setView('dm_dashboard');
+      }
     } catch (e: any) {
       alert(`Failed to save assessment: ${e?.message ?? 'Unknown error'}`);
     }
@@ -454,7 +466,11 @@ const App: React.FC = () => {
                           bmcData={canvas.data}
                           swotData={swot.data}
                           onSave={handleSaveAssessment}
-                          onCancel={() => { setIsFormOpen(false); setEditingAssessment(null); }}
+                          onCancel={() => {
+                            setIsFormOpen(false);
+                            setEditingAssessment(null);
+                            if (editFromHub) { setEditFromHub(false); setView('insight_hub'); }
+                          }}
                           initialData={editingAssessment}
                         />
                       </div>
@@ -474,12 +490,15 @@ const App: React.FC = () => {
                     swotData={swot.data}
                     onBack={() => setView('assess')}
                     onContinue={() => setView('kpi')}
+                    cachedInsight={cachedInsight}
+                    onInsightReady={setCachedInsight}
                     onEditTopic={(topicCode) => {
                       const match = assessments.find(a =>
                         String(a.topic).startsWith(topicCode)
                       );
                       setEditingAssessment(match ?? null);
                       setIsFormOpen(true);
+                      setEditFromHub(true);
                       setView('assess');
                     }}
                   />
