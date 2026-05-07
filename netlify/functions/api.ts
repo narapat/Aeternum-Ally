@@ -246,6 +246,10 @@ async function runAction(
       return generateKPISuggestions(ai, model, params);
     case "generateSustainabilityStatement":
       return generateSustainabilityStatement(ai, model, params);
+    case "analyzeTopicQuality":
+      return analyzeTopicQuality(ai, model, params);
+    case "analyzeDMASynthesis":
+      return analyzeDMASynthesis(ai, model, params);
     case "analyzeDMAQuality":
       return analyzeDMAQuality(ai, model, params);
     default:
@@ -889,6 +893,215 @@ async function generateSustainabilityStatement(
   };
 }
 
+// ── Shared helpers for DMA analysis ──────────────────────────────────────────
+
+function buildDMACompanySection(profile: any, bmcItems: any, swotItems: any): string {
+  const companyCtx = profile ? buildCompanyContext(profile) : "";
+  const bmcContext = bmcItems
+    ? [
+        bmcItems.key_activities?.length ? `Key activities: ${joinField(bmcItems.key_activities)}` : "",
+        bmcItems.eco_social_costs?.length ? `Eco-social costs: ${joinField(bmcItems.eco_social_costs)}` : "",
+        bmcItems.eco_social_benefits?.length ? `Eco-social benefits: ${joinField(bmcItems.eco_social_benefits)}` : "",
+      ].filter(Boolean).join("\n")
+    : "";
+  const swotContext = swotItems
+    ? [
+        swotItems.threats?.length ? `Threats: ${joinField(swotItems.threats)}` : "",
+        swotItems.opportunities?.length ? `Opportunities: ${joinField(swotItems.opportunities)}` : "",
+      ].filter(Boolean).join("\n")
+    : "";
+  return [
+    companyCtx,
+    bmcContext ? `Business context:\n${bmcContext}` : "",
+    swotContext ? `Strategic context:\n${swotContext}` : "",
+  ].filter(Boolean).join("\n\n");
+}
+
+// Pass 1 — single topic quality check. One call per topic from the frontend.
+async function analyzeTopicQuality(
+  ai: GoogleGenAI,
+  model: string,
+  { assessment, profile, bmcItems, swotItems }: any
+) {
+  const a = assessment;
+  const topicCode  = String(a.topic).split(" ")[0];
+  const topicTitle = String(a.topic).replace(/^[A-Z0-9]+ /, "");
+  const companySection = buildDMACompanySection(profile, bmcItems, swotItems);
+  const scores = a.impactScore ?? {};
+
+  const prompt = `
+You are a senior ESRS/CSRD auditor reviewing one topic in a Double Materiality Assessment.
+
+${companySection}
+
+Topic under review: ${a.topic}
+Material: ${(a.isMaterial ?? false) ? "Yes" : "No"}
+Impact score: ${a.impactMaterialityValue ?? 0}/100 — "${a.impactDescription || "No description provided"}"
+Financial score: ${a.financialMaterialityValue ?? 0}/100 — "${a.financialDescription || "No description provided"}"
+${scores.scale ? `Sub-scores: scale=${scores.scale} scope=${scores.scope} irremediability=${scores.irremediability} likelihood=${scores.likelihood}` : ""}
+
+Assess quality:
+- "needs_fix": critical gap that would fail a CSRD compliance review
+- "review": minor concern worth addressing, not blocking
+- "ok": meets minimum ESRS requirements for this topic
+
+Flag issues only if genuinely present. Return at most 2 issues. Keep descriptions concise (under 30 words each).
+Return ONLY valid JSON — no markdown, no backticks.
+  `.trim();
+
+  const issueSchema = {
+    type: Type.OBJECT,
+    required: ["severity", "title", "description", "esrs_ref", "fix_suggestion"],
+    properties: {
+      severity:       { type: Type.STRING },
+      title:          { type: Type.STRING },
+      description:    { type: Type.STRING },
+      esrs_ref:       { type: Type.STRING },
+      fix_suggestion: { type: Type.STRING },
+    },
+  };
+
+  const response = await ai.models.generateContent({
+    model,
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        required: ["topic", "topicTitle", "status", "issues"],
+        properties: {
+          topic:      { type: Type.STRING },
+          topicTitle: { type: Type.STRING },
+          status:     { type: Type.STRING },
+          issues:     { type: Type.ARRAY, items: issueSchema },
+        },
+      },
+    },
+  });
+
+  const parsed = parseAIJson<any>(response.text, { topic: topicCode, topicTitle, status: "ok", issues: [] });
+  // Always override topic/topicTitle from source data to prevent AI drift
+  return {
+    result: { ...parsed, topic: topicCode, topicTitle },
+    ...extractTokens(response),
+  };
+}
+
+// Pass 2 — holistic synthesis. Fired once after all topic calls complete.
+async function analyzeDMASynthesis(
+  ai: GoogleGenAI,
+  model: string,
+  { qualityChecks, assessments, profile, bmcItems, swotItems }: any
+) {
+  const companySection = buildDMACompanySection(profile, bmcItems, swotItems);
+
+  const allTopicsSummary = (assessments ?? []).map((a: any) =>
+    `${a.topic}: material=${(a.isMaterial ?? false) ? "yes" : "no"} impact=${a.impactMaterialityValue ?? 0}/100 financial=${a.financialMaterialityValue ?? 0}/100`
+  ).join(" | ");
+
+  const materialTopics = (assessments ?? [])
+    .filter((a: any) => a.isMaterial ?? false)
+    .map((a: any) => String(a.topic).split(" ")[0])
+    .join(", ") || "none identified";
+
+  // Summarise quality check results for the synthesis prompt
+  const qualitySummary = (qualityChecks ?? []).map((c: any) =>
+    `${c.topic} (${c.status})${c.issues?.length ? ": " + c.issues.map((i: any) => i.title).join("; ") : ""}`
+  ).join("\n");
+
+  const prompt = `
+You are a senior sustainability strategy advisor briefing a CEO on their completed Double Materiality Assessment (DMA).
+
+${companySection}
+
+All ESRS topics summary (topic: material? impact/100 financial/100):
+${allTopicsSummary}
+
+Material topics: ${materialTopics}
+
+Quality check results per topic:
+${qualitySummary}
+
+TASK 1 — STRATEGIC INSIGHT (plain language, no ESRS jargon):
+- summary: 2-3 sentences on what this DMA reveals about the business
+- keyRisks: exactly 3-5 strings, each describing a specific material risk with business impact
+- opportunities: exactly 3-5 strings, each describing a concrete strategic opportunity
+- bottomLine: one sentence — the single most important thing this company must do now
+
+TASK 2 — RECOMMENDED ACTIONS: Generate exactly 5 to 8 actions covering all three types.
+Each action MUST have ALL of these fields:
+- id: "action-1", "action-2", etc.
+- type: "fix" (correct an incomplete assessment), "comply" (meet ESRS requirement for material topic), or "improve" (strategic opportunity)
+- priority: "high", "medium", or "low"
+- title: short action title (under 10 words)
+- description: what to do and why (under 25 words)
+- esrs_ref: relevant ESRS standard (e.g. "ESRS E1-6", "ESRS S1-1")
+- source_type: "dma"
+- source_id: the ESRS topic code this action relates to (e.g. "E1", "S1")
+- estimated_time: realistic estimate (e.g. "2 hours", "1 day", "1 week")
+
+Distribute actions: at least 1 "fix", 2 "comply", 1 "improve". Prioritise material topics and topics with needs_fix status.
+
+Return ONLY valid JSON — no markdown, no backticks.
+  `.trim();
+
+  const response = await ai.models.generateContent({
+    model,
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        required: ["strategicInsight", "recommendedActions"],
+        properties: {
+          strategicInsight: {
+            type: Type.OBJECT,
+            required: ["summary", "keyRisks", "opportunities", "bottomLine"],
+            properties: {
+              summary:       { type: Type.STRING },
+              keyRisks:      { type: Type.ARRAY, items: { type: Type.STRING } },
+              opportunities: { type: Type.ARRAY, items: { type: Type.STRING } },
+              bottomLine:    { type: Type.STRING },
+            },
+          },
+          recommendedActions: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              required: ["id", "type", "priority", "title", "description", "esrs_ref", "source_type", "source_id", "estimated_time"],
+              properties: {
+                id:             { type: Type.STRING },
+                type:           { type: Type.STRING },
+                priority:       { type: Type.STRING },
+                title:          { type: Type.STRING },
+                description:    { type: Type.STRING },
+                esrs_ref:       { type: Type.STRING },
+                source_type:    { type: Type.STRING },
+                source_id:      { type: Type.STRING },
+                estimated_time: { type: Type.STRING },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const parsed = parseAIJson(response.text, {
+    strategicInsight: { summary: "", keyRisks: [], opportunities: [], bottomLine: "" },
+    recommendedActions: [],
+  });
+
+  return {
+    result: {
+      strategicInsight:   parsed?.strategicInsight  ?? { summary: "", keyRisks: [], opportunities: [], bottomLine: "" },
+      recommendedActions: Array.isArray(parsed?.recommendedActions) ? parsed.recommendedActions : [],
+    },
+    ...extractTokens(response),
+  };
+}
+
+// Legacy single-call version — kept for backward compat but no longer called by the UI.
 async function analyzeDMAQuality(
   ai: GoogleGenAI,
   model: string,

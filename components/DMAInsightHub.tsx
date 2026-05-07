@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -9,11 +9,12 @@ import {
   Clock,
   Lightbulb,
   Loader2,
+  RotateCcw,
   TrendingUp,
   XCircle,
   Zap,
 } from "lucide-react";
-import { generateDMAInsight } from "../services/geminiService";
+import { analyzeTopicQuality, analyzeDMASynthesis } from "../services/geminiService";
 import type {
   AssessmentData,
   CompanyProfile,
@@ -41,6 +42,19 @@ interface Props {
   onInsightReady?: (result: InsightHubResponse) => void;
 }
 
+// Per-topic loading phase — one per assessment, updated independently
+type TopicPhase =
+  | { phase: "loading" }
+  | { phase: "done"; check: QualityCheck }
+  | { phase: "error"; message: string };
+
+// Synthesis (Pass 2) phase — starts after all topics settle
+type SynthesisPhase =
+  | { phase: "idle" }
+  | { phase: "loading" }
+  | { phase: "done"; insight: StrategicInsight; actions: RecommendedAction[] }
+  | { phase: "error"; message: string };
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Main component
 // ─────────────────────────────────────────────────────────────────────────────
@@ -56,70 +70,93 @@ const DMAInsightHub: React.FC<Props> = ({
   cachedInsight,
   onInsightReady,
 }) => {
-  const [loading, setLoading] = useState(!cachedInsight);
-  const [error, setError] = useState<string | null>(null);
-  const [insight, setInsight] = useState<InsightHubResponse | null>(cachedInsight ?? null);
+  const [topicStates, setTopicStates] = useState<Map<string, TopicPhase>>(() => {
+    if (cachedInsight) {
+      return new Map(cachedInsight.qualityChecks.map((c) => [c.topic, { phase: "done", check: c } as TopicPhase]));
+    }
+    return new Map(assessments.map((a) => [String(a.topic).split(" ")[0], { phase: "loading" } as TopicPhase]));
+  });
+
+  const [synthesisState, setSynthesisState] = useState<SynthesisPhase>(() =>
+    cachedInsight
+      ? { phase: "done", insight: cachedInsight.strategicInsight, actions: cachedInsight.recommendedActions }
+      : { phase: "idle" }
+  );
+
+  // Incremented on each Re-analyse so stale async callbacks self-cancel
+  const runIdRef = useRef(0);
 
   const runAnalysis = React.useCallback(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setInsight(null);
+    const runId = ++runIdRef.current;
 
-    generateDMAInsight(assessments, bmcData, swotData, profile)
-      .then((result) => {
-        if (!cancelled) {
-          setInsight(result);
-          onInsightReady?.(result);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to analyse assessments. Please try again.");
-          setLoading(false);
-        }
-      });
+    setTopicStates(new Map(assessments.map((a) => [String(a.topic).split(" ")[0], { phase: "loading" } as TopicPhase])));
+    setSynthesisState({ phase: "idle" });
 
-    return () => { cancelled = true; };
+    const doneChecks: QualityCheck[] = [];
+    let settledCount = 0;
+
+    const onTopicSettle = async () => {
+      settledCount++;
+      if (settledCount < assessments.length) return;
+      if (runId !== runIdRef.current) return;
+
+      if (doneChecks.length === 0) {
+        setSynthesisState({ phase: "error", message: "All topic checks failed — unable to synthesise." });
+        return;
+      }
+
+      setSynthesisState({ phase: "loading" });
+      try {
+        const synth = await analyzeDMASynthesis(doneChecks, assessments, profile, bmcData, swotData);
+        if (runId !== runIdRef.current) return;
+        setSynthesisState({ phase: "done", insight: synth.strategicInsight, actions: synth.recommendedActions });
+        onInsightReady?.({ qualityChecks: doneChecks, strategicInsight: synth.strategicInsight, recommendedActions: synth.recommendedActions });
+      } catch (err) {
+        if (runId !== runIdRef.current) return;
+        setSynthesisState({ phase: "error", message: err instanceof Error ? err.message : "Strategic analysis failed." });
+      }
+    };
+
+    assessments.forEach(async (assessment) => {
+      const topicCode = String(assessment.topic).split(" ")[0];
+      try {
+        const check = await analyzeTopicQuality(assessment, profile, bmcData, swotData);
+        if (runId !== runIdRef.current) return;
+        doneChecks.push(check);
+        setTopicStates((prev) => new Map(prev).set(topicCode, { phase: "done", check }));
+      } catch (err) {
+        if (runId !== runIdRef.current) return;
+        setTopicStates((prev) =>
+          new Map(prev).set(topicCode, { phase: "error", message: err instanceof Error ? err.message : "Check failed" })
+        );
+      }
+      await onTopicSettle();
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assessments, bmcData, swotData, profile]);
+  }, [assessments, profile, bmcData, swotData]);
 
   useEffect(() => {
-    if (!cachedInsight) return runAnalysis();
+    if (!cachedInsight) runAnalysis();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Wrap onEditTopic so sub-components don't need access to the full checks list.
-  // QualityCheckCard passes its own check explicitly; ActionCard passes just topicCode
-  // and the lookup happens here.
+  // Derived
+  const completedChecks = assessments
+    .map((a) => topicStates.get(String(a.topic).split(" ")[0]))
+    .filter((s): s is { phase: "done"; check: QualityCheck } => s?.phase === "done")
+    .map((s) => s.check);
+
+  const hasFixIssues = completedChecks.some((c) => c.status === "needs_fix");
+  const isAnalysing = [...topicStates.values()].some((s) => s.phase === "loading");
+
   const handleEditTopic = React.useCallback((topicCode: string, qualityCheck?: QualityCheck) => {
-    const qc = qualityCheck ?? insight?.qualityChecks.find((c) => c.topic === topicCode);
+    const state = topicStates.get(topicCode);
+    const qc = qualityCheck ?? (state?.phase === "done" ? state.check : undefined);
     onEditTopic(topicCode, qc);
-  }, [insight, onEditTopic]);
-
-  const hasFixIssues = insight?.qualityChecks.some((c) => c.status === "needs_fix") ?? false;
-
-  if (loading) return <LoadingState />;
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 px-4 text-center">
-        <XCircle className="w-12 h-12 text-red-500 mb-4" />
-        <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Analysis Failed</h2>
-        <p className="text-slate-500 dark:text-slate-400 max-w-md mb-6">{error}</p>
-        <button
-          onClick={runAnalysis}
-          className="px-6 py-2.5 bg-esg-600 text-white rounded-lg hover:bg-esg-700 transition-colors font-medium"
-        >
-          Retry Analysis
-        </button>
-      </div>
-    );
-  }
+  }, [topicStates, onEditTopic]);
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 space-y-8 animate-in fade-in duration-500">
+    <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -130,30 +167,39 @@ const DMAInsightHub: React.FC<Props> = ({
         </div>
         <button
           onClick={runAnalysis}
-          className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-esg-600 dark:hover:text-esg-400 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-1.5 transition-colors flex-shrink-0"
+          disabled={isAnalysing || synthesisState.phase === "loading"}
+          className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-esg-600 dark:hover:text-esg-400 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-1.5 transition-colors flex-shrink-0 disabled:opacity-40"
         >
-          <Loader2 className="w-3 h-3" />
+          <RotateCcw className="w-3 h-3" />
           Re-analyse
         </button>
       </div>
 
-      {/* Score banner */}
-      <ScoreBanner assessments={assessments} checks={insight?.qualityChecks ?? []} />
+      {/* Score banner — updates as topic cards arrive */}
+      <ScoreBanner assessments={assessments} checks={completedChecks} />
 
-      {/* Quality checks */}
-      {insight && insight.qualityChecks.length > 0 && (
-        <QualityCheckSection checks={insight.qualityChecks} onEditTopic={handleEditTopic} />
+      {/* Quality checks — each card appears as its topic call resolves */}
+      {assessments.length > 0 && (
+        <QualityCheckSection
+          assessments={assessments}
+          topicStates={topicStates}
+          onEditTopic={handleEditTopic}
+        />
       )}
 
-      {/* Strategic insight */}
-      {insight?.strategicInsight && (
-        <StrategicInsightPanel insight={insight.strategicInsight} />
-      )}
-
-      {/* Recommended actions */}
-      {insight && (
-        <RecommendedActionsSection actions={insight.recommendedActions} onEditTopic={handleEditTopic} />
-      )}
+      {/* Synthesis — shown once all topics settle */}
+      <SynthesisSection
+        state={synthesisState}
+        onRetry={() => {
+          if (completedChecks.length > 0) {
+            setSynthesisState({ phase: "loading" });
+            analyzeDMASynthesis(completedChecks, assessments, profile, bmcData, swotData)
+              .then((s) => setSynthesisState({ phase: "done", insight: s.strategicInsight, actions: s.recommendedActions }))
+              .catch((e) => setSynthesisState({ phase: "error", message: e instanceof Error ? e.message : "Retry failed" }));
+          }
+        }}
+        onEditTopic={handleEditTopic}
+      />
 
       {/* Navigation */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
@@ -187,30 +233,42 @@ const DMAInsightHub: React.FC<Props> = ({
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Loading state
+// Synthesis section — appears after all topic calls settle
 // ─────────────────────────────────────────────────────────────────────────────
 
-const LoadingState: React.FC = () => (
-  <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
-    <div className="relative mb-6">
-      <div className="w-16 h-16 rounded-full border-2 border-esg-200 dark:border-esg-900 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-esg-600 animate-spin" />
+const SynthesisSection: React.FC<{
+  state: SynthesisPhase;
+  onRetry: () => void;
+  onEditTopic: (topicCode: string, qualityCheck?: QualityCheck) => void;
+}> = ({ state, onRetry, onEditTopic }) => {
+  if (state.phase === "idle") return null;
+
+  if (state.phase === "loading") {
+    return (
+      <div className="flex items-center gap-3 py-8 text-slate-500 dark:text-slate-400 text-sm">
+        <Loader2 className="w-4 h-4 animate-spin flex-shrink-0 text-esg-500" />
+        Analysing strategic context across all topics…
       </div>
-    </div>
-    <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Analysing your assessments…</h2>
-    <p className="text-slate-500 dark:text-slate-400 max-w-sm text-sm">
-      Reviewing quality, identifying gaps, and generating strategic insights from your DMA data.
-    </p>
-    <div className="mt-8 space-y-2 text-sm text-slate-400 dark:text-slate-500">
-      {["Checking ESRS coverage…", "Analysing materiality patterns…", "Building strategic insights…"].map((step) => (
-        <div key={step} className="flex items-center gap-2 justify-center">
-          <div className="w-1.5 h-1.5 rounded-full bg-esg-400 animate-pulse" />
-          {step}
-        </div>
-      ))}
-    </div>
-  </div>
-);
+    );
+  }
+
+  if (state.phase === "error") {
+    return (
+      <div className="flex items-center gap-3 py-6 text-sm text-red-600 dark:text-red-400">
+        <XCircle className="w-4 h-4 flex-shrink-0" />
+        <span>{state.message}</span>
+        <button onClick={onRetry} className="ml-2 underline hover:no-underline flex-shrink-0">Retry</button>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <StrategicInsightPanel insight={state.insight} />
+      <RecommendedActionsSection actions={state.actions} onEditTopic={onEditTopic} />
+    </>
+  );
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Score banner
@@ -287,12 +345,21 @@ const statusConfig = {
 };
 
 const QualityCheckSection: React.FC<{
-  checks: QualityCheck[];
+  assessments: AssessmentData[];
+  topicStates: Map<string, TopicPhase>;
   onEditTopic: (topicCode: string, qualityCheck?: QualityCheck) => void;
-}> = ({ checks, onEditTopic }) => {
-  const sorted = [...checks].sort((a, b) => {
-    const order = { needs_fix: 0, review: 1, ok: 2 };
-    return order[a.status] - order[b.status];
+}> = ({ assessments, topicStates, onEditTopic }) => {
+  // Sort: done (needs_fix first) → loading → error
+  const sorted = [...assessments].sort((a, b) => {
+    const sa = topicStates.get(String(a.topic).split(" ")[0]);
+    const sb = topicStates.get(String(b.topic).split(" ")[0]);
+    const rank = (s: TopicPhase | undefined) => {
+      if (!s || s.phase === "loading") return 3;
+      if (s.phase === "error") return 4;
+      const order = { needs_fix: 0, review: 1, ok: 2 };
+      return order[s.check.status] ?? 2;
+    };
+    return rank(sa) - rank(sb);
   });
 
   return (
@@ -302,13 +369,43 @@ const QualityCheckSection: React.FC<{
         Quality Check
       </h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {sorted.map((check) => (
-          <QualityCheckCard key={check.topic} check={check} onEditTopic={onEditTopic} />
-        ))}
+        {sorted.map((assessment) => {
+          const topicCode = String(assessment.topic).split(" ")[0];
+          const topicTitle = String(assessment.topic).replace(/^[A-Z0-9]+ /, "");
+          const state = topicStates.get(topicCode);
+
+          if (!state || state.phase === "loading") {
+            return <TopicSkeletonCard key={topicCode} topicCode={topicCode} topicTitle={topicTitle} />;
+          }
+          if (state.phase === "error") {
+            return <TopicErrorCard key={topicCode} topicCode={topicCode} topicTitle={topicTitle} message={state.message} />;
+          }
+          return <QualityCheckCard key={topicCode} check={state.check} onEditTopic={onEditTopic} />;
+        })}
       </div>
     </section>
   );
 };
+
+const TopicSkeletonCard: React.FC<{ topicCode: string; topicTitle: string }> = ({ topicCode, topicTitle }) => (
+  <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 flex items-center gap-3 animate-pulse">
+    <Loader2 className="w-4 h-4 text-esg-400 animate-spin flex-shrink-0" />
+    <div className="min-w-0">
+      <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">{topicCode} — {topicTitle}</p>
+      <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Checking quality…</p>
+    </div>
+  </div>
+);
+
+const TopicErrorCard: React.FC<{ topicCode: string; topicTitle: string; message: string }> = ({ topicCode, topicTitle, message }) => (
+  <div className="rounded-xl border border-l-4 border-l-slate-400 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-4 flex items-center gap-3">
+    <XCircle className="w-4 h-4 text-slate-400 flex-shrink-0" />
+    <div className="min-w-0">
+      <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">{topicCode} — {topicTitle}</p>
+      <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 truncate">{message}</p>
+    </div>
+  </div>
+);
 
 const QualityCheckCard: React.FC<{
   check: QualityCheck;

@@ -1,4 +1,4 @@
-import { ESRSTopic, SustainabilityBusinessModel, SwotAnalysis, BSCPerspective, AssessmentData, CompanyProfile, AssessmentScoring, InsightHubResponse, QualityCheck } from "../types";
+import { ESRSTopic, SustainabilityBusinessModel, SwotAnalysis, BSCPerspective, AssessmentData, CompanyProfile, AssessmentScoring, InsightHubResponse, QualityCheck, StrategicInsight, RecommendedAction } from "../types";
 import { supabase } from "../lib/supabaseClient";
 
 const API_ENDPOINT = "/.netlify/functions/api";
@@ -142,6 +142,46 @@ export const generateSustainabilityStatement = async (
   return await callApi("generateSustainabilityStatement", { profile, materialAssessments });
 };
 
+// Pass 1 — quality check for a single topic. Called once per assessment from the frontend.
+export const analyzeTopicQuality = async (
+  assessment: AssessmentData,
+  profile: CompanyProfile,
+  bmcData: SustainabilityBusinessModel,
+  swotData: SwotAnalysis,
+): Promise<QualityCheck> => {
+  const bmcItems = {
+    key_activities: bmcData.keyActivities,
+    eco_social_costs: bmcData.ecoSocialCosts,
+    eco_social_benefits: bmcData.ecoSocialBenefits,
+  };
+  const swotItems = {
+    threats: swotData.threats,
+    opportunities: swotData.opportunities,
+  };
+  return await callApi("analyzeTopicQuality", { assessment, profile, bmcItems, swotItems });
+};
+
+// Pass 2 — holistic synthesis. Called once after all topic checks complete.
+export const analyzeDMASynthesis = async (
+  qualityChecks: QualityCheck[],
+  assessments: AssessmentData[],
+  profile: CompanyProfile,
+  bmcData: SustainabilityBusinessModel,
+  swotData: SwotAnalysis,
+): Promise<{ strategicInsight: StrategicInsight; recommendedActions: RecommendedAction[] }> => {
+  const bmcItems = {
+    key_activities: bmcData.keyActivities,
+    eco_social_costs: bmcData.ecoSocialCosts,
+    eco_social_benefits: bmcData.ecoSocialBenefits,
+  };
+  const swotItems = {
+    threats: swotData.threats,
+    opportunities: swotData.opportunities,
+  };
+  return await callApi("analyzeDMASynthesis", { qualityChecks, assessments, profile, bmcItems, swotItems });
+};
+
+// Legacy — kept for backward compat, no longer used by the UI.
 export const generateDMAInsight = async (
   assessments: AssessmentData[],
   bmcData: SustainabilityBusinessModel,
@@ -157,6 +197,5 @@ export const generateDMAInsight = async (
     threats: swotData.threats,
     opportunities: swotData.opportunities,
   };
-  // Re-throws so the caller can show a meaningful error.
   return await callApi("analyzeDMAQuality", { assessments, bmcItems, swotItems, profile });
 };
