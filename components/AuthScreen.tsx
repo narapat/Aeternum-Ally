@@ -90,7 +90,7 @@ const AuthScreen: React.FC = () => {
         <div className="my-10 flex flex-col gap-6">
           {/* Headline */}
           <div>
-            <h1 className="text-3xl lg:text-4xl font-heading font-bold leading-tight mb-3">
+            <h1 className="text-3xl lg:text-4xl font-heading font-bold leading-tight mb-3" style={{ color: "#ccff00" }}>
               Turn Sustainability Compliance<br />into Business Strategy with AI
             </h1>
             <p className="text-base lg:text-lg opacity-80 font-sans leading-relaxed">
