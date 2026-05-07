@@ -15,6 +15,9 @@ import type {
   StrategicInsight,
   RecommendedAction,
   InsightHubResponse,
+  Task,
+  SuggestedTask,
+  TaskStatus,
 } from "../types";
 
 // =================================================================
@@ -515,5 +518,170 @@ export async function upsertKpi(orgId: string, kpi: KPI): Promise<KPI> {
 
 export async function deleteKpi(id: string): Promise<void> {
   const { error } = await supabase.from("kpis").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// =================================================================
+// TASKS  (many per org)
+// =================================================================
+
+const fromDbTask = (row: any): Task => ({
+  id: row.id,
+  organization_id: row.organization_id,
+  title: row.title ?? "",
+  description: row.description ?? null,
+  notes: row.notes ?? null,
+  type: row.type,
+  status: row.status,
+  priority: row.priority,
+  due_date: row.due_date ?? null,
+  assignee_id: row.assignee_id ?? null,
+  assigned_by: row.assigned_by ?? null,
+  assigned_at: row.assigned_at ?? null,
+  source_type: row.source_type ?? null,
+  source_id: row.source_id ?? null,
+  esrs_ref: row.esrs_ref ?? null,
+  created_by: row.created_by ?? null,
+  created_at: row.created_at,
+  updated_at: row.updated_at,
+  completed_at: row.completed_at ?? null,
+});
+
+export async function fetchTasks(orgId: string): Promise<Task[]> {
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map(fromDbTask);
+}
+
+export async function upsertTask(orgId: string, task: Partial<Task> & Pick<Task, 'title' | 'type' | 'status' | 'priority'>): Promise<Task> {
+  const payload: any = {
+    organization_id: orgId,
+    title: task.title,
+    description: task.description ?? null,
+    notes: task.notes ?? null,
+    type: task.type,
+    status: task.status,
+    priority: task.priority,
+    due_date: task.due_date ?? null,
+    assignee_id: task.assignee_id ?? null,
+    assigned_by: task.assigned_by ?? null,
+    assigned_at: task.assigned_at ?? null,
+    source_type: task.source_type ?? null,
+    source_id: task.source_id ?? null,
+    esrs_ref: task.esrs_ref ?? null,
+  };
+  if (task.status === 'done' && !task.completed_at) payload.completed_at = new Date().toISOString();
+  if (task.status !== 'done') payload.completed_at = null;
+
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(task.id ?? "");
+  if (isUuid) payload.id = task.id;
+
+  const { data, error } = await supabase
+    .from("tasks")
+    .upsert(payload, { onConflict: "id" })
+    .select()
+    .single();
+  if (error) throw error;
+  return fromDbTask(data);
+}
+
+export async function deleteTask(id: string): Promise<void> {
+  const { error } = await supabase.from("tasks").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// =================================================================
+// SUGGESTED TASKS  (many per org)
+// =================================================================
+
+const fromDbSuggestedTask = (row: any): SuggestedTask => ({
+  id: row.id,
+  organization_id: row.organization_id,
+  title: row.title ?? "",
+  description: row.description ?? null,
+  type: row.type,
+  priority: row.priority,
+  source_type: row.source_type ?? "",
+  source_id: row.source_id ?? null,
+  esrs_ref: row.esrs_ref ?? null,
+  estimated_time: row.estimated_time ?? null,
+  dismissed: row.dismissed ?? false,
+  dismissed_at: row.dismissed_at ?? null,
+  dismissed_by: row.dismissed_by ?? null,
+  converted_to_task_id: row.converted_to_task_id ?? null,
+  converted_at: row.converted_at ?? null,
+  created_at: row.created_at,
+});
+
+export async function fetchSuggestedTasks(orgId: string, includeConverted = false): Promise<SuggestedTask[]> {
+  let query = supabase
+    .from("suggested_tasks")
+    .select("*")
+    .eq("organization_id", orgId)
+    .eq("dismissed", false)
+    .order("created_at", { ascending: false });
+  if (!includeConverted) query = query.is("converted_to_task_id", null);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []).map(fromDbSuggestedTask);
+}
+
+export async function dismissSuggestedTask(id: string, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from("suggested_tasks")
+    .update({ dismissed: true, dismissed_at: new Date().toISOString(), dismissed_by: userId })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function promoteSuggestedTask(
+  orgId: string,
+  suggested: SuggestedTask,
+  overrides: { assignee_id?: string | null; due_date?: string | null; status?: TaskStatus } = {},
+): Promise<Task> {
+  const task = await upsertTask(orgId, {
+    title: suggested.title,
+    description: suggested.description,
+    type: suggested.type,
+    status: overrides.status ?? 'todo',
+    priority: suggested.priority,
+    due_date: overrides.due_date ?? null,
+    assignee_id: overrides.assignee_id ?? null,
+    source_type: suggested.source_type as Task['source_type'],
+    source_id: suggested.source_id,
+    esrs_ref: suggested.esrs_ref,
+  });
+
+  const { error } = await supabase
+    .from("suggested_tasks")
+    .update({ converted_to_task_id: task.id, converted_at: new Date().toISOString() })
+    .eq("id", suggested.id);
+  if (error) console.warn("promoteSuggestedTask: failed to mark conversion:", error.message);
+
+  return task;
+}
+
+export async function saveSuggestedTasks(
+  orgId: string,
+  tasks: Array<Omit<SuggestedTask, 'id' | 'organization_id' | 'dismissed' | 'dismissed_at' | 'dismissed_by' | 'converted_to_task_id' | 'converted_at' | 'created_at'>>,
+): Promise<void> {
+  if (tasks.length === 0) return;
+  const { error } = await supabase.from("suggested_tasks").insert(
+    tasks.map((t) => ({
+      organization_id: orgId,
+      title: t.title,
+      description: t.description ?? null,
+      type: t.type,
+      priority: t.priority,
+      source_type: t.source_type,
+      source_id: t.source_id ?? null,
+      esrs_ref: t.esrs_ref ?? null,
+      estimated_time: t.estimated_time ?? null,
+    })),
+  );
   if (error) throw error;
 }

@@ -1,4 +1,4 @@
-import { ESRSTopic, SustainabilityBusinessModel, SwotAnalysis, BSCPerspective, AssessmentData, CompanyProfile, AssessmentScoring, InsightHubResponse, QualityCheck, StrategicInsight, RecommendedAction } from "../types";
+import { ESRSTopic, SustainabilityBusinessModel, SwotAnalysis, BSCPerspective, AssessmentData, CompanyProfile, AssessmentScoring, InsightHubResponse, QualityCheck, StrategicInsight, RecommendedAction, KPI, SuggestedTask } from "../types";
 import { supabase } from "../lib/supabaseClient";
 
 const API_ENDPOINT = "/.netlify/functions/api";
@@ -179,6 +179,22 @@ export const analyzeDMASynthesis = async (
     opportunities: swotData.opportunities,
   };
   return await callApi("analyzeDMASynthesis", { qualityChecks, assessments, profile, bmcItems, swotItems });
+};
+
+// Issue #7 — Generate actionable fix/comply/improve tasks from DMA data.
+export const generateTasks = async (
+  qualityChecks: QualityCheck[],
+  assessments: AssessmentData[],
+  kpis: KPI[],
+  swotData: SwotAnalysis,
+  profile: CompanyProfile,
+): Promise<Omit<SuggestedTask, 'id' | 'organization_id' | 'dismissed' | 'dismissed_at' | 'dismissed_by' | 'converted_to_task_id' | 'converted_at' | 'created_at'>[]> => {
+  const swotItems = {
+    strengths: swotData.strengths,
+    opportunities: swotData.opportunities,
+    weaknesses: swotData.weaknesses,
+  };
+  return await callApi("generateTasks", { qualityChecks, assessments, kpis, swotItems, profile });
 };
 
 // Legacy — kept for backward compat, no longer used by the UI.
