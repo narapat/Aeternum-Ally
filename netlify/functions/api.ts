@@ -117,22 +117,44 @@ const handler = async (event: any) => {
   let upstreamStatus: number | null = null;
   let userFacingMessage = "Something went wrong while contacting the AI service.";
 
+  // Internal fence at 9 s — Netlify kills the process at 10 s with no chance to log.
+  // Rejecting one second early lets the catch block write to ai_usage_log + error_log
+  // before the hard deadline hits.
+  const FENCE_MS = 9_000;
+  let fenceId: ReturnType<typeof setTimeout>;
+  const fencePromise = new Promise<never>((_, reject) => {
+    fenceId = setTimeout(() => {
+      const err = new Error(`Action '${action}' exceeded the ${FENCE_MS / 1000}s timeout`);
+      (err as any).isTimeout = true;
+      reject(err);
+    }, FENCE_MS);
+  });
+
   try {
-    const outcome = await runAction(ai, model, action, params);
+    const outcome = await Promise.race([
+      runAction(ai, model, action, params),
+      fencePromise,
+    ]);
+    clearTimeout(fenceId!);
     result = outcome.result;
     inputTokens = outcome.inputTokens;
     outputTokens = outcome.outputTokens;
   } catch (error: any) {
+    clearTimeout(fenceId!);
     console.error("API Error:", error);
     success = false;
     rawAiResponse = error?.rawAiResponse ?? null;
     upstreamStatus =
-      (typeof error?.status === "number" && error.status) ||
-      (typeof error?.error?.code === "number" && error.error.code) ||
-      null;
+      error?.isTimeout
+        ? 504
+        : (typeof error?.status === "number" && error.status) ||
+          (typeof error?.error?.code === "number" && error.error.code) ||
+          null;
     errorMessage = error?.error?.message || (error instanceof Error ? error.message : String(error));
     userFacingMessage =
-      upstreamStatus === 503
+      error?.isTimeout
+        ? "The AI request timed out. Please try again — complex topics occasionally need a second attempt."
+        : upstreamStatus === 503
         ? "The AI service is temporarily overloaded. Please try again in a moment."
         : upstreamStatus === 429
         ? "AI rate limit reached. Please wait a minute and try again."
