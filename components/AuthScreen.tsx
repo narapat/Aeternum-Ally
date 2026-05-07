@@ -80,13 +80,12 @@ const AuthScreen: React.FC = () => {
         className="lg:w-1/2 text-white p-8 lg:p-16 flex flex-col justify-between"
         style={{ backgroundColor: "#004d4d" }}
       >
-        <div className="flex items-center gap-3">
+        <div>
           <img
-            src="/AeternumAlly-Logo-Sqr.png"
-            alt="AeternumAlly logo"
-            className="w-12 h-12 rounded-lg object-contain"
+            src="/AeternumAlly-Logo-Full.png"
+            alt="AeternumAlly"
+            className="h-12 w-auto object-contain"
           />
-          <span className="text-2xl font-bold font-heading tracking-tight">AeternumAlly</span>
         </div>
         <div className="my-10 flex flex-col gap-6">
           {/* Headline */}
