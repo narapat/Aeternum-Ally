@@ -28,7 +28,8 @@ interface Props {
   currentUserId: string;
   isSidebarCollapsed?: boolean;
   onNavigateToInsightHub?: () => void;
-  onNavigateToDMA?: () => void;
+  // topicCode e.g. "E1" — opens that specific assessment in the form
+  onNavigateToDMARecord?: (topicCode: string | null) => void;
   onNavigateToKPI?: () => void;
 }
 
@@ -129,11 +130,14 @@ interface GeneratorProps {
   currentUserId: string;
   onTasksCreated: () => void;
   onNavigateToInsightHub?: () => void;
+  onNavigateToDMARecord?: (topicCode: string | null) => void;
+  onNavigateToKPI?: () => void;
 }
 
 const GeneratorTab: React.FC<GeneratorProps> = ({
   orgId, assessments, kpis, swotData, profile, cachedInsight,
   members, currentUserId, onTasksCreated, onNavigateToInsightHub,
+  onNavigateToDMARecord, onNavigateToKPI,
 }) => {
   const [suggested, setSuggested] = useState<SuggestedTask[]>([]);
   const [loading, setLoading] = useState(false);
@@ -382,6 +386,19 @@ const GeneratorTab: React.FC<GeneratorProps> = ({
                                   <Clock className="w-3 h-3" />{task.estimated_time}
                                 </p>
                               )}
+                              {/* Source link */}
+                              {task.source_type && task.source_type !== 'manual' && (
+                                <div className="mt-1.5">
+                                  <SourceLink
+                                    sourceType={task.source_type}
+                                    sourceId={task.source_id}
+                                    esrsRef={task.esrs_ref}
+                                    onNavigateToDMARecord={onNavigateToDMARecord}
+                                    onNavigateToInsightHub={onNavigateToInsightHub}
+                                    onNavigateToKPI={onNavigateToKPI}
+                                  />
+                                </div>
+                              )}
                               {/* Assignee + due date overrides */}
                               <div className="flex flex-wrap gap-3 mt-2">
                                 <div className="flex items-center gap-1">
@@ -442,26 +459,26 @@ interface SourceLinkProps {
   sourceType: string;
   sourceId: string | null;
   esrsRef: string | null;
-  onNavigateToDMA?: () => void;
+  onNavigateToDMARecord?: (topicCode: string | null) => void;
   onNavigateToInsightHub?: () => void;
   onNavigateToKPI?: () => void;
 }
 
 const SourceLink: React.FC<SourceLinkProps> = ({
-  sourceType, sourceId, esrsRef, onNavigateToDMA, onNavigateToInsightHub, onNavigateToKPI,
+  sourceType, sourceId, esrsRef, onNavigateToDMARecord, onNavigateToInsightHub, onNavigateToKPI,
 }) => {
   const meta = SOURCE_TYPE_META[sourceType];
   if (!meta) return null;
 
-  const label = [
-    meta.label,
-    sourceId && !/^[0-9a-f-]{36}$/i.test(sourceId) ? sourceId : null,
-    esrsRef,
-  ].filter(Boolean).join(' · ');
+  // Show human-readable topic code (not raw UUIDs)
+  const isUUID = sourceId ? /^[0-9a-f-]{36}$/i.test(sourceId) : true;
+  const topicLabel = !isUUID ? sourceId : null;
+
+  const label = [meta.label, topicLabel, esrsRef].filter(Boolean).join(' · ');
 
   const navigate =
     sourceType === 'insight_hub' ? onNavigateToInsightHub :
-    sourceType === 'dma' ? onNavigateToDMA :
+    sourceType === 'dma' ? () => onNavigateToDMARecord?.(topicLabel) :
     sourceType === 'kpi' ? onNavigateToKPI : undefined;
 
   return (
@@ -469,7 +486,7 @@ const SourceLink: React.FC<SourceLinkProps> = ({
       onClick={navigate}
       disabled={!navigate}
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border transition-opacity ${meta.color} ${navigate ? 'hover:opacity-80 cursor-pointer' : 'cursor-default opacity-70'}`}
-      title={navigate ? `Go to ${meta.label}` : undefined}
+      title={navigate ? `Go to ${meta.label}${topicLabel ? ` · ${topicLabel}` : ''}` : undefined}
     >
       <ChevronRight className="w-3 h-3" />{label}
     </button>
@@ -484,14 +501,14 @@ interface ManagerProps {
   currentUserId: string;
   refreshTrigger: number;
   onGoToGenerator: () => void;
-  onNavigateToDMA?: () => void;
+  onNavigateToDMARecord?: (topicCode: string | null) => void;
   onNavigateToInsightHub?: () => void;
   onNavigateToKPI?: () => void;
 }
 
 const ManagerTab: React.FC<ManagerProps> = ({
   orgId, members, currentUserId, refreshTrigger, onGoToGenerator,
-  onNavigateToDMA, onNavigateToInsightHub, onNavigateToKPI,
+  onNavigateToDMARecord, onNavigateToInsightHub, onNavigateToKPI,
 }) => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -781,7 +798,7 @@ const ManagerTab: React.FC<ManagerProps> = ({
                           sourceType={task.source_type}
                           sourceId={task.source_id}
                           esrsRef={task.esrs_ref}
-                          onNavigateToDMA={onNavigateToDMA}
+                          onNavigateToDMARecord={onNavigateToDMARecord}
                           onNavigateToInsightHub={onNavigateToInsightHub}
                           onNavigateToKPI={onNavigateToKPI}
                         />
@@ -1015,25 +1032,15 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ orgId, members, onClose, on
 const TaskManagement: React.FC<Props> = ({
   orgId, assessments, kpis, swotData, profile, cachedInsight,
   members, currentUserId, isSidebarCollapsed,
-  onNavigateToInsightHub, onNavigateToDMA, onNavigateToKPI,
+  onNavigateToInsightHub, onNavigateToDMARecord, onNavigateToKPI,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('manager');
   const [managerRefresh, setManagerRefresh] = useState(0);
 
   return (
     <div className={`mx-auto space-y-6 transition-all duration-300 ${isSidebarCollapsed ? 'max-w-7xl' : 'max-w-5xl'}`}>
-      {/* Tab bar */}
+      {/* Tab bar — Manager first (left), Generator second (right) */}
       <div className="flex gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
-        <button
-          onClick={() => setActiveTab('generator')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
-            activeTab === 'generator'
-              ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
-              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-          }`}
-        >
-          <Sparkles className="w-4 h-4" />Generator
-        </button>
         <button
           onClick={() => setActiveTab('manager')}
           className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
@@ -1043,6 +1050,16 @@ const TaskManagement: React.FC<Props> = ({
           }`}
         >
           <ListChecks className="w-4 h-4" />Manager
+        </button>
+        <button
+          onClick={() => setActiveTab('generator')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
+            activeTab === 'generator'
+              ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />Generator
         </button>
       </div>
 
@@ -1058,6 +1075,8 @@ const TaskManagement: React.FC<Props> = ({
           members={members}
           currentUserId={currentUserId}
           onNavigateToInsightHub={onNavigateToInsightHub}
+          onNavigateToDMARecord={onNavigateToDMARecord}
+          onNavigateToKPI={onNavigateToKPI}
           onTasksCreated={() => setManagerRefresh(n => n + 1)}
         />
       )}
@@ -1068,7 +1087,7 @@ const TaskManagement: React.FC<Props> = ({
           currentUserId={currentUserId}
           refreshTrigger={managerRefresh}
           onGoToGenerator={() => setActiveTab('generator')}
-          onNavigateToDMA={onNavigateToDMA}
+          onNavigateToDMARecord={onNavigateToDMARecord}
           onNavigateToInsightHub={onNavigateToInsightHub}
           onNavigateToKPI={onNavigateToKPI}
         />

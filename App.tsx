@@ -543,7 +543,13 @@ const App: React.FC = () => {
                     currentUserId={user.id}
                     isSidebarCollapsed={isSidebarCollapsed}
                     onNavigateToInsightHub={() => setView('insight_hub')}
-                    onNavigateToDMA={() => setView('assess')}
+                    onNavigateToDMARecord={(topicCode) => {
+                      const match = assessments.find(a => String(a.topic).startsWith(topicCode ?? ''));
+                      setEditingAssessment(match ?? null);
+                      setEditFromHub(false);
+                      setIsFormOpen(!!match);
+                      setView('assess');
+                    }}
                     onNavigateToKPI={() => setView('kpi')}
                   />
                 )}
