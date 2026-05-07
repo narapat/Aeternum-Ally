@@ -91,7 +91,7 @@ const AuthScreen: React.FC = () => {
           {/* Headline */}
           <div>
             <h1 className="text-3xl lg:text-4xl font-heading font-bold leading-tight mb-3" style={{ color: "#ccff00" }}>
-              Turn Sustainability Compliance<br />into Business Strategy with AI
+              Turn Sustainability Compliance<br />into Business Actions with AI
             </h1>
             <p className="text-base lg:text-lg opacity-80 font-sans leading-relaxed">
               AI-powered platform for SMEs navigating<br className="hidden lg:block" /> CSRD and ESRS reporting — from your<br className="hidden lg:block" /> business context to carbon accounting and reports.
