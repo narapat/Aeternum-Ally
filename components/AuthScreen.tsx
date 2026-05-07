@@ -94,7 +94,7 @@ const AuthScreen: React.FC = () => {
               Turn Sustainability Compliance<br />into Business Strategy with AI
             </h1>
             <p className="text-base lg:text-lg opacity-80 font-sans leading-relaxed">
-              AI-powered platform for SMEs navigating<br className="hidden lg:block" /> CSRD and ESRS reporting — from materiality<br className="hidden lg:block" /> assessment to carbon accounting.
+              AI-powered platform for SMEs navigating<br className="hidden lg:block" /> CSRD and ESRS reporting — from your<br className="hidden lg:block" /> business context to carbon accounting and reports.
             </p>
           </div>
 
