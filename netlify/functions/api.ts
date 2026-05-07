@@ -7,16 +7,19 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
 
-// Approximate Gemini pricing per 1M tokens (USD).
-// Source: https://ai.google.dev/pricing
-const PRICING: Record<string, { input: number; output: number }> = {
-  "gemini-2.5-flash-lite": { input: 0.10, output: 0.40 },
-  "gemini-2.5-flash":      { input: 0.30, output: 2.50 },
-  "gemini-2.5-pro":        { input: 1.25, output: 10.00 },
+// Per-model capabilities and pricing.
+// Update this table whenever a new model is added to the admin model picker.
+// canDisableThinking: true  → thinkingBudget:0 is valid (Flash family)
+// canDisableThinking: false → model always thinks; don't pass thinkingConfig (Pro family)
+// canDisableThinking: null  → unknown/BYOK model; falls back to name heuristic below
+const MODEL_REGISTRY: Record<string, { input: number; output: number; canDisableThinking: boolean }> = {
+  "gemini-2.5-flash-lite": { input: 0.10, output: 0.40,  canDisableThinking: true  },
+  "gemini-2.5-flash":      { input: 0.30, output: 2.50,  canDisableThinking: true  },
+  "gemini-2.5-pro":        { input: 1.25, output: 10.00, canDisableThinking: false },
 };
 
 function estimateCost(model: string, inputTokens: number, outputTokens: number): number {
-  const p = PRICING[model];
+  const p = MODEL_REGISTRY[model];
   if (!p) return 0;
   return (inputTokens * p.input + outputTokens * p.output) / 1_000_000;
 }
@@ -257,10 +260,13 @@ async function runAction(
   }
 }
 
-// thinkingBudget: 0 disables extended thinking on Flash models, keeping latency under 9s.
-// Pro models do not support budget=0 (minimum is 128) — return empty config for them.
+// Returns { thinkingConfig: { thinkingBudget: 0 } } for models that support disabling thinking,
+// or {} for models that don't (Pro) or are unknown (BYOK).
+// Prefer MODEL_REGISTRY lookup; fall back to name heuristic for unknown future models.
 function noThinkingConfig(model: string): object {
-  return model.includes("flash") ? { thinkingConfig: { thinkingBudget: 0 } } : {};
+  const entry = MODEL_REGISTRY[model];
+  const canDisable = entry != null ? entry.canDisableThinking : model.includes("flash");
+  return canDisable ? { thinkingConfig: { thinkingBudget: 0 } } : {};
 }
 
 // Pull token counts out of Gemini's response in a tolerant way.
