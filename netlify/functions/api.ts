@@ -418,10 +418,12 @@ ${(qualityCheckContext.issues as any[]).map((i: any) =>
     Return ONLY the plain text description. No JSON, no markdown, no label.
   `;
 
-  // Run both descriptions in parallel — halves latency vs a single combined call
+  // Run both descriptions in parallel — halves latency vs a single combined call.
+  // thinkingBudget: 0 disables extended thinking on 2.5-flash to keep latency under 9s.
+  const noThinking = { thinkingConfig: { thinkingBudget: 0 } };
   const [impactResp, financialResp] = await Promise.all([
-    ai.models.generateContent({ model, contents: impactPrompt }),
-    ai.models.generateContent({ model, contents: financialPrompt }),
+    ai.models.generateContent({ model, contents: impactPrompt, config: noThinking }),
+    ai.models.generateContent({ model, contents: financialPrompt, config: noThinking }),
   ]);
 
   const impactTokens = extractTokens(impactResp);
@@ -965,6 +967,8 @@ Return ONLY valid JSON — no markdown, no backticks.
     model,
     contents: prompt,
     config: {
+      // thinkingBudget: 0 disables extended thinking — keeps each per-topic call under 9s.
+      thinkingConfig: { thinkingBudget: 0 },
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -1049,6 +1053,8 @@ Return ONLY valid JSON — no markdown, no backticks.
     model,
     contents: prompt,
     config: {
+      // thinkingBudget: 0 disables extended thinking to stay within the 9s fence.
+      thinkingConfig: { thinkingBudget: 0 },
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
