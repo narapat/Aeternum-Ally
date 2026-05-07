@@ -131,18 +131,10 @@ const AuthScreen: React.FC = () => {
           </div>
         </div>
 
-        {/* Footer badges */}
-        <div className="flex flex-wrap gap-2 font-sans">
-          {["CSRD/ESRS Ready", "GRI Compatible"].map((tag) => (
-            <span
-              key={tag}
-              className="text-xs font-semibold px-3 py-1 rounded-full border"
-              style={{ borderColor: "rgba(204,255,0,0.4)", color: "rgba(255,255,255,0.7)" }}
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
+        {/* Footer */}
+        <p className="text-sm font-sans font-semibold" style={{ color: "#ccff00" }}>
+          CSRD/ESRS-aligned reporting with GRI compatibility
+        </p>
       </div>
 
       {/* Form panel */}
