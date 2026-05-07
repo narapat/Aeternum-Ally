@@ -92,27 +92,20 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
 
   const [autoFillError, setAutoFillError] = useState<string | null>(null);
 
-  // AI Auto-Fill: generate descriptions then auto-save so data is persisted immediately.
-  // Scoring is NOT triggered automatically — user can request it manually after reviewing.
+  // AI Auto-Fill: populate description fields and keep the form open for review.
+  // Scoring is NOT triggered — the "Get Suggestions" button becomes available once
+  // descriptions are present; user can click it manually after reviewing.
   const handleAutoFill = async () => {
     setLoadingAI(true);
     setAutoFillError(null);
     try {
       const suggestions = await generateAssessmentSuggestions(profile, topic);
-      const imValue = calculateImpactMateriality(impactScore);
-      const fmValue = calculateFinancialMateriality(financialScore);
-      onSave({
-        id: initialData?.id || Math.random().toString(36).substr(2, 9),
-        topic,
-        impactDescription: suggestions.impactSuggestion,
-        financialDescription: suggestions.financialSuggestion,
-        impactScore,
-        financialScore,
-        impactMaterialityValue: imValue,
-        financialMaterialityValue: fmValue,
-        isMaterial: imValue > 40 || fmValue > 40,
-        aiScoringSuggestion: initialData?.aiScoringSuggestion ?? null,
-      });
+      setImpactDesc(suggestions.impactSuggestion);
+      setFinancialDesc(suggestions.financialSuggestion);
+      // Reset any prior scoring so "Get Suggestions" button reappears
+      setAiScoring(null);
+      setScoringError(false);
+      setOverrides(new Set());
     } catch (err: any) {
       setAutoFillError(err?.message ?? "AI auto-fill failed. Please try again.");
     } finally {
