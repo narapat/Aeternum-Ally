@@ -40,6 +40,8 @@ interface Props {
   onEditTopic: (topicCode: string, qualityCheck?: QualityCheck) => void;
   cachedInsight?: InsightHubResponse | null;
   onInsightReady?: (result: InsightHubResponse) => void;
+  /** Called as each per-topic quality check resolves — used to persist results to DB. */
+  onQualityCheckReady?: (assessmentId: string, check: QualityCheck) => void;
 }
 
 // Per-topic loading phase — one per assessment, updated independently
@@ -69,6 +71,7 @@ const DMAInsightHub: React.FC<Props> = ({
   onEditTopic,
   cachedInsight,
   onInsightReady,
+  onQualityCheckReady,
 }) => {
   // Deduplicate by topic code — keep the highest-scored row per topic.
   // Duplicate DB rows happen when a user saves the same ESRS topic more than once.
@@ -147,6 +150,7 @@ const DMAInsightHub: React.FC<Props> = ({
         if (runId !== runIdRef.current) return;
         doneChecks.push(check);
         setTopicStates((prev) => new Map(prev).set(topicCode, { phase: "done", check }));
+        onQualityCheckReady?.(assessment.id, check);
       } catch (err) {
         if (runId !== runIdRef.current) return;
         setTopicStates((prev) =>

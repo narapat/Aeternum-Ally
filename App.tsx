@@ -21,6 +21,7 @@ import {
   fromDbSwot, toDbSwot,
   fetchAssessments, upsertAssessment, deleteAssessment,
   fetchKpis, upsertKpi, deleteKpi,
+  saveQualityCheck, saveDMAInsight, clearDMAInsight, loadDMAInsight, saveDMASuggestedTasks,
 } from './services/dbService';
 import { setOrganizationContext } from './services/geminiService';
 import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2 } from 'lucide-react';
@@ -104,11 +105,12 @@ const App: React.FC = () => {
     if (!orgId) { setArrayLoading(false); return; }
     let cancelled = false;
     setArrayLoading(true);
-    Promise.all([fetchAssessments(orgId), fetchKpis(orgId)])
-      .then(([a, k]) => {
+    Promise.all([fetchAssessments(orgId), fetchKpis(orgId), loadDMAInsight(orgId)])
+      .then(([a, k, insight]) => {
         if (cancelled) return;
         setAssessments(a);
         setKpis(k);
+        setCachedInsight(insight);
       })
       .catch(err => {
         // eslint-disable-next-line no-console
@@ -135,8 +137,9 @@ const App: React.FC = () => {
         setAssessments(prev => [saved, ...prev]);
       }
       setIsFormOpen(false);
-      // Assessments changed — clear cached insight so hub re-analyses next visit
+      // Assessments changed — clear cached insight so hub re-analyses fresh on next visit.
       setCachedInsight(null);
+      if (orgId) clearDMAInsight(orgId);
       if (editFromHub) {
         setEditFromHub(false);
         setHubQualityCheck(null);
@@ -500,7 +503,16 @@ const App: React.FC = () => {
                     onBack={() => setView('assess')}
                     onContinue={() => setView('kpi')}
                     cachedInsight={cachedInsight}
-                    onInsightReady={setCachedInsight}
+                    onInsightReady={(result) => {
+                      setCachedInsight(result);
+                      if (orgId) {
+                        saveDMAInsight(orgId, result.strategicInsight, result.recommendedActions);
+                        saveDMASuggestedTasks(orgId, result.recommendedActions, assessments);
+                      }
+                    }}
+                    onQualityCheckReady={(assessmentId, check) => {
+                      if (orgId) saveQualityCheck(assessmentId, orgId, check);
+                    }}
                     onEditTopic={(topicCode, qualityCheck) => {
                       const match = assessments.find(a =>
                         String(a.topic).startsWith(topicCode)

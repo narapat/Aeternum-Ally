@@ -11,6 +11,10 @@ import type {
   Organization,
   OrgMember,
   OrgRole,
+  QualityCheck,
+  StrategicInsight,
+  RecommendedAction,
+  InsightHubResponse,
 } from "../types";
 
 // =================================================================
@@ -343,6 +347,113 @@ export async function upsertAssessment(orgId: string, assessment: AssessmentData
 export async function deleteAssessment(id: string): Promise<void> {
   const { error } = await supabase.from("assessments").delete().eq("id", id);
   if (error) throw error;
+}
+
+// =================================================================
+// DMA INSIGHTS  (quality checks, strategic insight, suggested tasks)
+// =================================================================
+
+// Save quality check result for one topic onto its assessment row.
+export async function saveQualityCheck(
+  assessmentId: string,
+  orgId: string,
+  check: QualityCheck,
+): Promise<void> {
+  const { error } = await supabase
+    .from("assessments")
+    .update({
+      quality_check_status: check.status,
+      quality_check_issues: check.issues,
+    })
+    .eq("id", assessmentId)
+    .eq("organization_id", orgId);
+  if (error) console.warn("saveQualityCheck failed:", error.message);
+}
+
+// Upsert the org's strategic insight and recommended actions.
+export async function saveDMAInsight(
+  orgId: string,
+  strategicInsight: StrategicInsight,
+  recommendedActions: RecommendedAction[],
+): Promise<void> {
+  const { error } = await supabase
+    .from("dma_insights")
+    .upsert(
+      { organization_id: orgId, strategic_insight: strategicInsight, recommended_actions: recommendedActions },
+      { onConflict: "organization_id" },
+    );
+  if (error) console.warn("saveDMAInsight failed:", error.message);
+}
+
+// Load the cached DMA insight from DB. Returns null if the org has never run analysis.
+export async function loadDMAInsight(orgId: string): Promise<InsightHubResponse | null> {
+  const [insightResp, checksResp] = await Promise.all([
+    supabase
+      .from("dma_insights")
+      .select("strategic_insight, recommended_actions")
+      .eq("organization_id", orgId)
+      .maybeSingle(),
+    supabase
+      .from("assessments")
+      .select("topic, quality_check_status, quality_check_issues")
+      .eq("organization_id", orgId)
+      .not("quality_check_status", "is", null),
+  ]);
+
+  if (!insightResp.data) return null;
+
+  const qualityChecks: QualityCheck[] = (checksResp.data ?? []).map((row) => ({
+    topic: String(row.topic).split(" ")[0],
+    topicTitle: String(row.topic).replace(/^[A-Z0-9]+ /, ""),
+    status: row.quality_check_status as QualityCheck["status"],
+    issues: (row.quality_check_issues as QualityCheck["issues"]) ?? [],
+  }));
+
+  return {
+    qualityChecks,
+    strategicInsight: insightResp.data.strategic_insight as StrategicInsight,
+    recommendedActions: insightResp.data.recommended_actions as RecommendedAction[],
+  };
+}
+
+// Delete the org's strategic insight row so the next hub visit triggers a fresh analysis.
+export async function clearDMAInsight(orgId: string): Promise<void> {
+  await supabase.from("dma_insights").delete().eq("organization_id", orgId);
+}
+
+// Replace undismissed DMA suggested tasks with a fresh batch from the AI.
+export async function saveDMASuggestedTasks(
+  orgId: string,
+  actions: RecommendedAction[],
+  assessments: AssessmentData[],
+): Promise<void> {
+  // Remove stale undismissed DMA suggestions before inserting new ones.
+  await supabase
+    .from("suggested_tasks")
+    .delete()
+    .eq("organization_id", orgId)
+    .eq("source_type", "dma")
+    .eq("dismissed", false);
+
+  if (actions.length === 0) return;
+
+  // Resolve each action's topic code to an assessment UUID for traceability.
+  const topicToId = new Map(assessments.map((a) => [String(a.topic).split(" ")[0], a.id]));
+
+  const { error } = await supabase.from("suggested_tasks").insert(
+    actions.map((a) => ({
+      organization_id: orgId,
+      title: a.title,
+      description: a.description,
+      type: a.type,
+      priority: a.priority,
+      source_type: "dma",
+      source_id: topicToId.get(a.source_id) ?? null,
+      esrs_ref: a.esrs_ref,
+      estimated_time: a.estimated_time,
+    })),
+  );
+  if (error) console.warn("saveDMASuggestedTasks failed:", error.message);
 }
 
 // =================================================================
