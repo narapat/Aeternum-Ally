@@ -88,16 +88,61 @@ const AuthScreen: React.FC = () => {
           />
           <span className="text-2xl font-bold font-heading tracking-tight">AeternumAlly</span>
         </div>
-        <div className="my-12">
-          <h1 className="text-3xl lg:text-5xl font-heading font-bold mb-6 leading-tight">
-            Turn Sustainability Compliance into Business Strategy with AI
-          </h1>
-          <p className="text-lg opacity-90 max-w-lg font-sans">
-            SaaS platform that helps SMEs manage CSRD and ESRS reporting easily, quickly, and cost-effectively with Generative AI.
-          </p>
+        <div className="my-10 flex flex-col gap-6">
+          {/* Headline */}
+          <div>
+            <h1 className="text-3xl lg:text-4xl font-heading font-bold leading-tight mb-3">
+              Turn Sustainability Compliance<br />into Business Strategy with AI
+            </h1>
+            <p className="text-base lg:text-lg opacity-80 font-sans leading-relaxed">
+              AI-powered platform for SMEs navigating<br className="hidden lg:block" /> CSRD and ESRS reporting — from materiality<br className="hidden lg:block" /> assessment to carbon accounting.
+            </p>
+          </div>
+
+          {/* Divider */}
+          <div className="w-10 h-0.5 rounded-full" style={{ backgroundColor: "#ccff00", opacity: 0.6 }} />
+
+          {/* Feature list */}
+          <div className="flex flex-col gap-2 font-sans text-sm lg:text-base">
+            {[
+              "Sustainability Business Canvas Model",
+              "Internal & External Analysis",
+              "Double Materiality Assessment",
+              "InsightHub & Recommendations",
+              "KPI Dashboard & Goal Setting",
+              "Task Management",
+            ].map((f) => (
+              <div key={f} className="flex items-center gap-2.5">
+                <span className="flex-shrink-0 text-base font-bold" style={{ color: "#ccff00" }}>✓</span>
+                <span className="opacity-90">{f}</span>
+              </div>
+            ))}
+            {[
+              "Carbon Accounting",
+              "Evidence Vault",
+            ].map((f) => (
+              <div key={f} className="flex items-center gap-2.5 opacity-50">
+                <span className="flex-shrink-0 text-base">—</span>
+                <span>{f}</span>
+                <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full border border-white/30 tracking-wide uppercase">
+                  Q3 2026
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="text-sm opacity-60 font-sans">
-          ESRS · GRI · Double Materiality · Balanced Scorecard
+
+        {/* Footer badges */}
+        <div className="flex flex-wrap gap-2 font-sans">
+          {["CSRD/ESRS Ready", "GRI Compatible"].map((tag) => (
+            <span
+              key={tag}
+              className="text-xs font-semibold px-3 py-1 rounded-full border"
+              style={{ borderColor: "rgba(204,255,0,0.4)", color: "rgba(255,255,255,0.7)" }}
+            >
+              {tag}
+            </span>
+          ))}
         </div>
       </div>
 
