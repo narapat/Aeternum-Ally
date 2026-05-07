@@ -541,6 +541,7 @@ const App: React.FC = () => {
                     cachedInsight={cachedInsight}
                     members={members}
                     currentUserId={user.id}
+                    isSidebarCollapsed={isSidebarCollapsed}
                     onNavigateToInsightHub={() => setView('insight_hub')}
                   />
                 )}

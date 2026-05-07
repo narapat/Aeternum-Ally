@@ -11,7 +11,8 @@ import { generateTasks } from '../services/geminiService';
 import {
   Sparkles, ListChecks, RefreshCw, CheckCircle2, Circle, Clock,
   AlertCircle, Loader2, ChevronDown, ChevronUp, Trash2, ArrowUpRight,
-  Filter, Plus, CheckSquare, Square, User, CalendarDays, Tag, Zap, Shield, TrendingUp,
+  Filter, Plus, CheckSquare, Square, User, CalendarDays, Tag, Shield, TrendingUp,
+  ArrowUpDown,
 } from 'lucide-react';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -25,10 +26,13 @@ interface Props {
   cachedInsight: InsightHubResponse | null;
   members: OrgMember[];
   currentUserId: string;
+  isSidebarCollapsed?: boolean;
   onNavigateToInsightHub?: () => void;
 }
 
 type Tab = 'generator' | 'manager';
+type GeneratorSort = 'priority' | 'type' | 'time';
+type ManagerSort = 'created' | 'priority' | 'due_date' | 'status';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -53,6 +57,46 @@ const STATUS_META: Record<TaskStatus, { label: string; icon: React.ReactNode; co
 };
 
 const TYPE_ORDER: TaskType[] = ['fix', 'comply', 'improve'];
+const PRIORITY_RANK: Record<TaskPriority, number> = { high: 0, medium: 1, low: 2 };
+
+function sortSuggested(tasks: SuggestedTask[], by: GeneratorSort): SuggestedTask[] {
+  return [...tasks].sort((a, b) => {
+    if (by === 'priority') return PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
+    if (by === 'type') return TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type);
+    if (by === 'time') {
+      // parse "N hours/days/weeks" to minutes for comparison
+      const toMins = (s: string | null) => {
+        if (!s) return 99999;
+        const m = s.match(/(\d+)\s*(hour|day|week)/i);
+        if (!m) return 99999;
+        const n = Number(m[1]);
+        if (/week/i.test(m[2])) return n * 5 * 8 * 60;
+        if (/day/i.test(m[2])) return n * 8 * 60;
+        return n * 60;
+      };
+      return toMins(a.estimated_time) - toMins(b.estimated_time);
+    }
+    return 0;
+  });
+}
+
+function sortTasks(tasks: Task[], by: ManagerSort): Task[] {
+  return [...tasks].sort((a, b) => {
+    if (by === 'priority') return PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
+    if (by === 'status') {
+      const order: Record<TaskStatus, number> = { todo: 0, in_progress: 1, done: 2 };
+      return order[a.status] - order[b.status];
+    }
+    if (by === 'due_date') {
+      if (!a.due_date && !b.due_date) return 0;
+      if (!a.due_date) return 1;
+      if (!b.due_date) return -1;
+      return a.due_date.localeCompare(b.due_date);
+    }
+    // created (default) — already ordered by DB descending
+    return 0;
+  });
+}
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -98,6 +142,7 @@ const GeneratorTab: React.FC<GeneratorProps> = ({
   // Per-task overrides for assignee / due-date before promoting
   const [overrides, setOverrides] = useState<Record<string, { assignee_id?: string | null; due_date?: string | null }>>({});
   const [expandedGroups, setExpandedGroups] = useState<Set<TaskType>>(new Set(TYPE_ORDER));
+  const [sortBy, setSortBy] = useState<GeneratorSort>('priority');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -174,8 +219,9 @@ const GeneratorTab: React.FC<GeneratorProps> = ({
     });
   };
 
+  const sortedSuggested = sortSuggested(suggested, sortBy);
   const grouped = TYPE_ORDER.reduce<Record<TaskType, SuggestedTask[]>>((acc, type) => {
-    acc[type] = suggested.filter(t => t.type === type);
+    acc[type] = sortedSuggested.filter(t => t.type === type);
     return acc;
   }, { fix: [], comply: [], improve: [] });
 
@@ -200,14 +246,30 @@ const GeneratorTab: React.FC<GeneratorProps> = ({
             AI analyses your DMA quality checks, material topics, and KPIs to generate an action list.
           </p>
         </div>
-        <button
-          onClick={handleGenerate}
-          disabled={generating}
-          className="flex items-center gap-2 px-4 py-2 bg-esg-600 hover:bg-esg-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
-        >
-          {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-          {generating ? 'Generating…' : (suggested.length > 0 ? 'Re-generate' : 'Generate Tasks')}
-        </button>
+        <div className="flex items-center gap-2">
+          {suggested.length > 0 && (
+            <div className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
+              <ArrowUpDown className="w-3.5 h-3.5" />
+              <select
+                className="border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 outline-none text-sm"
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value as GeneratorSort)}
+              >
+                <option value="priority">Sort: Priority</option>
+                <option value="type">Sort: Type</option>
+                <option value="time">Sort: Est. Time</option>
+              </select>
+            </div>
+          )}
+          <button
+            onClick={handleGenerate}
+            disabled={generating}
+            className="flex items-center gap-2 px-4 py-2 bg-esg-600 hover:bg-esg-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            {generating ? 'Generating…' : (suggested.length > 0 ? 'Re-generate' : 'Generate Tasks')}
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -379,6 +441,7 @@ const ManagerTab: React.FC<ManagerProps> = ({ orgId, members, refreshTrigger }) 
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<TaskStatus | 'all'>('all');
   const [filterType, setFilterType] = useState<TaskType | 'all'>('all');
+  const [sortBy, setSortBy] = useState<ManagerSort>('created');
   const [showAddModal, setShowAddModal] = useState(false);
 
   const load = useCallback(async () => {
@@ -407,9 +470,12 @@ const ManagerTab: React.FC<ManagerProps> = ({ orgId, members, refreshTrigger }) 
     setTasks(prev => prev.filter(t => t.id !== id));
   };
 
-  const filtered = tasks.filter(t =>
-    (filterStatus === 'all' || t.status === filterStatus) &&
-    (filterType === 'all' || t.type === filterType),
+  const filtered = sortTasks(
+    tasks.filter(t =>
+      (filterStatus === 'all' || t.status === filterStatus) &&
+      (filterType === 'all' || t.type === filterType),
+    ),
+    sortBy,
   );
 
   const stats = {
@@ -450,7 +516,7 @@ const ManagerTab: React.FC<ManagerProps> = ({ orgId, members, refreshTrigger }) 
         })}
       </div>
 
-      {/* Filters + add */}
+      {/* Filters + sort + add */}
       <div className="flex flex-wrap items-center gap-3">
         <Filter className="w-4 h-4 text-slate-400 flex-shrink-0" />
         <select
@@ -473,6 +539,19 @@ const ManagerTab: React.FC<ManagerProps> = ({ orgId, members, refreshTrigger }) 
           <option value="comply">Comply</option>
           <option value="improve">Improve</option>
         </select>
+        <div className="flex items-center gap-1.5">
+          <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
+          <select
+            className="text-sm border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 outline-none"
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value as ManagerSort)}
+          >
+            <option value="created">Newest first</option>
+            <option value="priority">Priority</option>
+            <option value="status">Status</option>
+            <option value="due_date">Due Date</option>
+          </select>
+        </div>
         <div className="flex-1" />
         <button
           onClick={() => setShowAddModal(true)}
@@ -726,13 +805,13 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ orgId, members, onClose, on
 
 const TaskManagement: React.FC<Props> = ({
   orgId, assessments, kpis, swotData, profile, cachedInsight,
-  members, currentUserId, onNavigateToInsightHub,
+  members, currentUserId, isSidebarCollapsed, onNavigateToInsightHub,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('generator');
   const [managerRefresh, setManagerRefresh] = useState(0);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className={`mx-auto space-y-6 transition-all duration-300 ${isSidebarCollapsed ? 'max-w-7xl' : 'max-w-5xl'}`}>
       {/* Tab bar */}
       <div className="flex gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
         <button
