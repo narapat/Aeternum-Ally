@@ -90,15 +90,34 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
     setLoadingScoring(false);
   };
 
-  // AI Auto-Fill: generate descriptions then immediately score based on them
+  const [autoFillError, setAutoFillError] = useState<string | null>(null);
+
+  // AI Auto-Fill: generate descriptions then auto-save so data is persisted immediately.
+  // Scoring is NOT triggered automatically — user can request it manually after reviewing.
   const handleAutoFill = async () => {
     setLoadingAI(true);
-    const suggestions = await generateAssessmentSuggestions(profile, topic);
-    setImpactDesc(suggestions.impactSuggestion);
-    setFinancialDesc(suggestions.financialSuggestion);
-    setLoadingAI(false);
-    // Trigger scoring with the freshly generated descriptions
-    await runAIScoring(suggestions.impactSuggestion, suggestions.financialSuggestion, topic);
+    setAutoFillError(null);
+    try {
+      const suggestions = await generateAssessmentSuggestions(profile, topic);
+      const imValue = calculateImpactMateriality(impactScore);
+      const fmValue = calculateFinancialMateriality(financialScore);
+      onSave({
+        id: initialData?.id || Math.random().toString(36).substr(2, 9),
+        topic,
+        impactDescription: suggestions.impactSuggestion,
+        financialDescription: suggestions.financialSuggestion,
+        impactScore,
+        financialScore,
+        impactMaterialityValue: imValue,
+        financialMaterialityValue: fmValue,
+        isMaterial: imValue > 40 || fmValue > 40,
+        aiScoringSuggestion: initialData?.aiScoringSuggestion ?? null,
+      });
+    } catch (err: any) {
+      setAutoFillError(err?.message ?? "AI auto-fill failed. Please try again.");
+    } finally {
+      setLoadingAI(false);
+    }
   };
 
   // Manual trigger: user typed their own descriptions and wants AI score suggestions
@@ -179,7 +198,7 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
             onClick={handleAutoFill}
             disabled={loadingAI || loadingScoring}
             className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-3 py-1.5 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors text-sm font-medium disabled:opacity-50 shrink-0"
-            title="AI writes descriptions then immediately suggests scores"
+            title="AI writes descriptions and auto-saves. Request AI scores separately."
           >
             {loadingAI ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cpu className="w-4 h-4" />}
             AI Auto-Fill
@@ -244,6 +263,17 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
           <X className="w-6 h-6" />
         </button>
       </div>
+
+      {/* ── Auto-fill error banner ── */}
+      {autoFillError && (
+        <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span>{autoFillError}</span>
+          <button type="button" onClick={() => setAutoFillError(null)} className="ml-auto text-red-400 hover:text-red-600">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* ── Topic selector ── */}
       <div className="max-w-sm space-y-1.5">

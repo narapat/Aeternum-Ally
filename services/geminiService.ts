@@ -55,16 +55,12 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "An unexpected error occurred. Please try again.";
 }
 
+// Re-throws on error — caller must catch and show an error state.
 export const generateAssessmentSuggestions = async (
   profile: CompanyProfile,
   topic: ESRSTopic
-) => {
-  try {
-    return await callApi("generateAssessmentSuggestions", { profile, topic });
-  } catch (error) {
-    const msg = errorMessage(error);
-    return { impactSuggestion: msg, financialSuggestion: msg };
-  }
+): Promise<{ impactSuggestion: string; financialSuggestion: string }> => {
+  return await callApi("generateAssessmentSuggestions", { profile, topic });
 };
 
 export const generateAssessmentScoring = async (

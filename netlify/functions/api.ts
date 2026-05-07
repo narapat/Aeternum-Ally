@@ -332,69 +332,69 @@ async function generateAssessmentSuggestions(
   model: string,
   { profile, topic }: any
 ) {
-  // Extract topic code (e.g. "E1" from "E1 Climate Change")
   const topicCode = String(topic).split(" ")[0];
   const guidance = ESRS_TOPIC_GUIDANCE[topicCode];
-  const impactGuidance = guidance
-    ? `Cover these ESRS-required disclosure areas: ${guidance.impactAreas}.`
-    : "Cover the key environmental or social impacts relevant to this topic.";
-  const financialGuidance = guidance
-    ? `Cover these ESRS-required financial exposure areas: ${guidance.financialAreas}.`
-    : "Cover key financial risks and opportunities linked to this topic.";
-
   const companyName = profile.name || "this company";
   const industryCtx = [profile.industry, profile.isicCode].filter(Boolean).join(", ISIC: ");
+  const companyCtx = buildCompanyContext(profile);
 
-  const prompt = `
-    You are a senior sustainability consultant writing a Double Materiality Assessment for a CSRD/ESRS report.
+  const sharedRules = `
+    Ground every sentence in ${companyName}'s actual industry (${industryCtx}), business model,
+    products/services, and operations described above.
+    Select only the ESRS areas genuinely material for a company of this type — skip irrelevant ones.
+    Name specific activities, processes, or products. Do not write generic statements.
+    Do NOT use vague hedging ("may have", "could affect"). Be direct. Length: 80–120 words.
+  `.trim();
+
+  const impactPrompt = `
+    You are a senior sustainability consultant writing a CSRD/ESRS Double Materiality Assessment.
 
     --- COMPANY CONTEXT ---
-    ${buildCompanyContext(profile)}
+    ${companyCtx}
     -----------------------
-
     ESRS Topic: "${topic}"
 
-    Your task: write two descriptions that are SPECIFIC TO THIS COMPANY and will PASS an ESRS quality review.
+    Write the IMPACT DESCRIPTION (Inside-out / Impact Materiality):
+    Describe how ${companyName} impacts people and the environment on this topic.
+    ${guidance ? `ESRS disclosure areas to address (select relevant ones): ${guidance.impactAreas}` : "Cover key environmental and social impact pathways."}
 
-    Critical rules:
-    - Ground every sentence in ${companyName}'s actual industry (${industryCtx}), business model, products/services, and operations as described above.
-    - From the ESRS disclosure areas listed below, SELECT only the ones that are genuinely material for a company of this type — do NOT list areas that are irrelevant to this industry.
-    - Name the company's specific activities, processes, or products. Do not write generic statements that could apply to any company.
-    - Do NOT use vague hedging like "may have", "could affect", or "might result in". Be direct.
-
-    ESRS disclosure areas to consider for the Impact Description:
-    ${impactGuidance}
-
-    ESRS disclosure areas to consider for the Financial Description:
-    ${financialGuidance}
-
-    1. Impact Description (Inside-out / Impact Materiality):
-    Describe how ${companyName} actually impacts people and the environment on this topic, referencing its specific operations and value chain. Length: 80–120 words.
-
-    2. Financial Description (Outside-in / Financial Materiality):
-    Describe how this sustainability topic creates concrete financial risks or opportunities for ${companyName}, naming regulatory frameworks, cost lines, or market mechanisms relevant to its industry. Length: 80–120 words.
-
-    Return ONLY a JSON object. No markdown, no backticks, no explanation.
+    ${sharedRules}
+    Return ONLY the plain text description. No JSON, no markdown, no label.
   `;
 
-  const response = await ai.models.generateContent({
-    model,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          impactSuggestion: { type: Type.STRING },
-          financialSuggestion: { type: Type.STRING },
-        },
-      },
-    },
-  });
+  const financialPrompt = `
+    You are a senior sustainability consultant writing a CSRD/ESRS Double Materiality Assessment.
+
+    --- COMPANY CONTEXT ---
+    ${companyCtx}
+    -----------------------
+    ESRS Topic: "${topic}"
+
+    Write the FINANCIAL DESCRIPTION (Outside-in / Financial Materiality):
+    Describe how this sustainability topic creates financial risks or opportunities for ${companyName}.
+    Name regulatory frameworks, cost lines, or market mechanisms relevant to its industry.
+    ${guidance ? `ESRS financial exposure areas to address (select relevant ones): ${guidance.financialAreas}` : "Cover key financial risks and opportunities."}
+
+    ${sharedRules}
+    Return ONLY the plain text description. No JSON, no markdown, no label.
+  `;
+
+  // Run both descriptions in parallel — halves latency vs a single combined call
+  const [impactResp, financialResp] = await Promise.all([
+    ai.models.generateContent({ model, contents: impactPrompt }),
+    ai.models.generateContent({ model, contents: financialPrompt }),
+  ]);
+
+  const impactTokens = extractTokens(impactResp);
+  const financialTokens = extractTokens(financialResp);
 
   return {
-    result: parseAIJson(response.text, { impactSuggestion: "", financialSuggestion: "" }),
-    ...extractTokens(response),
+    result: {
+      impactSuggestion: impactResp.text?.trim() ?? "",
+      financialSuggestion: financialResp.text?.trim() ?? "",
+    },
+    inputTokens: impactTokens.inputTokens + financialTokens.inputTokens,
+    outputTokens: impactTokens.outputTokens + financialTokens.outputTokens,
   };
 }
 
