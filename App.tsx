@@ -513,10 +513,10 @@ const App: React.FC = () => {
                     onQualityCheckReady={(assessmentId, check) => {
                       if (orgId) saveQualityCheck(assessmentId, orgId, check);
                     }}
-                    onEditTopic={(topicCode, qualityCheck) => {
-                      const match = assessments.find(a =>
-                        String(a.topic).startsWith(topicCode)
-                      );
+                    onEditTopic={(topicCode, assessmentId, qualityCheck) => {
+                      // Prefer the exact record that was analyzed (by ID); fall back to topic code match.
+                      const match = assessments.find(a => a.id === assessmentId)
+                        ?? assessments.find(a => String(a.topic).startsWith(topicCode));
                       setEditingAssessment(match ?? null);
                       setHubQualityCheck(qualityCheck ?? null);
                       setIsFormOpen(true);

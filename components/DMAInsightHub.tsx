@@ -37,7 +37,8 @@ interface Props {
   swotData: SwotAnalysis;
   onBack: () => void;
   onContinue: () => void;
-  onEditTopic: (topicCode: string, qualityCheck?: QualityCheck) => void;
+  /** assessmentId is the UUID of the specific record that was analyzed (deduplicated). */
+  onEditTopic: (topicCode: string, assessmentId: string, qualityCheck?: QualityCheck) => void;
   cachedInsight?: InsightHubResponse | null;
   onInsightReady?: (result: InsightHubResponse) => void;
   /** Called as each per-topic quality check resolves — used to persist results to DB. */
@@ -176,11 +177,18 @@ const DMAInsightHub: React.FC<Props> = ({
   const hasFixIssues = completedChecks.some((c) => c.status === "needs_fix");
   const isAnalysing = [...topicStates.values()].some((s) => s.phase === "loading");
 
+  // Map topicCode → assessmentId for the deduplicated record — used by edit links.
+  const topicToAssessmentId = React.useMemo(
+    () => new Map(assessments.map((a) => [String(a.topic).split(" ")[0], a.id])),
+    [assessments],
+  );
+
   const handleEditTopic = React.useCallback((topicCode: string, qualityCheck?: QualityCheck) => {
     const state = topicStates.get(topicCode);
     const qc = qualityCheck ?? (state?.phase === "done" ? state.check : undefined);
-    onEditTopic(topicCode, qc);
-  }, [topicStates, onEditTopic]);
+    const assessmentId = topicToAssessmentId.get(topicCode) ?? "";
+    onEditTopic(topicCode, assessmentId, qc);
+  }, [topicStates, topicToAssessmentId, onEditTopic]);
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
@@ -203,7 +211,7 @@ const DMAInsightHub: React.FC<Props> = ({
       </div>
 
       {/* Score banner — updates as topic cards arrive */}
-      <ScoreBanner assessments={assessments} checks={completedChecks} />
+      <ScoreBanner assessments={assessments} rawCount={rawAssessments.length} checks={completedChecks} />
 
       {/* Quality checks — each card appears as its topic call resolves */}
       {assessments.length > 0 && (
@@ -301,12 +309,13 @@ const SynthesisSection: React.FC<{
 // Score banner
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ScoreBanner: React.FC<{ assessments: AssessmentData[]; checks: QualityCheck[] }> = ({
-  assessments,
-  checks,
-}) => {
+const ScoreBanner: React.FC<{
+  assessments: AssessmentData[];
+  rawCount: number;
+  checks: QualityCheck[];
+}> = ({ assessments, rawCount, checks }) => {
+  const uniqueTopics = assessments.length;
   const materialCount = assessments.filter((a) => a.isMaterial).length;
-  const completionPct = assessments.length === 0 ? 0 : Math.round((assessments.length / 10) * 100);
   const fixCount = checks.filter((c) => c.status === "needs_fix").length;
   const reviewCount = checks.filter((c) => c.status === "review").length;
   const okCount = checks.filter((c) => c.status === "ok").length;
@@ -322,24 +331,31 @@ const ScoreBanner: React.FC<{ assessments: AssessmentData[]; checks: QualityChec
       ? "text-emerald-500"
       : "text-slate-400";
 
+  // Sub-label shown when there are duplicate records for the same topic
+  const topicsLabel = rawCount > uniqueTopics
+    ? `${rawCount} records · ${uniqueTopics} unique`
+    : "ESRS Topics";
+
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
       {[
-        { label: "Material Topics", value: `${materialCount}/10`, color: "text-esg-600 dark:text-esg-400" },
-        { label: "Assessments Done", value: `${completionPct}%`, color: "text-blue-600 dark:text-blue-400" },
+        { label: "Material Topics", value: `${materialCount}/10`, color: "text-esg-600 dark:text-esg-400", sub: null },
+        { label: "Topics Covered", value: `${uniqueTopics}/10`, color: "text-blue-600 dark:text-blue-400", sub: topicsLabel },
         {
           label: "Quality Status",
           value: `${fixCount > 0 ? `${fixCount} fix` : reviewCount > 0 ? `${reviewCount} review` : `${okCount} ok`}`,
           color: fixCount > 0 ? "text-red-500" : reviewCount > 0 ? "text-amber-500" : "text-emerald-500",
+          sub: null,
         },
-        { label: "Statement Ready", value: readiness, color: readinessColor },
-      ].map(({ label, value, color }) => (
+        { label: "Statement Ready", value: readiness, color: readinessColor, sub: null },
+      ].map(({ label, value, color, sub }) => (
         <div
           key={label}
           className="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm text-center"
         >
           <div className={`text-2xl font-bold ${color}`}>{value}</div>
           <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{label}</div>
+          {sub && <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{sub}</div>}
         </div>
       ))}
     </div>
