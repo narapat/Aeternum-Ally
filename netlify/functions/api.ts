@@ -257,6 +257,12 @@ async function runAction(
   }
 }
 
+// thinkingBudget: 0 disables extended thinking on Flash models, keeping latency under 9s.
+// Pro models do not support budget=0 (minimum is 128) — return empty config for them.
+function noThinkingConfig(model: string): object {
+  return model.includes("flash") ? { thinkingConfig: { thinkingBudget: 0 } } : {};
+}
+
 // Pull token counts out of Gemini's response in a tolerant way.
 function extractTokens(response: any): { inputTokens: number; outputTokens: number } {
   const u = response?.usageMetadata ?? {};
@@ -419,11 +425,9 @@ ${(qualityCheckContext.issues as any[]).map((i: any) =>
   `;
 
   // Run both descriptions in parallel — halves latency vs a single combined call.
-  // thinkingBudget: 0 disables extended thinking on 2.5-flash to keep latency under 9s.
-  const noThinking = { thinkingConfig: { thinkingBudget: 0 } };
   const [impactResp, financialResp] = await Promise.all([
-    ai.models.generateContent({ model, contents: impactPrompt, config: noThinking }),
-    ai.models.generateContent({ model, contents: financialPrompt, config: noThinking }),
+    ai.models.generateContent({ model, contents: impactPrompt, config: noThinkingConfig(model) }),
+    ai.models.generateContent({ model, contents: financialPrompt, config: noThinkingConfig(model) }),
   ]);
 
   const impactTokens = extractTokens(impactResp);
@@ -683,6 +687,7 @@ Return ONLY valid JSON, no markdown:
       model,
       contents: prompt,
       config: {
+        ...noThinkingConfig(model),
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -967,8 +972,7 @@ Return ONLY valid JSON — no markdown, no backticks.
     model,
     contents: prompt,
     config: {
-      // thinkingBudget: 0 disables extended thinking — keeps each per-topic call under 9s.
-      thinkingConfig: { thinkingBudget: 0 },
+      ...noThinkingConfig(model),
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -1053,8 +1057,7 @@ Return ONLY valid JSON — no markdown, no backticks.
     model,
     contents: prompt,
     config: {
-      // thinkingBudget: 0 disables extended thinking to stay within the 9s fence.
-      thinkingConfig: { thinkingBudget: 0 },
+      ...noThinkingConfig(model),
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
