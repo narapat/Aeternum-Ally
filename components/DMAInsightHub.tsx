@@ -60,7 +60,7 @@ type SynthesisPhase =
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DMAInsightHub: React.FC<Props> = ({
-  assessments,
+  assessments: rawAssessments,
   profile,
   bmcData,
   swotData,
@@ -70,9 +70,32 @@ const DMAInsightHub: React.FC<Props> = ({
   cachedInsight,
   onInsightReady,
 }) => {
+  // Deduplicate by topic code — keep the highest-scored row per topic.
+  // Duplicate DB rows happen when a user saves the same ESRS topic more than once.
+  const assessments = React.useMemo(() => {
+    const seen = new Map<string, AssessmentData>();
+    for (const a of rawAssessments) {
+      const code = String(a.topic).split(" ")[0];
+      const existing = seen.get(code);
+      const score = (a.impactMaterialityValue ?? 0) + (a.financialMaterialityValue ?? 0);
+      const existingScore = existing ? (existing.impactMaterialityValue ?? 0) + (existing.financialMaterialityValue ?? 0) : -1;
+      if (!existing || score > existingScore) seen.set(code, a);
+    }
+    return [...seen.values()];
+  }, [rawAssessments]);
+
   const [topicStates, setTopicStates] = useState<Map<string, TopicPhase>>(() => {
     if (cachedInsight) {
-      return new Map(cachedInsight.qualityChecks.map((c) => [c.topic, { phase: "done", check: c } as TopicPhase]));
+      const map = new Map(cachedInsight.qualityChecks.map((c) => [c.topic, { phase: "done", check: c } as TopicPhase]));
+      // Topics that timed out in a previous run are absent from the cache.
+      // Show them as an error so the user can Re-analyse instead of spinning forever.
+      assessments.forEach((a) => {
+        const code = String(a.topic).split(" ")[0];
+        if (!map.has(code)) {
+          map.set(code, { phase: "error", message: "Previous check timed out — click Re-analyse to retry." });
+        }
+      });
+      return map;
     }
     return new Map(assessments.map((a) => [String(a.topic).split(" ")[0], { phase: "loading" } as TopicPhase]));
   });
