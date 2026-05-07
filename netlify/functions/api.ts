@@ -342,28 +342,37 @@ async function generateAssessmentSuggestions(
     ? `Cover these ESRS-required financial exposure areas: ${guidance.financialAreas}.`
     : "Cover key financial risks and opportunities linked to this topic.";
 
+  const companyName = profile.name || "this company";
+  const industryCtx = [profile.industry, profile.isicCode].filter(Boolean).join(", ISIC: ");
+
   const prompt = `
     You are a senior sustainability consultant writing a Double Materiality Assessment for a CSRD/ESRS report.
 
+    --- COMPANY CONTEXT ---
     ${buildCompanyContext(profile)}
+    -----------------------
 
     ESRS Topic: "${topic}"
 
-    Write two descriptions that will PASS an ESRS quality review:
+    Your task: write two descriptions that are SPECIFIC TO THIS COMPANY and will PASS an ESRS quality review.
+
+    Critical rules:
+    - Ground every sentence in ${companyName}'s actual industry (${industryCtx}), business model, products/services, and operations as described above.
+    - From the ESRS disclosure areas listed below, SELECT only the ones that are genuinely material for a company of this type — do NOT list areas that are irrelevant to this industry.
+    - Name the company's specific activities, processes, or products. Do not write generic statements that could apply to any company.
+    - Do NOT use vague hedging like "may have", "could affect", or "might result in". Be direct.
+
+    ESRS disclosure areas to consider for the Impact Description:
+    ${impactGuidance}
+
+    ESRS disclosure areas to consider for the Financial Description:
+    ${financialGuidance}
 
     1. Impact Description (Inside-out / Impact Materiality):
-    Describe how ${profile.name || "this company"} impacts people and the environment on this topic.
-    ${impactGuidance}
-    Be concrete: name specific activities, processes, or products. Reference actual impact pathways.
-    Do NOT use vague language like "may have impacts" or "could affect". State what the company does and what impact that has.
-    Length: 80–120 words.
+    Describe how ${companyName} actually impacts people and the environment on this topic, referencing its specific operations and value chain. Length: 80–120 words.
 
     2. Financial Description (Outside-in / Financial Materiality):
-    Describe how this sustainability topic creates financial risks or opportunities for ${profile.name || "this company"}.
-    ${financialGuidance}
-    Be concrete: name regulatory frameworks, market mechanisms, cost/revenue lines, or time horizons.
-    Do NOT use vague language. Quantify where possible (e.g. "energy costs represent X% of OPEX" if known).
-    Length: 80–120 words.
+    Describe how this sustainability topic creates concrete financial risks or opportunities for ${companyName}, naming regulatory frameworks, cost lines, or market mechanisms relevant to its industry. Length: 80–120 words.
 
     Return ONLY a JSON object. No markdown, no backticks, no explanation.
   `;
