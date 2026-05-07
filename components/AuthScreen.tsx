@@ -84,7 +84,7 @@ const AuthScreen: React.FC = () => {
           <img
             src="/AeternumAlly-Logo-Full.png"
             alt="AeternumAlly"
-            className="h-14 lg:h-16 w-auto object-contain"
+            className="w-56 lg:w-72 h-auto object-contain"
           />
         </div>
         <div className="my-10 flex flex-col gap-6">
