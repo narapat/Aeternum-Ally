@@ -6,6 +6,9 @@
     <title>Aeternum Ally</title>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/favicon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -21,7 +24,18 @@
                 700: '#15803d',
                 800: '#166534',
                 900: '#14532d',
+              },
+              brand: {
+                teal: '#004d4d',
+                'teal-dark': '#003838',
+                'teal-light': '#006666',
+                lime: '#ccff00',
+                'lime-dark': '#aadd00',
               }
+            },
+            fontFamily: {
+              heading: ['Outfit', 'sans-serif'],
+              sans: ['Inter', 'Noto Sans Thai', 'sans-serif'],
             }
           }
         }
