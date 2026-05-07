@@ -330,13 +330,24 @@ const ESRS_TOPIC_GUIDANCE: Record<string, { impactAreas: string; financialAreas:
 async function generateAssessmentSuggestions(
   ai: GoogleGenAI,
   model: string,
-  { profile, topic }: any
+  { profile, topic, qualityCheckContext }: any
 ) {
   const topicCode = String(topic).split(" ")[0];
   const guidance = ESRS_TOPIC_GUIDANCE[topicCode];
   const companyName = profile.name || "this company";
   const industryCtx = [profile.industry, profile.isicCode].filter(Boolean).join(", ISIC: ");
   const companyCtx = buildCompanyContext(profile);
+
+  // If quality check issues are provided, convert them to explicit AI instructions
+  const qualityFixBlock = qualityCheckContext?.issues?.length
+    ? `
+QUALITY CHECK FEEDBACK — the previous description failed review on these points.
+Your new description MUST explicitly address each one:
+${(qualityCheckContext.issues as any[]).map((i: any) =>
+  `• [${(i.severity ?? "").toUpperCase()}] ${i.title}: ${i.description} — Fix: ${i.fix_suggestion} (${i.esrs_ref})`
+).join('\n')}
+`.trim()
+    : "";
 
   const sharedRules = `
     Ground every sentence in ${companyName}'s actual industry (${industryCtx}), business model,
@@ -357,6 +368,7 @@ async function generateAssessmentSuggestions(
     Write the IMPACT DESCRIPTION (Inside-out / Impact Materiality):
     Describe how ${companyName} impacts people and the environment on this topic.
     ${guidance ? `ESRS disclosure areas to address (select relevant ones): ${guidance.impactAreas}` : "Cover key environmental and social impact pathways."}
+    ${qualityFixBlock ? `\n${qualityFixBlock}` : ""}
 
     ${sharedRules}
     Return ONLY the plain text description. No JSON, no markdown, no label.
@@ -374,6 +386,7 @@ async function generateAssessmentSuggestions(
     Describe how this sustainability topic creates financial risks or opportunities for ${companyName}.
     Name regulatory frameworks, cost lines, or market mechanisms relevant to its industry.
     ${guidance ? `ESRS financial exposure areas to address (select relevant ones): ${guidance.financialAreas}` : "Cover key financial risks and opportunities."}
+    ${qualityFixBlock ? `\n${qualityFixBlock}` : ""}
 
     ${sharedRules}
     Return ONLY the plain text description. No JSON, no markdown, no label.

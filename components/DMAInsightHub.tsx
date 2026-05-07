@@ -36,7 +36,7 @@ interface Props {
   swotData: SwotAnalysis;
   onBack: () => void;
   onContinue: () => void;
-  onEditTopic: (topicCode: string) => void;
+  onEditTopic: (topicCode: string, qualityCheck?: QualityCheck) => void;
   cachedInsight?: InsightHubResponse | null;
   onInsightReady?: (result: InsightHubResponse) => void;
 }
@@ -90,6 +90,14 @@ const DMAInsightHub: React.FC<Props> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Wrap onEditTopic so sub-components don't need access to the full checks list.
+  // QualityCheckCard passes its own check explicitly; ActionCard passes just topicCode
+  // and the lookup happens here.
+  const handleEditTopic = React.useCallback((topicCode: string, qualityCheck?: QualityCheck) => {
+    const qc = qualityCheck ?? insight?.qualityChecks.find((c) => c.topic === topicCode);
+    onEditTopic(topicCode, qc);
+  }, [insight, onEditTopic]);
+
   const hasFixIssues = insight?.qualityChecks.some((c) => c.status === "needs_fix") ?? false;
 
   if (loading) return <LoadingState />;
@@ -134,7 +142,7 @@ const DMAInsightHub: React.FC<Props> = ({
 
       {/* Quality checks */}
       {insight && insight.qualityChecks.length > 0 && (
-        <QualityCheckSection checks={insight.qualityChecks} onEditTopic={onEditTopic} />
+        <QualityCheckSection checks={insight.qualityChecks} onEditTopic={handleEditTopic} />
       )}
 
       {/* Strategic insight */}
@@ -144,7 +152,7 @@ const DMAInsightHub: React.FC<Props> = ({
 
       {/* Recommended actions */}
       {insight && (
-        <RecommendedActionsSection actions={insight.recommendedActions} onEditTopic={onEditTopic} />
+        <RecommendedActionsSection actions={insight.recommendedActions} onEditTopic={handleEditTopic} />
       )}
 
       {/* Navigation */}
@@ -280,7 +288,7 @@ const statusConfig = {
 
 const QualityCheckSection: React.FC<{
   checks: QualityCheck[];
-  onEditTopic: (topicCode: string) => void;
+  onEditTopic: (topicCode: string, qualityCheck?: QualityCheck) => void;
 }> = ({ checks, onEditTopic }) => {
   const sorted = [...checks].sort((a, b) => {
     const order = { needs_fix: 0, review: 1, ok: 2 };
@@ -304,7 +312,7 @@ const QualityCheckSection: React.FC<{
 
 const QualityCheckCard: React.FC<{
   check: QualityCheck;
-  onEditTopic: (topicCode: string) => void;
+  onEditTopic: (topicCode: string, qualityCheck?: QualityCheck) => void;
 }> = ({ check, onEditTopic }) => {
   const [expanded, setExpanded] = useState(check.status === "needs_fix");
   const cfg = statusConfig[check.status] ?? statusConfig.ok;
@@ -383,7 +391,7 @@ const QualityCheckCard: React.FC<{
       {expanded && (
         <div className="px-4 pb-3 flex justify-end border-t border-slate-200/60 dark:border-slate-700/60 pt-2">
           <button
-            onClick={() => onEditTopic(check.topic)}
+            onClick={() => onEditTopic(check.topic, check)}
             className="text-xs font-medium text-esg-600 dark:text-esg-400 hover:underline flex items-center gap-1"
           >
             Edit {check.topic} assessment →

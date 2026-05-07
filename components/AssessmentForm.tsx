@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { AssessmentData, ESRSTopic, ImpactScore, FinancialScore, CompanyProfile, SustainabilityBusinessModel, SwotAnalysis, AssessmentScoring } from '../types';
+import { AssessmentData, ESRSTopic, ImpactScore, FinancialScore, CompanyProfile, SustainabilityBusinessModel, SwotAnalysis, AssessmentScoring, QualityCheck } from '../types';
 import { SCALE_OPTIONS, LIKELIHOOD_OPTIONS, calculateImpactMateriality, calculateFinancialMateriality, TOPICS } from '../constants';
 import { generateAssessmentSuggestions, generateAssessmentScoring } from '../services/geminiService';
 import { AlertCircle, TrendingUp, Cpu, Loader2, Save, X, Sparkles, RotateCcw, AlertTriangle } from 'lucide-react';
@@ -13,11 +13,12 @@ interface Props {
   onSave: (data: AssessmentData) => void;
   onCancel: () => void;
   initialData?: AssessmentData | null;
+  qualityCheckContext?: QualityCheck | null;
 }
 
 type OverrideKey = 'impact.scale' | 'impact.scope' | 'impact.irremediability' | 'impact.likelihood' | 'financial.magnitude' | 'financial.likelihood';
 
-const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, onCancel, initialData }) => {
+const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, onCancel, initialData, qualityCheckContext }) => {
   const [topic, setTopic] = useState<ESRSTopic>(ESRSTopic.E1);
   const [impactDesc, setImpactDesc] = useState('');
   const [financialDesc, setFinancialDesc] = useState('');
@@ -99,7 +100,7 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
     setLoadingAI(true);
     setAutoFillError(null);
     try {
-      const suggestions = await generateAssessmentSuggestions(profile, topic);
+      const suggestions = await generateAssessmentSuggestions(profile, topic, qualityCheckContext ?? undefined);
       setImpactDesc(suggestions.impactSuggestion);
       setFinancialDesc(suggestions.financialSuggestion);
       // Reset any prior scoring so "Get Suggestions" button reappears
@@ -256,6 +257,18 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
           <X className="w-6 h-6" />
         </button>
       </div>
+
+      {/* ── Quality check context banner ── */}
+      {qualityCheckContext && qualityCheckContext.issues.length > 0 && (
+        <div className="flex items-start gap-2 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-800 dark:text-amber-300">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-semibold">Quality check context loaded — </span>
+            {qualityCheckContext.issues.length} issue{qualityCheckContext.issues.length > 1 ? 's' : ''} found for {qualityCheckContext.topic}.
+            {' '}AI Auto-Fill will address these when regenerating descriptions.
+          </div>
+        </div>
+      )}
 
       {/* ── Auto-fill error banner ── */}
       {autoFillError && (

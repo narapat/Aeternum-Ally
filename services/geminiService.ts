@@ -1,4 +1,4 @@
-import { ESRSTopic, SustainabilityBusinessModel, SwotAnalysis, BSCPerspective, AssessmentData, CompanyProfile, AssessmentScoring, InsightHubResponse } from "../types";
+import { ESRSTopic, SustainabilityBusinessModel, SwotAnalysis, BSCPerspective, AssessmentData, CompanyProfile, AssessmentScoring, InsightHubResponse, QualityCheck } from "../types";
 import { supabase } from "../lib/supabaseClient";
 
 const API_ENDPOINT = "/.netlify/functions/api";
@@ -58,9 +58,10 @@ function errorMessage(error: unknown): string {
 // Re-throws on error — caller must catch and show an error state.
 export const generateAssessmentSuggestions = async (
   profile: CompanyProfile,
-  topic: ESRSTopic
+  topic: ESRSTopic,
+  qualityCheckContext?: QualityCheck,
 ): Promise<{ impactSuggestion: string; financialSuggestion: string }> => {
-  return await callApi("generateAssessmentSuggestions", { profile, topic });
+  return await callApi("generateAssessmentSuggestions", { profile, topic, qualityCheckContext });
 };
 
 export const generateAssessmentScoring = async (

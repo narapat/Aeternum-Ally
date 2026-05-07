@@ -24,7 +24,7 @@ import {
 } from './services/dbService';
 import { setOrganizationContext } from './services/geminiService';
 import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2 } from 'lucide-react';
-import type { InsightHubResponse } from './types';
+import type { InsightHubResponse, QualityCheck } from './types';
 
 const DEFAULT_PROFILE: CompanyProfile = {
   name: '', taxId: '', industry: '', isicCode: '', foundingYear: '',
@@ -76,6 +76,9 @@ const App: React.FC = () => {
   const [cachedInsight, setCachedInsight] = useState<InsightHubResponse | null>(null);
   // Whether the assessment form was opened from the insight hub (to enable "back to hub" navigation)
   const [editFromHub, setEditFromHub] = useState(false);
+  // Quality check context for the topic being edited from the hub — passed to AssessmentForm
+  // so AI auto-fill knows which issues to address
+  const [hubQualityCheck, setHubQualityCheck] = useState<QualityCheck | null>(null);
 
   // DB-backed singleton data (auto-save + manual save)
   const orgId = organization?.id ?? null;
@@ -136,6 +139,7 @@ const App: React.FC = () => {
       setCachedInsight(null);
       if (editFromHub) {
         setEditFromHub(false);
+        setHubQualityCheck(null);
         setView('insight_hub');
       } else {
         setView('dm_dashboard');
@@ -469,9 +473,14 @@ const App: React.FC = () => {
                           onCancel={() => {
                             setIsFormOpen(false);
                             setEditingAssessment(null);
-                            if (editFromHub) { setEditFromHub(false); setView('insight_hub'); }
+                            if (editFromHub) {
+                              setEditFromHub(false);
+                              setHubQualityCheck(null);
+                              setView('insight_hub');
+                            }
                           }}
                           initialData={editingAssessment}
+                          qualityCheckContext={editFromHub ? hubQualityCheck : null}
                         />
                       </div>
                     )}
@@ -492,11 +501,12 @@ const App: React.FC = () => {
                     onContinue={() => setView('kpi')}
                     cachedInsight={cachedInsight}
                     onInsightReady={setCachedInsight}
-                    onEditTopic={(topicCode) => {
+                    onEditTopic={(topicCode, qualityCheck) => {
                       const match = assessments.find(a =>
                         String(a.topic).startsWith(topicCode)
                       );
                       setEditingAssessment(match ?? null);
+                      setHubQualityCheck(qualityCheck ?? null);
                       setIsFormOpen(true);
                       setEditFromHub(true);
                       setView('assess');
