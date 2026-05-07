@@ -74,16 +74,27 @@ const DMAInsightHub: React.FC<Props> = ({
   onInsightReady,
   onQualityCheckReady,
 }) => {
-  // Deduplicate by topic code — keep the highest-scored row per topic.
-  // Duplicate DB rows happen when a user saves the same ESRS topic more than once.
+  // Deduplicate by topic code — one record per ESRS topic for quality check.
+  // Pick priority: (1) record with descriptions written > (2) most recently updated.
+  // Score is NOT used — it represents materiality significance, not completeness.
   const assessments = React.useMemo(() => {
+    const hasContent = (a: AssessmentData) =>
+      (a.impactDescription?.trim().length ?? 0) > 0 ||
+      (a.financialDescription?.trim().length ?? 0) > 0;
+    const updatedTime = (a: AssessmentData) =>
+      a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+
     const seen = new Map<string, AssessmentData>();
     for (const a of rawAssessments) {
       const code = String(a.topic).split(" ")[0];
       const existing = seen.get(code);
-      const score = (a.impactMaterialityValue ?? 0) + (a.financialMaterialityValue ?? 0);
-      const existingScore = existing ? (existing.impactMaterialityValue ?? 0) + (existing.financialMaterialityValue ?? 0) : -1;
-      if (!existing || score > existingScore) seen.set(code, a);
+      if (!existing) { seen.set(code, a); continue; }
+      const aContent = hasContent(a);
+      const existContent = hasContent(existing);
+      if (aContent && !existContent) { seen.set(code, a); continue; }
+      if (aContent === existContent && updatedTime(a) > updatedTime(existing)) {
+        seen.set(code, a);
+      }
     }
     return [...seen.values()];
   }, [rawAssessments]);

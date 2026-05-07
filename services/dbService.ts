@@ -303,6 +303,7 @@ export const fromDbAssessment = (row: any): AssessmentData => ({
   financialMaterialityValue: Number(row.financial_materiality_value ?? 0),
   isMaterial: !!row.is_material,
   aiScoringSuggestion: (row.ai_scoring_suggestion as (AssessmentScoring & { suggestedAt: string }) | null) ?? null,
+  updatedAt: row.updated_at ?? undefined,
 });
 
 const toDbAssessment = (data: AssessmentData, orgId: string) => ({
