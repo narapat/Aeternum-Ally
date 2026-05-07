@@ -28,6 +28,8 @@ interface Props {
   currentUserId: string;
   isSidebarCollapsed?: boolean;
   onNavigateToInsightHub?: () => void;
+  onNavigateToDMA?: () => void;
+  onNavigateToKPI?: () => void;
 }
 
 type Tab = 'generator' | 'manager';
@@ -391,7 +393,7 @@ const GeneratorTab: React.FC<GeneratorProps> = ({
                                   >
                                     <option value="">Unassigned</option>
                                     {members.map(m => (
-                                      <option key={m.user_id} value={m.user_id}>{m.email ?? m.user_id}</option>
+                                      <option key={m.id} value={m.id}>{m.email ?? m.user_id}</option>
                                     ))}
                                   </select>
                                 </div>
@@ -428,6 +430,52 @@ const GeneratorTab: React.FC<GeneratorProps> = ({
   );
 };
 
+// ── Source Link ────────────────────────────────────────────────────────────────
+
+const SOURCE_TYPE_META: Record<string, { label: string; color: string }> = {
+  insight_hub: { label: 'Insight Hub',  color: 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800' },
+  dma:         { label: 'DMA',          color: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' },
+  kpi:         { label: 'KPI',          color: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800' },
+};
+
+interface SourceLinkProps {
+  sourceType: string;
+  sourceId: string | null;
+  esrsRef: string | null;
+  onNavigateToDMA?: () => void;
+  onNavigateToInsightHub?: () => void;
+  onNavigateToKPI?: () => void;
+}
+
+const SourceLink: React.FC<SourceLinkProps> = ({
+  sourceType, sourceId, esrsRef, onNavigateToDMA, onNavigateToInsightHub, onNavigateToKPI,
+}) => {
+  const meta = SOURCE_TYPE_META[sourceType];
+  if (!meta) return null;
+
+  const label = [
+    meta.label,
+    sourceId && !/^[0-9a-f-]{36}$/i.test(sourceId) ? sourceId : null,
+    esrsRef,
+  ].filter(Boolean).join(' · ');
+
+  const navigate =
+    sourceType === 'insight_hub' ? onNavigateToInsightHub :
+    sourceType === 'dma' ? onNavigateToDMA :
+    sourceType === 'kpi' ? onNavigateToKPI : undefined;
+
+  return (
+    <button
+      onClick={navigate}
+      disabled={!navigate}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border transition-opacity ${meta.color} ${navigate ? 'hover:opacity-80 cursor-pointer' : 'cursor-default opacity-70'}`}
+      title={navigate ? `Go to ${meta.label}` : undefined}
+    >
+      <ChevronRight className="w-3 h-3" />{label}
+    </button>
+  );
+};
+
 // ── Manager Tab ───────────────────────────────────────────────────────────────
 
 interface ManagerProps {
@@ -435,9 +483,15 @@ interface ManagerProps {
   members: OrgMember[];
   currentUserId: string;
   refreshTrigger: number;
+  onNavigateToDMA?: () => void;
+  onNavigateToInsightHub?: () => void;
+  onNavigateToKPI?: () => void;
 }
 
-const ManagerTab: React.FC<ManagerProps> = ({ orgId, members, currentUserId, refreshTrigger }) => {
+const ManagerTab: React.FC<ManagerProps> = ({
+  orgId, members, currentUserId, refreshTrigger,
+  onNavigateToDMA, onNavigateToInsightHub, onNavigateToKPI,
+}) => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<TaskStatus | 'all'>('all');
@@ -493,18 +547,22 @@ const ManagerTab: React.FC<ManagerProps> = ({ orgId, members, currentUserId, ref
     setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
   };
 
-  const handleAssign = async (task: Task, assigneeId: string | null) => {
+  const handleAssign = async (task: Task, memberId: string | null) => {
     const now = new Date().toISOString();
     const updated = await upsertTask(orgId, {
       ...task,
-      assignee_id: assigneeId,
-      assigned_by: assigneeId ? currentUserId : null,
-      assigned_at: assigneeId ? now : null,
+      assignee_id: memberId,              // organization_members.id
+      assigned_by: memberId ? currentUserId : null, // auth.users.id
+      assigned_at: memberId ? now : null,
     });
     setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
   };
 
-  const handlePickUp = (task: Task) => handleAssign(task, currentUserId);
+  // Pick up = assign to self using this user's member row id
+  const handlePickUp = (task: Task) => {
+    if (!currentMemberId) return;
+    handleAssign(task, currentMemberId);
+  };
 
   const filtered = sortTasks(
     tasks.filter(t =>
@@ -520,10 +578,20 @@ const ManagerTab: React.FC<ManagerProps> = ({ orgId, members, currentUserId, ref
     done: tasks.filter(t => t.status === 'done').length,
   };
 
-  const memberEmail = (userId: string | null) => {
-    if (!userId) return null;
-    return members.find(m => m.user_id === userId)?.email ?? userId;
-  };
+  // assignee_id references organization_members.id (the row UUID)
+  const memberByMemberId = (memberId: string | null) =>
+    memberId ? members.find(m => m.id === memberId) : null;
+  // assigned_by references auth.users.id
+  const memberByUserId = (userId: string | null) =>
+    userId ? members.find(m => m.user_id === userId) : null;
+
+  const assigneeName = (memberId: string | null) =>
+    memberByMemberId(memberId)?.email ?? (memberId ? '…' : null);
+  const assignedByName = (userId: string | null) =>
+    memberByUserId(userId)?.email ?? null;
+
+  // The current user's member row id (for "pick up")
+  const currentMemberId = members.find(m => m.user_id === currentUserId)?.id ?? null;
 
   if (loading) {
     return (
@@ -617,9 +685,9 @@ const ManagerTab: React.FC<ManagerProps> = ({ orgId, members, currentUserId, ref
             const sm = STATUS_META[task.status];
             const noteExpanded = expandedNotes.has(task.id);
             const noteDraft = noteDrafts[task.id] ?? task.notes ?? '';
-            const assigneeName = memberEmail(task.assignee_id);
-            const assignedByName = memberEmail(task.assigned_by);
-            const isSelfAssigned = task.assignee_id === currentUserId;
+            const taskAssigneeName = assigneeName(task.assignee_id);
+            const taskAssignedByName = assignedByName(task.assigned_by);
+            const isSelfAssigned = currentMemberId != null && task.assignee_id === currentMemberId;
 
             return (
               <div
@@ -657,7 +725,7 @@ const ManagerTab: React.FC<ManagerProps> = ({ orgId, members, currentUserId, ref
 
                     {/* Meta row */}
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
-                      {/* Assignee selector */}
+                      {/* Assignee selector — value uses organization_members.id */}
                       <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
                         <User className="w-3 h-3" />
                         <select
@@ -667,11 +735,11 @@ const ManagerTab: React.FC<ManagerProps> = ({ orgId, members, currentUserId, ref
                         >
                           <option value="">Unassigned</option>
                           {members.map(m => (
-                            <option key={m.user_id} value={m.user_id}>{m.email ?? m.user_id}</option>
+                            <option key={m.id} value={m.id}>{m.email ?? m.user_id}</option>
                           ))}
                         </select>
                         {/* "Pick up" shortcut for unassigned tasks */}
-                        {!task.assignee_id && (
+                        {!task.assignee_id && currentMemberId && (
                           <button
                             onClick={() => handlePickUp(task)}
                             className="ml-1 flex items-center gap-0.5 text-xs text-esg-500 hover:text-esg-700 dark:text-esg-400 transition-colors font-medium"
@@ -685,7 +753,7 @@ const ManagerTab: React.FC<ManagerProps> = ({ orgId, members, currentUserId, ref
                       {/* Assignment audit trail */}
                       {task.assigned_by && task.assigned_at && (
                         <span className="text-xs text-slate-400 dark:text-slate-500">
-                          by {assignedByName} · {new Date(task.assigned_at).toLocaleDateString()}
+                          by {taskAssignedByName ?? '…'} · {new Date(task.assigned_at).toLocaleDateString()}
                         </span>
                       )}
 
@@ -694,10 +762,17 @@ const ManagerTab: React.FC<ManagerProps> = ({ orgId, members, currentUserId, ref
                           <CalendarDays className="w-3 h-3" />{new Date(task.due_date).toLocaleDateString()}
                         </span>
                       )}
-                      {task.source_id && (
-                        <span className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
-                          <Tag className="w-3 h-3" />{task.source_id}
-                        </span>
+
+                      {/* Source link — navigates back to the inspiring record */}
+                      {task.source_type && task.source_type !== 'manual' && (
+                        <SourceLink
+                          sourceType={task.source_type}
+                          sourceId={task.source_id}
+                          esrsRef={task.esrs_ref}
+                          onNavigateToDMA={onNavigateToDMA}
+                          onNavigateToInsightHub={onNavigateToInsightHub}
+                          onNavigateToKPI={onNavigateToKPI}
+                        />
                       )}
                     </div>
                   </div>
@@ -927,7 +1002,8 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ orgId, members, onClose, on
 
 const TaskManagement: React.FC<Props> = ({
   orgId, assessments, kpis, swotData, profile, cachedInsight,
-  members, currentUserId, isSidebarCollapsed, onNavigateToInsightHub,
+  members, currentUserId, isSidebarCollapsed,
+  onNavigateToInsightHub, onNavigateToDMA, onNavigateToKPI,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('generator');
   const [managerRefresh, setManagerRefresh] = useState(0);
@@ -979,6 +1055,9 @@ const TaskManagement: React.FC<Props> = ({
           members={members}
           currentUserId={currentUserId}
           refreshTrigger={managerRefresh}
+          onNavigateToDMA={onNavigateToDMA}
+          onNavigateToInsightHub={onNavigateToInsightHub}
+          onNavigateToKPI={onNavigateToKPI}
         />
       )}
     </div>

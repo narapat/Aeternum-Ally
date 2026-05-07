@@ -543,6 +543,8 @@ const App: React.FC = () => {
                     currentUserId={user.id}
                     isSidebarCollapsed={isSidebarCollapsed}
                     onNavigateToInsightHub={() => setView('insight_hub')}
+                    onNavigateToDMA={() => setView('assess')}
+                    onNavigateToKPI={() => setView('kpi')}
                   />
                 )}
               </>
