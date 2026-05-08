@@ -1,38 +1,41 @@
 import React, { useState } from 'react';
-import { Loader2, ShieldCheck, AlertCircle, Mail, CheckCircle } from 'lucide-react';
-import { supabase } from '../../lib/supabaseClient';
+import { Loader2, ShieldCheck, AlertCircle, Mail, CheckCircle, ExternalLink } from 'lucide-react';
 
 interface Props {
   onLoginSuccess: (token: string, email: string) => void;
 }
 
-type Stage = 'input' | 'verifying' | 'sent' | 'error';
+type Stage = 'input' | 'sending' | 'sent' | 'error';
 
 const AdminLoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
-  const [email, setEmail]   = useState('');
-  const [stage, setStage]   = useState<Stage>('input');
-  const [errorMsg, setError] = useState('');
+  const [email, setEmail]     = useState('');
+  const [stage, setStage]     = useState<Stage>('input');
+  const [errorMsg, setError]  = useState('');
+  const [devLink, setDevLink] = useState<string | null>(null);   // dev mode only
 
   const handleSendLink = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setStage('verifying');
+    setDevLink(null);
+    setStage('sending');
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
-        options: {
-          // Redirect back to the admin portal after clicking the link
-          emailRedirectTo: `${window.location.origin}/admin`,
-          // Admin account must already exist in Supabase Auth
-          shouldCreateUser: false,
-        },
+      // Request the magic link through our Netlify function — NOT directly
+      // through Supabase.  The server uses the admin SDK to generate the link
+      // with redirectTo: /admin (bypasses Supabase's redirect-URL allowlist)
+      // and sends a custom admin-branded email via Resend.
+      const res = await fetch('/.netlify/functions/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'request_admin_magic_link', email: email.trim() }),
       });
 
-      if (error) throw error;
-      // Mark that an admin OTP is in-flight so index.tsx can intercept the
-      // Supabase redirect even if it lands on '/' instead of '/admin'
-      try { localStorage.setItem('admin_otp_pending', '1'); } catch {}
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Failed to send link');
+
+      // Dev mode: server returns the link directly when RESEND_API_KEY is not set
+      if (json.dev_link) setDevLink(json.dev_link);
+
       setStage('sent');
     } catch (err: any) {
       setError(err?.message ?? 'Failed to send magic link');
@@ -41,9 +44,9 @@ const AdminLoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
   };
 
   const handleResend = () => {
-    try { localStorage.removeItem('admin_otp_pending'); } catch {}
     setStage('input');
     setError('');
+    setDevLink(null);
   };
 
   return (
@@ -58,13 +61,13 @@ const AdminLoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
           <p className="text-slate-400 text-sm mt-1">Aeternum Ally — Platform Administration</p>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
 
-          {/* Stage: input / verifying / error */}
+          {/* ── Input / sending / error ── */}
           {stage !== 'sent' && (
             <form onSubmit={handleSendLink} className="space-y-4">
               <p className="text-sm text-slate-400 text-center">
-                Enter your admin email — we'll send a one-time sign-in link.
+                Enter your admin email — we'll send a secure one-time sign-in link.
               </p>
 
               {stage === 'error' && errorMsg && (
@@ -94,33 +97,55 @@ const AdminLoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
 
               <button
                 type="submit"
-                disabled={stage === 'verifying' || !email}
+                disabled={stage === 'sending' || !email}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-esg-600 hover:bg-esg-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors text-sm"
               >
-                {stage === 'verifying' ? (
+                {stage === 'sending' ? (
                   <><Loader2 className="w-4 h-4 animate-spin" /> Sending link…</>
                 ) : (
-                  <><Mail className="w-4 h-4" /> Send Magic Link</>
+                  <><Mail className="w-4 h-4" /> Send Admin Sign-in Link</>
                 )}
               </button>
             </form>
           )}
 
-          {/* Stage: sent */}
+          {/* ── Sent confirmation ── */}
           {stage === 'sent' && (
-            <div className="text-center space-y-4 py-2">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-esg-900/50 border border-esg-700">
-                <CheckCircle className="w-6 h-6 text-esg-400" />
+            <div className="space-y-4">
+              <div className="text-center space-y-3 py-1">
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-esg-900/50 border border-esg-700">
+                  <CheckCircle className="w-6 h-6 text-esg-400" />
+                </div>
+                <div>
+                  <p className="text-white font-semibold">Check your inbox</p>
+                  <p className="text-sm text-slate-400 mt-1.5 leading-relaxed">
+                    A sign-in link was sent to{' '}
+                    <span className="text-white font-medium">{email}</span>.
+                    Click the link in the email to open the admin portal.
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-white font-semibold">Check your inbox</p>
-                <p className="text-sm text-slate-400 mt-1.5 leading-relaxed">
-                  A sign-in link was sent to{' '}
-                  <span className="text-white font-medium">{email}</span>.
-                  Click the link in the email — it will bring you straight back here.
-                </p>
-              </div>
-              <p className="text-xs text-slate-500 pt-1">
+
+              {/* Dev mode: show the link directly when Resend is not configured */}
+              {devLink && (
+                <div className="bg-amber-950/40 border border-amber-700/50 rounded-lg p-3 space-y-2">
+                  <p className="text-xs font-semibold text-amber-400 uppercase tracking-wide">
+                    ⚠️ Dev mode — no RESEND_API_KEY set
+                  </p>
+                  <p className="text-xs text-amber-300/70">
+                    No email was sent. Use the link below to sign in:
+                  </p>
+                  <a
+                    href={devLink}
+                    className="flex items-center gap-1.5 text-xs text-amber-300 hover:text-amber-200 underline break-all transition-colors"
+                  >
+                    <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                    {devLink}
+                  </a>
+                </div>
+              )}
+
+              <p className="text-center text-xs text-slate-500">
                 Didn't receive it?{' '}
                 <button
                   onClick={handleResend}
