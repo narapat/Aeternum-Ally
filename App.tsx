@@ -29,7 +29,7 @@ import {
   saveQualityCheck, saveDMAInsight, clearDMAInsight, loadDMAInsight, saveDMASuggestedTasks,
 } from './services/dbService';
 import { setOrganizationContext } from './services/geminiService';
-import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, ChevronDown, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2, ListChecks, Zap, Leaf, Settings, UserCircle, ChevronUp } from 'lucide-react';
+import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, ChevronDown, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2, ListChecks, Zap, Leaf, Settings, UserCircle, ChevronUp, ScatterChart } from 'lucide-react';
 import type { InsightHubResponse, QualityCheck } from './types';
 
 const DEFAULT_PROFILE: CompanyProfile = {
@@ -87,10 +87,19 @@ const App: React.FC = () => {
   // so AI auto-fill knows which issues to address
   const [hubQualityCheck, setHubQualityCheck] = useState<QualityCheck | null>(null);
 
-  // Sidebar nav group open/close state
-  const [myBusinessOpen, setMyBusinessOpen] = useState(true);
-  const [doubleMaterialityOpen, setDoubleMaterialityOpen] = useState(true);
-  const [measurementOpen, setMeasurementOpen] = useState(true);
+  // Sidebar nav group open/close state — persisted per-device in localStorage
+  const [myBusinessOpen, setMyBusinessOpen] = useState(() => {
+    try { return localStorage.getItem('nav_myBusiness') !== 'false'; } catch { return true; }
+  });
+  const [doubleMaterialityOpen, setDoubleMaterialityOpen] = useState(() => {
+    try { return localStorage.getItem('nav_doubleMateriality') !== 'false'; } catch { return true; }
+  });
+  const [measurementOpen, setMeasurementOpen] = useState(() => {
+    try { return localStorage.getItem('nav_measurement') !== 'false'; } catch { return true; }
+  });
+  useEffect(() => { try { localStorage.setItem('nav_myBusiness', String(myBusinessOpen)); } catch {} }, [myBusinessOpen]);
+  useEffect(() => { try { localStorage.setItem('nav_doubleMateriality', String(doubleMaterialityOpen)); } catch {} }, [doubleMaterialityOpen]);
+  useEffect(() => { try { localStorage.setItem('nav_measurement', String(measurementOpen)); } catch {} }, [measurementOpen]);
 
   // DB-backed singleton data (auto-save + manual save)
   const orgId = organization?.id ?? null;
@@ -269,7 +278,7 @@ const App: React.FC = () => {
             </NavSection>
 
             <NavSection label="Double Materiality" open={doubleMaterialityOpen} onToggle={() => setDoubleMaterialityOpen(v => !v)} sidebarCollapsed={isSidebarCollapsed}>
-              <NavItem active={view === 'dm_dashboard'} collapsed={isSidebarCollapsed} onClick={() => setView('dm_dashboard')} icon={<BarChart3 />} label="Dashboard" />
+              <NavItem active={view === 'dm_dashboard'} collapsed={isSidebarCollapsed} onClick={() => setView('dm_dashboard')} icon={<ScatterChart />} label="Dashboard" />
               <NavItem active={view === 'assess'} collapsed={isSidebarCollapsed} onClick={() => { setView('assess'); setIsFormOpen(false); setEditingAssessment(null); }} icon={<Plus />} label="Assessments" />
               <NavItem active={view === 'insight_hub'} collapsed={isSidebarCollapsed} onClick={() => setView('insight_hub')} icon={<Zap className="w-5 h-5" />} label="Insight Hub" />
             </NavSection>
