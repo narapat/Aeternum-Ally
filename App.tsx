@@ -16,6 +16,7 @@ import PerformanceDashboard from './components/PerformanceDashboard';
 import SustainabilityStatement from './components/SustainabilityStatement';
 import MaterialTopicsList from './components/MaterialTopicsList';
 import AuthScreen from './components/AuthScreen';
+import ResetPasswordModal from './components/ResetPasswordModal';
 import OrgSetupScreen from './components/OrgSetupScreen';
 import { useAuth } from './hooks/useAuth';
 import { useOrganization } from './hooks/useOrganization';
@@ -29,6 +30,7 @@ import {
   saveQualityCheck, saveDMAInsight, clearDMAInsight, loadDMAInsight, saveDMASuggestedTasks,
 } from './services/dbService';
 import { setOrganizationContext } from './services/geminiService';
+import { supabase } from './lib/supabaseClient';
 import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, ChevronDown, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2, ListChecks, Zap, Leaf, Settings, UserCircle, ChevronUp, ScatterChart } from 'lucide-react';
 import type { InsightHubResponse, QualityCheck } from './types';
 
@@ -72,6 +74,15 @@ const App: React.FC = () => {
       return next;
     });
   };
+
+  // Password recovery — shown when Supabase fires a PASSWORD_RECOVERY event
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setShowPasswordReset(true);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   // UI state
   const [view, setView] = useState<'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub' | 'tasks' | 'carbon_wizard' | 'carbon_dashboard' | 'settings' | 'user_profile'>('overview');
@@ -223,6 +234,9 @@ const App: React.FC = () => {
   // ----- Loading / auth gates -----
   if (authLoading) return <FullScreenLoader label="Signing you in…" />;
   if (!user) return <AuthScreen />;
+
+  // Password recovery modal — shown over any view when user follows a reset link
+  if (showPasswordReset) return <ResetPasswordModal onDone={() => setShowPasswordReset(false)} />;
   if (orgLoading) return <FullScreenLoader label="Loading your workspace…" />;
   if (!organization) {
     return (
