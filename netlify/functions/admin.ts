@@ -243,6 +243,77 @@ async function handleAdminDashboard(): Promise<object> {
 }
 
 // ---------------------------------------------------------------------------
+// Post-auth: export_company_data
+// ---------------------------------------------------------------------------
+
+// Tables with a plain organization_id column
+const ORG_SCOPED_TABLES = [
+  'company_profiles',
+  'business_model_canvases',
+  'swot_analyses',
+  'assessments',
+  'kpis',
+  'tasks',
+  'suggested_tasks',
+  'emission_sources',
+  'emission_entries',
+  'evidence_attachments',
+  'notification_channels',
+  'organization_members',
+  'organization_invites',
+  'organization_ai_settings',
+  'organization_integrations',
+  'ai_usage_log',
+] as const;
+
+async function handleExportCompanyData(body: any): Promise<object> {
+  const orgId = (body.org_id ?? '').trim();
+  if (!orgId) throw Object.assign(new Error('org_id is required'), { status: 400 });
+
+  const sb = getAdminClient();
+
+  // Verify org exists
+  const { data: org, error: orgErr } = await sb
+    .from('organizations')
+    .select('id, tier, is_active, created_at')
+    .eq('id', orgId)
+    .maybeSingle();
+  if (orgErr || !org) throw Object.assign(new Error('Organization not found'), { status: 404 });
+
+  // Fetch company name
+  const { data: profile } = await sb
+    .from('company_profiles').select('name').eq('organization_id', orgId).maybeSingle();
+
+  // Fetch all tables in parallel
+  const results = await Promise.all(
+    ORG_SCOPED_TABLES.map(async (table) => {
+      try {
+        const { data } = await sb.from(table).select('*').eq('organization_id', orgId);
+        return { table, rows: data ?? [] };
+      } catch {
+        return { table, rows: [] as unknown[] };
+      }
+    })
+  );
+
+  const tables: Record<string, unknown[]> = {};
+  for (const { table, rows } of results) tables[table] = rows;
+
+  const exportedAt = new Date().toISOString();
+  const manifest = {
+    exported_at:      exportedAt,
+    organization_id:  orgId,
+    company_name:     profile?.name ?? '(unnamed)',
+    tier:             org.tier ?? 'free',
+    is_active:        org.is_active !== false,
+    org_created_at:   org.created_at,
+    tables_exported:  Object.keys(tables),
+  };
+
+  return { manifest, tables };
+}
+
+// ---------------------------------------------------------------------------
 // Post-auth: create_company
 // ---------------------------------------------------------------------------
 async function handleCreateCompany(body: any): Promise<object> {
@@ -745,6 +816,7 @@ export const handler: Handler = async (event) => {
 
       switch (action) {
         case 'admin_dashboard':    result = await handleAdminDashboard();                        break;
+        case 'export_company_data':     result = await handleExportCompanyData(body);          break;
         case 'create_company':          result = await handleCreateCompany(body);              break;
         case 'list_companies':          result = await handleListCompanies();                   break;
         case 'set_company_status':      result = await handleSetCompanyStatus(body);            break;
