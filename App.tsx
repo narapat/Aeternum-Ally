@@ -594,7 +594,7 @@ const App: React.FC = () => {
                     bmcData={canvas.data}
                     swotData={swot.data}
                     onBack={() => setView('assess')}
-                    onContinue={() => setView('tasks')}
+                    onContinue={() => setView('kpi')}
                     cachedInsight={cachedInsight}
                     onInsightReady={(result) => {
                       setCachedInsight(result);
