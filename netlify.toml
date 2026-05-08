@@ -7,3 +7,15 @@
   command = "npm run dev"
   port = 8888
   targetPort = 3000
+
+# SPA fallback — both the tenant app and the admin portal are served from
+# the same index.html; client-side routing handles the /admin split.
+[[redirects]]
+  from   = "/admin/*"
+  to     = "/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200

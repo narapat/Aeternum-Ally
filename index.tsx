@@ -38,9 +38,16 @@ if (!supabaseAnonKey) missing.push('VITE_SUPABASE_ANON_KEY');
 if (missing.length > 0) {
   renderConfigError(missing);
 } else {
+  {
+    // Route /admin to the Platform Admin portal; everything else → tenant App.
+    // The admin magic link is generated server-side with redirectTo: /admin,
+    // so it always lands here directly — no intercept hack needed.
+    const isAdminRoute = window.location.pathname.startsWith('/admin');
+    const appModule = isAdminRoute ? import('./AdminApp') : import('./App');
+
   // Dynamic import so module-load errors (e.g. Supabase client init) become
   // visible UI instead of a blank page.
-  import('./App')
+  appModule
     .then(({ default: App }) => {
       const root = ReactDOM.createRoot(rootElement!);
       root.render(
@@ -62,4 +69,5 @@ if (missing.length > 0) {
         </div>
       `;
     });
+  }
 }
