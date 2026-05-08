@@ -1,18 +1,13 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { CompanyProfile, OrgMember, OrgRole, OrgInvite } from '../types';
+import React, { useState } from 'react';
+import { CompanyProfile } from '../types';
 import { INDUSTRY_SECTORS, ISIC_CODES_GROUPED, COUNTRIES } from '../constants';
 import {
   Building2, MapPin, Globe, Hash, Users, Wallet, Target, Layers, BookOpen,
-  UserPlus, Loader2, AlertCircle, Trash2, Copy, CheckCircle2, Sparkles,
-  Clock, XCircle, ShieldOff, RefreshCw, Mail, Phone
+  Settings, Mail, Phone, AlertCircle, ArrowRight,
 } from 'lucide-react';
 import SaveIndicator from './SaveIndicator';
 import type { SaveStatus } from '../hooks/useOrgData';
-import { supabase } from '../lib/supabaseClient';
-import { removeMember, updateMemberRole, cancelInvite } from '../services/dbService';
-import { logError } from '../services/errorLogService';
-import AIUsagePanel from './AIUsagePanel';
 
 interface Props {
   data: CompanyProfile;
@@ -21,20 +16,14 @@ interface Props {
   saveStatus: SaveStatus;
   isDirty: boolean;
   saveError?: string | null;
-
-  // Team tab props
-  organizationId: string;
-  currentUserId: string;
-  currentUserRole: OrgRole | null;
-  members: OrgMember[];
-  onMembersChanged: () => void | Promise<void>;
+  /** Called when user clicks the "Go to Settings" link */
+  onOpenSettings?: () => void;
 }
 
 const CompanyProfileForm: React.FC<Props> = ({
-  data, onChange, onSave, saveStatus, isDirty, saveError,
-  organizationId, currentUserId, currentUserRole, members, onMembersChanged,
+  data, onChange, onSave, saveStatus, isDirty, saveError, onOpenSettings,
 }) => {
-  const [activeTab, setActiveTab] = useState<'general' | 'details' | 'strategy' | 'team' | 'ai'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'details' | 'strategy'>('general');
   const [emailError, setEmailError] = useState<string | null>(null);
 
   const handleChange = (field: keyof CompanyProfile, value: string) => {
@@ -53,8 +42,6 @@ const CompanyProfileForm: React.FC<Props> = ({
       setEmailError(null);
     }
   };
-
-  const canManageTeam = currentUserRole === 'Owner' || currentUserRole === 'Admin';
 
   return (
     <div className="w-full animate-in fade-in duration-500">
@@ -79,12 +66,15 @@ const CompanyProfileForm: React.FC<Props> = ({
           <TabButton
             active={activeTab === 'strategy'} onClick={() => setActiveTab('strategy')}
             icon={<Target className="w-4 h-4 flex-shrink-0" />} label="Strategy & Mission" />
-          <TabButton
-            active={activeTab === 'team'} onClick={() => setActiveTab('team')}
-            icon={<Users className="w-4 h-4 flex-shrink-0" />} label="Team" />
-          <TabButton
-            active={activeTab === 'ai'} onClick={() => setActiveTab('ai')}
-            icon={<Sparkles className="w-4 h-4 flex-shrink-0" />} label="AI & Usage" />
+          {/* Team & AI moved to Settings */}
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="flex items-center gap-2 px-4 py-4 text-sm font-medium text-slate-400 dark:text-slate-500 hover:text-esg-600 dark:hover:text-esg-400 border-b-2 border-transparent whitespace-nowrap transition-colors ml-auto"
+          >
+            <Settings className="w-4 h-4 flex-shrink-0" /> Team &amp; AI
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         <div className="p-4 md:p-8">
@@ -230,463 +220,7 @@ const CompanyProfileForm: React.FC<Props> = ({
             </div>
           )}
 
-          {activeTab === 'team' && (
-            <TeamPanel
-              organizationId={organizationId}
-              currentUserId={currentUserId}
-              currentUserRole={currentUserRole}
-              members={members}
-              canManage={canManageTeam}
-              onMembersChanged={onMembersChanged}
-            />
-          )}
-
-          {activeTab === 'ai' && (
-            <AIUsagePanel
-              organizationId={organizationId}
-              currentUserRole={currentUserRole}
-            />
-          )}
         </div>
-      </div>
-    </div>
-  );
-};
-
-// =============================================================
-// TEAM PANEL
-// =============================================================
-
-interface TeamPanelProps {
-  organizationId: string;
-  currentUserId: string;
-  currentUserRole: OrgRole | null;
-  members: OrgMember[];
-  canManage: boolean;
-  onMembersChanged: () => void | Promise<void>;
-}
-
-const ROLE_COLORS: Record<OrgRole, string> = {
-  Owner: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800',
-  Admin: 'bg-indigo-100 text-indigo-800 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-800',
-  Manager: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800',
-  Consultant: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600',
-};
-
-const TeamPanel: React.FC<TeamPanelProps> = ({
-  organizationId, currentUserId, currentUserRole, members, canManage, onMembersChanged,
-}) => {
-  const isOwner = currentUserRole === 'Owner';
-
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<Exclude<OrgRole, 'Owner'>>('Manager');
-  const [isInviting, setIsInviting] = useState(false);
-  const [inviteError, setInviteError] = useState<string | null>(null);
-  const [inviteToken, setInviteToken] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  const [pendingInvites, setPendingInvites] = useState<OrgInvite[]>([]);
-  const [invitesLoading, setInvitesLoading] = useState(false);
-  const [invitesError, setInvitesError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-
-  const fetchPendingInvites = useCallback(async () => {
-    setInvitesLoading(true);
-    setInvitesError(null);
-    try {
-      const sessionResp = await supabase.auth.getSession();
-      const accessToken = sessionResp.data.session?.access_token;
-      if (!accessToken) throw new Error('Not signed in.');
-
-      const resp = await fetch('/.netlify/functions/invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ action: 'list', organization_id: organizationId }),
-      });
-      const body = await resp.json();
-      if (!resp.ok) throw new Error(body.error ?? 'Failed to load invitations.');
-      setPendingInvites((body.invites ?? []) as OrgInvite[]);
-    } catch (e: any) {
-      setInvitesError(e?.message ?? 'Failed to load invitations.');
-    } finally {
-      setInvitesLoading(false);
-    }
-  }, [organizationId]);
-
-  useEffect(() => { fetchPendingInvites(); }, [fetchPendingInvites]);
-
-  const handleInvite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setInviteError(null);
-    setInviteToken(null);
-    setIsInviting(true);
-    try {
-      const sessionResp = await supabase.auth.getSession();
-      const accessToken = sessionResp.data.session?.access_token;
-      if (!accessToken) throw new Error('Not signed in.');
-
-      const resp = await fetch('/.netlify/functions/invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole, organization_id: organizationId }),
-      });
-      const body = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(body.error ?? 'Failed to send invitation.');
-
-      setInviteToken(body.invite_token ?? null);
-      setInviteEmail('');
-      await Promise.all([onMembersChanged(), fetchPendingInvites()]);
-    } catch (err: any) {
-      setInviteError(err?.message ?? 'Failed to send invitation.');
-    } finally {
-      setIsInviting(false);
-    }
-  };
-
-  const handleDeactivate = async (memberId: string, email: string | null) => {
-    if (!window.confirm(`Deactivate access for ${email ?? 'this member'}? They will lose access immediately.`)) return;
-    setActionError(null);
-    try {
-      await removeMember(memberId);
-    } catch (error: any) {
-      setActionError(`Failed to deactivate: ${error.message}`);
-      logError({ context: "member-management", action: "deactivate_member", error, organizationId });
-      return;
-    }
-    await onMembersChanged();
-  };
-
-  const handleCancelInvite = async (inviteId: string, email: string) => {
-    if (!window.confirm(`Cancel invitation for ${email}?`)) return;
-    setActionError(null);
-    try {
-      await cancelInvite(inviteId);
-    } catch (error: any) {
-      setActionError(`Failed to cancel invitation: ${error.message}`);
-      logError({ context: "member-management", action: "cancel_invite", error, organizationId });
-      return;
-    }
-    await fetchPendingInvites();
-  };
-
-  const [resendingId, setResendingId] = useState<string | null>(null);
-  const [fallbackLink, setFallbackLink] = useState<{ inviteId: string; link: string } | null>(null);
-
-  const handleResendInvite = async (inviteId: string, email: string) => {
-    setResendingId(inviteId);
-    setFallbackLink(null);
-    try {
-      const sessionResp = await supabase.auth.getSession();
-      const accessToken = sessionResp.data.session?.access_token;
-      if (!accessToken) throw new Error('Not signed in.');
-
-      const resp = await fetch('/.netlify/functions/invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ action: 'resend', invite_id: inviteId, email, organization_id: organizationId }),
-      });
-      const body = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(body.error ?? 'Failed to resend invitation.');
-
-      if (body.fallback_link) {
-        // Email delivery unavailable for existing users — surface the link directly
-        setFallbackLink({ inviteId, link: body.fallback_link });
-      } else {
-        alert(`Invitation resent to ${email}. The new link is valid for 1 hour.`);
-      }
-    } catch (err: any) {
-      setActionError(err?.message ?? 'Failed to resend invitation.');
-      logError({ context: "member-management", action: "resend_invite", error: err, organizationId });
-    } finally {
-      setResendingId(null);
-    }
-  };
-
-  const handleRoleChange = async (memberId: string, newRole: OrgRole) => {
-    setActionError(null);
-    try {
-      await updateMemberRole(memberId, newRole);
-    } catch (error: any) {
-      setActionError(`Failed to update role: ${error.message}`);
-      logError({ context: "member-management", action: "update_role", error, organizationId });
-      return;
-    }
-    await onMembersChanged();
-  };
-
-  const copyToken = (token: string) => {
-    navigator.clipboard.writeText(token).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
-  const isExpired = (expiresAt: string) => new Date(expiresAt) < new Date();
-
-  return (
-    <div className="space-y-8">
-
-      {actionError && (
-        <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-700 dark:text-red-300">
-          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /> {actionError}
-        </div>
-      )}
-
-      {/* ── Invite form ────────────────────────────────────────────── */}
-      {canManage && (
-        <div className="p-5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700">
-          <h3 className="font-bold text-slate-800 dark:text-white mb-1 flex items-center gap-2">
-            <UserPlus className="w-4 h-4" /> Invite a team member
-          </h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-            We'll email the invite link. They'll need to sign up (or sign in) before they can join.
-          </p>
-
-          {inviteError && (
-            <div className="mb-3 flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-700 dark:text-red-300">
-              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /> {inviteError}
-            </div>
-          )}
-
-          <form onSubmit={handleInvite} className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2">
-            <input
-              type="email" required value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="teammate@company.com"
-              className="p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
-            />
-            <select
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value as Exclude<OrgRole, 'Owner'>)}
-              className="p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
-            >
-              <option value="Admin">Admin</option>
-              <option value="Manager">Manager</option>
-              <option value="Consultant">Consultant (read-only)</option>
-            </select>
-            <button
-              type="submit" disabled={isInviting}
-              className="flex items-center justify-center gap-2 bg-esg-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-esg-700 transition-colors disabled:opacity-50"
-            >
-              {isInviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-              Send invite
-            </button>
-          </form>
-
-          {inviteToken && (
-            <div className="mt-4 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg">
-              <p className="text-xs text-emerald-700 dark:text-emerald-300 mb-2">
-                ✓ Invitation sent. If the email doesn't arrive, share this link directly:
-              </p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 text-xs font-mono bg-white dark:bg-slate-950 p-2 rounded border border-emerald-200 dark:border-emerald-800 text-slate-700 dark:text-slate-300 break-all">
-                  {inviteToken}
-                </code>
-                <button
-                  type="button" onClick={() => copyToken(inviteToken)}
-                  className="p-2 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 rounded text-emerald-700 dark:text-emerald-300"
-                  title="Copy token"
-                >
-                  {copied ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Pending invitations ────────────────────────────────────── */}
-      {canManage && (
-        <div>
-          <h3 className="font-bold text-slate-800 dark:text-white mb-1 flex items-center gap-2">
-            <Clock className="w-4 h-4 text-amber-500" /> Pending Invitations
-          </h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
-            Invitations that have been sent but not yet accepted.
-          </p>
-
-          <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300">
-                <tr>
-                  <th className="text-left p-3 font-semibold">Email</th>
-                  <th className="text-left p-3 font-semibold">Role</th>
-                  <th className="text-left p-3 font-semibold">Expires</th>
-                  {isOwner && <th className="p-3"></th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-700 bg-white dark:bg-slate-800">
-                {invitesLoading ? (
-                  <tr>
-                    <td colSpan={isOwner ? 4 : 3} className="p-6 text-center text-slate-400">
-                      <Loader2 className="w-4 h-4 animate-spin inline-block mr-2" />Loading…
-                    </td>
-                  </tr>
-                ) : invitesError ? (
-                  <tr>
-                    <td colSpan={isOwner ? 4 : 3} className="p-6 text-center text-red-500 text-sm">
-                      <AlertCircle className="w-4 h-4 inline-block mr-1 mb-0.5" />{invitesError}
-                    </td>
-                  </tr>
-                ) : pendingInvites.length === 0 ? (
-                  <tr>
-                    <td colSpan={isOwner ? 4 : 3} className="p-6 text-center text-slate-400 italic">
-                      No pending invitations.
-                    </td>
-                  </tr>
-                ) : pendingInvites.map((inv) => {
-                  const expired = isExpired(inv.expires_at);
-                  return (
-                    <tr key={inv.id} className={expired ? 'opacity-50' : ''}>
-                      <td className="p-3 font-medium text-slate-800 dark:text-white">{inv.email}</td>
-                      <td className="p-3">
-                        <span className={`text-xs font-semibold px-2 py-1 rounded border ${ROLE_COLORS[inv.role]}`}>
-                          {inv.role}
-                        </span>
-                      </td>
-                      <td className="p-3 text-xs text-slate-500 dark:text-slate-400">
-                        {expired
-                          ? <span className="text-red-500 font-medium">Expired</span>
-                          : new Date(inv.expires_at).toLocaleDateString()}
-                      </td>
-                      {isOwner && (
-                        <td className="p-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => handleResendInvite(inv.id, inv.email)}
-                              disabled={resendingId === inv.id}
-                              className="flex items-center gap-1 text-xs px-2 py-1 text-slate-500 hover:text-esg-600 hover:bg-esg-50 dark:hover:bg-esg-900/20 rounded transition-colors disabled:opacity-50"
-                              title="Resend invitation email (new 24-hour link)"
-                            >
-                              {resendingId === inv.id
-                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                : <RefreshCw className="w-3.5 h-3.5" />}
-                              Resend
-                            </button>
-                            <button
-                              onClick={() => handleCancelInvite(inv.id, inv.email)}
-                              className="flex items-center gap-1 text-xs px-2 py-1 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                              title="Cancel invitation"
-                            >
-                              <XCircle className="w-3.5 h-3.5" /> Cancel
-                            </button>
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Fallback link banner (shown when Supabase can't email an existing user) */}
-      {fallbackLink && (
-        <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-sm">
-          <p className="font-semibold text-amber-800 dark:text-amber-200 mb-1">
-            Email delivery unavailable — share this link directly:
-          </p>
-          <p className="text-amber-700 dark:text-amber-300 text-xs mb-2">
-            Copy and send this link to the invitee. It expires in 1 hour.
-          </p>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 text-xs font-mono bg-white dark:bg-slate-950 p-2 rounded border border-amber-200 dark:border-amber-700 text-slate-700 dark:text-slate-300 break-all">
-              {fallbackLink.link}
-            </code>
-            <button
-              onClick={() => { navigator.clipboard.writeText(fallbackLink.link); copyToken(fallbackLink.link); }}
-              className="p-2 hover:bg-amber-100 dark:hover:bg-amber-900/40 rounded text-amber-700 dark:text-amber-300"
-              title="Copy link"
-            >
-              {copied ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Active members ─────────────────────────────────────────── */}
-      <div>
-        <h3 className="font-bold text-slate-800 dark:text-white mb-1 flex items-center gap-2">
-          <Users className="w-4 h-4" /> Team Members
-        </h3>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
-          {members.length} {members.length === 1 ? 'person has' : 'people have'} access to this workspace.
-        </p>
-
-        <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300">
-              <tr>
-                <th className="text-left p-3 font-semibold">Email</th>
-                <th className="text-left p-3 font-semibold">Role</th>
-                <th className="text-left p-3 font-semibold">Joined</th>
-                {isOwner && <th className="p-3"></th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700 bg-white dark:bg-slate-800">
-              {members.map((m) => {
-                const isSelf = m.user_id === currentUserId;
-                const isMemberOwner = m.role === 'Owner';
-                const canEditThisRow = canManage && !isMemberOwner && !isSelf;
-                return (
-                  <tr key={m.id}>
-                    <td className="p-3 font-medium text-slate-800 dark:text-white">
-                      {m.email ?? '—'} {isSelf && <span className="text-xs text-slate-400 ml-1">(you)</span>}
-                    </td>
-                    <td className="p-3">
-                      {canEditThisRow ? (
-                        <select
-                          value={m.role}
-                          onChange={(e) => handleRoleChange(m.id, e.target.value as OrgRole)}
-                          className={`text-xs font-semibold px-2 py-1 rounded border ${ROLE_COLORS[m.role]}`}
-                        >
-                          <option value="Admin">Admin</option>
-                          <option value="Manager">Manager</option>
-                          <option value="Consultant">Consultant</option>
-                        </select>
-                      ) : (
-                        <span className={`text-xs font-semibold px-2 py-1 rounded border ${ROLE_COLORS[m.role]}`}>
-                          {m.role}
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-3 text-slate-500 dark:text-slate-400 text-xs">
-                      {new Date(m.joined_at).toLocaleDateString()}
-                    </td>
-                    {isOwner && (
-                      <td className="p-3 text-right">
-                        {!isMemberOwner && !isSelf && (
-                          <button
-                            onClick={() => handleDeactivate(m.id, m.email)}
-                            className="flex items-center gap-1 text-xs px-2 py-1 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                            title="Deactivate access"
-                          >
-                            <ShieldOff className="w-3.5 h-3.5" /> Deactivate
-                          </button>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-              {members.length === 0 && (
-                <tr>
-                  <td colSpan={isOwner ? 4 : 3} className="p-6 text-center text-slate-400 italic">
-                    No team members yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {!canManage && (
-          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-            Only Owners and Admins can invite team members. Only Owners can deactivate access.
-          </p>
-        )}
       </div>
     </div>
   );
