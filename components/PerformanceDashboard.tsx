@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { fetchSuggestedTasks } from '../services/dbService';
+import EvidenceBadge from './EvidenceBadge';
 import AmbientTaskBadge from './AmbientTaskBadge';
 
 interface Props {
@@ -197,6 +198,16 @@ const StrategyCard: React.FC<{
                                     orgId={orgId}
                                     currentUserId={currentUserId}
                                     onChanged={onSuggestionsChanged}
+                                />
+                            </span>
+                        )}
+                        {orgId && currentUserId && (
+                            <span onClick={e => e.stopPropagation()}>
+                                <EvidenceBadge
+                                    linkedToType="kpi"
+                                    linkedToId={kpi.id}
+                                    orgId={orgId}
+                                    currentUserId={currentUserId}
                                 />
                             </span>
                         )}
