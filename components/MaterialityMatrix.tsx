@@ -11,16 +11,17 @@ interface Props {
 }
 
 // ── Colour logic ─────────────────────────────────────────────────────────────
-// Green  (#16a34a) — High Impact Material : both axes ≥ threshold
-// Orange (#c2410c) — Material             : at least one axis ≥ threshold
-// Grey   (#64748b) — Not Material         : neither axis ≥ threshold
+// Aligns with the "High Impact Risks" stat card (financialMaterialityValue > 60)
+//
+// Green  (#16a34a) — High Impact Material : financial score > 60
+// Orange (#c2410c) — Material             : isMaterial && financial ≤ 60
+// Grey   (#64748b) — Not Material         : not material on either axis
+const HIGH_IMPACT_THRESHOLD = 60;
 type DotTier = 'high' | 'material' | 'none';
 
 function getTier(d: AssessmentData): DotTier {
-  const fin = d.financialMaterialityValue >= MATERIALITY_THRESHOLD;
-  const imp = d.impactMaterialityValue    >= MATERIALITY_THRESHOLD;
-  if (fin && imp) return 'high';
-  if (fin || imp) return 'material';
+  if (d.financialMaterialityValue > HIGH_IMPACT_THRESHOLD) return 'high';
+  if (d.isMaterial) return 'material';
   return 'none';
 }
 
