@@ -405,36 +405,82 @@ async function handleAdminAIUsageSummary(): Promise<object> {
 }
 
 // ---------------------------------------------------------------------------
-// Post-auth: admin_ai_usage_by_month  (last 12 months, stacked by quota_type)
+// Post-auth: admin_ai_usage_by_month  (12 months of a given year, stacked by quota_type)
+// Optional body param: year (number, defaults to current year)
 // ---------------------------------------------------------------------------
-async function handleAdminAIUsageByMonth(): Promise<object> {
-  const sb    = getAdminClient();
-  const since = new Date();
-  since.setMonth(since.getMonth() - 11);
-  since.setDate(1);
-  since.setHours(0, 0, 0, 0);
+async function handleAdminAIUsageByMonth(year?: number): Promise<object> {
+  const sb        = getAdminClient();
+  const targetYear = year ?? new Date().getFullYear();
+  const since      = new Date(targetYear, 0, 1, 0, 0, 0, 0);   // Jan 1
+  const until      = new Date(targetYear + 1, 0, 1, 0, 0, 0, 0); // Jan 1 next year
 
-  const rows = await fetchAIUsage(sb, since.toISOString());
+  let q = sb.from('ai_usage_log')
+    .select('quota_type, created_at')
+    .gte('created_at', since.toISOString())
+    .lt('created_at', until.toISOString());
+  const { data, error } = await q;
+  if (error) throw Object.assign(new Error(error.message), { status: 500 });
+  const rows = data ?? [];
 
-  // Build map: YYYY-MM → { byok, platform, total }
+  // Build 12-slot map: YYYY-MM → { byok, platform, total }
   const map: Record<string, { month: string; byok: number; platform: number; total: number }> = {};
-
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(since);
-    d.setMonth(d.getMonth() + i);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    map[key] = { month: key, byok: 0, platform: 0, total: 0 };
+  for (let m = 0; m < 12; m++) {
+    const key = `${targetYear}-${String(m + 1).padStart(2, '0')}`;
+    map[key]  = { month: key, byok: 0, platform: 0, total: 0 };
   }
 
   for (const r of rows) {
-    const key = r.created_at.slice(0, 7);
+    const key = (r.created_at as string).slice(0, 7);
     if (!map[key]) continue;
     map[key].total += 1;
     if (r.quota_type === 'byok') map[key].byok += 1;
     else                          map[key].platform += 1;
   }
 
-  return { months: Object.values(map) };
+  return { year: targetYear, months: Object.values(map) };
+}
+
+// ---------------------------------------------------------------------------
+// Post-auth: admin_ai_usage_by_action_by_month
+// Returns call counts grouped by action × month for a given year.
+// Response: { year, months: string[], series: { action, data: number[] }[] }
+// Optional body param: year (number, defaults to current year)
+// ---------------------------------------------------------------------------
+async function handleAdminAIUsageByActionByMonth(year?: number): Promise<object> {
+  const sb         = getAdminClient();
+  const targetYear = year ?? new Date().getFullYear();
+  const since      = new Date(targetYear, 0, 1, 0, 0, 0, 0);
+  const until      = new Date(targetYear + 1, 0, 1, 0, 0, 0, 0);
+
+  const { data, error } = await sb.from('ai_usage_log')
+    .select('action, created_at')
+    .gte('created_at', since.toISOString())
+    .lt('created_at', until.toISOString());
+  if (error) throw Object.assign(new Error(error.message), { status: 500 });
+  const rows = data ?? [];
+
+  // month keys Jan..Dec
+  const monthKeys = Array.from({ length: 12 }, (_, i) =>
+    `${targetYear}-${String(i + 1).padStart(2, '0')}`);
+
+  // action → monthIndex → count
+  const actionMap: Record<string, number[]> = {};
+  for (const r of rows) {
+    const action = (r.action as string) ?? 'unknown';
+    const mIdx   = monthKeys.indexOf((r.created_at as string).slice(0, 7));
+    if (mIdx === -1) continue;
+    if (!actionMap[action]) actionMap[action] = new Array(12).fill(0);
+    actionMap[action][mIdx] += 1;
+  }
+
+  // Sort series by total calls descending, cap at top 10 to keep chart readable
+  const series = Object.entries(actionMap)
+    .map(([action, data]) => ({ action, data, total: data.reduce((s, n) => s + n, 0) }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 10)
+    .map(({ action, data }) => ({ action, data }));
+
+  return { year: targetYear, months: monthKeys, series };
 }
 
 // ---------------------------------------------------------------------------
@@ -1100,10 +1146,11 @@ export const handler: Handler = async (event) => {
       switch (action) {
         case 'admin_dashboard':    result = await handleAdminDashboard();                        break;
         case 'company_stats':           result = await handleCompanyStats(body);               break;
-        case 'admin_ai_usage_summary':  result = await handleAdminAIUsageSummary();            break;
-        case 'admin_ai_usage_by_month': result = await handleAdminAIUsageByMonth();            break;
-        case 'admin_ai_usage_by_action':result = await handleAdminAIUsageByAction();           break;
-        case 'admin_ai_top_orgs':       result = await handleAdminAITopOrgs();                 break;
+        case 'admin_ai_usage_summary':          result = await handleAdminAIUsageSummary();                           break;
+        case 'admin_ai_usage_by_month':         result = await handleAdminAIUsageByMonth(body.year);                  break;
+        case 'admin_ai_usage_by_action':        result = await handleAdminAIUsageByAction();                          break;
+        case 'admin_ai_usage_by_action_by_month': result = await handleAdminAIUsageByActionByMonth(body.year);        break;
+        case 'admin_ai_top_orgs':               result = await handleAdminAITopOrgs();                                break;
         case 'export_company_data':     result = await handleExportCompanyData(body);          break;
         case 'create_company':          result = await handleCreateCompany(body);              break;
         case 'list_companies':          result = await handleListCompanies();                   break;
