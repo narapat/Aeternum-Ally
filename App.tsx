@@ -285,92 +285,16 @@ const App: React.FC = () => {
               <NavItem active={view === 'report'} collapsed={isSidebarCollapsed} onClick={() => setView('report')} icon={<FileText />} label="Reports" />
             </div>
 
-            <div className="space-y-1">
-              <NavItem active={view === 'settings'} collapsed={isSidebarCollapsed} onClick={() => setView('settings')} icon={<Settings />} label="Settings" />
-            </div>
           </nav>
 
-          <div className="border-t border-slate-800 dark:border-slate-900 flex-shrink-0">
-            {/* Expand button when collapsed */}
-            {isSidebarCollapsed && (
-              <div className="p-2">
-                <button onClick={toggleSidebarCollapse} className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-white transition-colors">
-                  <ChevronsRight className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-
-            {/* User avatar / dropdown trigger */}
-            <div className="relative p-3">
-              <button
-                onClick={() => setUserDropdownOpen(v => !v)}
-                title={isSidebarCollapsed ? (user.email ?? '') : ''}
-                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-slate-800 transition-colors group ${isSidebarCollapsed ? 'justify-center' : ''}`}
-              >
-                <div className="w-8 h-8 rounded-full bg-esg-700 flex items-center justify-center text-white font-bold flex-shrink-0 text-sm">
-                  {(user.email ?? '?').charAt(0).toUpperCase()}
-                </div>
-                {!isSidebarCollapsed && (
-                  <>
-                    <div className="overflow-hidden flex-1 min-w-0 text-left">
-                      <p className="text-sm font-medium text-white truncate leading-tight">
-                        {user.email}
-                      </p>
-                      <p className="text-xs text-slate-500 truncate leading-tight mt-0.5">
-                        {currentUserRole ?? 'Member'} · {profile.data.name || 'Workspace'}
-                      </p>
-                    </div>
-                    {userDropdownOpen
-                      ? <ChevronUp className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-                      : <ChevronDown className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-                    }
-                  </>
-                )}
+          {/* Expand button — only shown when sidebar is collapsed */}
+          {isSidebarCollapsed && (
+            <div className="border-t border-slate-800 dark:border-slate-900 p-2 flex-shrink-0">
+              <button onClick={toggleSidebarCollapse} className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-white transition-colors">
+                <ChevronsRight className="w-4 h-4" />
               </button>
-
-              {/* Dropdown menu */}
-              {userDropdownOpen && (
-                <div className={`absolute bottom-full mb-1 z-50 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden ${isSidebarCollapsed ? 'left-full ml-2 w-52' : 'left-3 right-3'}`}>
-                  {/* Profile link */}
-                  <button
-                    onClick={() => { setView('user_profile'); setUserDropdownOpen(false); }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
-                  >
-                    <UserCircle className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                    My Profile
-                  </button>
-
-                  {/* Dark / Light mode toggle */}
-                  <button
-                    onClick={() => setDarkMode(v => !v)}
-                    className="w-full flex items-center justify-between gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
-                  >
-                    <span className="flex items-center gap-3">
-                      {darkMode
-                        ? <Moon className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-                        : <Sun className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                      }
-                      {darkMode ? 'Dark Mode' : 'Light Mode'}
-                    </span>
-                    <div className={`w-8 h-4 rounded-full p-0.5 transition-colors flex-shrink-0 ${darkMode ? 'bg-indigo-600' : 'bg-slate-600'}`}>
-                      <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${darkMode ? 'translate-x-4' : 'translate-x-0'}`} />
-                    </div>
-                  </button>
-
-                  {/* Settings — Owner / Admin only */}
-                  {(currentUserRole === 'Owner' || currentUserRole === 'Admin') && (
-                    <button
-                      onClick={() => { setView('settings'); setUserDropdownOpen(false); }}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors border-t border-slate-700"
-                    >
-                      <Settings className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                      Settings
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
-          </div>
+          )}
         </aside>
 
         {/* Main content */}
@@ -409,8 +333,10 @@ const App: React.FC = () => {
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <span className="text-sm text-slate-500 dark:text-slate-400 font-medium hidden sm:inline">FY {new Date().getFullYear()}</span>
+
+              {/* Sign out */}
               <button
                 onClick={signOut}
                 title="Sign out"
@@ -419,6 +345,72 @@ const App: React.FC = () => {
                 <LogOut className="w-4 h-4" />
                 <span className="hidden sm:inline">Sign out</span>
               </button>
+
+              {/* User avatar dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setUserDropdownOpen(v => !v)}
+                  className="flex items-center gap-2.5 pl-1 pr-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-full bg-esg-700 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                    {(user.email ?? '?').charAt(0).toUpperCase()}
+                  </div>
+                  <div className="hidden sm:block text-left min-w-0">
+                    <p className="text-sm font-medium text-slate-800 dark:text-white truncate max-w-[160px] leading-tight">
+                      {user.email}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[160px] leading-tight">
+                      {currentUserRole ?? 'Member'} · {profile.data.name || 'Workspace'}
+                    </p>
+                  </div>
+                  {userDropdownOpen
+                    ? <ChevronUp className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 hidden sm:block" />
+                    : <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 hidden sm:block" />
+                  }
+                </button>
+
+                {/* Dropdown */}
+                {userDropdownOpen && (
+                  <div className="absolute top-full right-0 mt-1 w-52 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden">
+                    {/* My Profile */}
+                    <button
+                      onClick={() => { setView('user_profile'); setUserDropdownOpen(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors"
+                    >
+                      <UserCircle className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      My Profile
+                    </button>
+
+                    {/* Dark / Light mode toggle */}
+                    <button
+                      onClick={() => setDarkMode(v => !v)}
+                      className="w-full flex items-center justify-between gap-3 px-4 py-3 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors"
+                    >
+                      <span className="flex items-center gap-3">
+                        {darkMode
+                          ? <Moon className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                          : <Sun className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                        }
+                        {darkMode ? 'Dark Mode' : 'Light Mode'}
+                      </span>
+                      <div className={`w-8 h-4 rounded-full p-0.5 transition-colors flex-shrink-0 ${darkMode ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                        <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${darkMode ? 'translate-x-4' : 'translate-x-0'}`} />
+                      </div>
+                    </button>
+
+                    {/* Settings — Owner / Admin only */}
+                    {(currentUserRole === 'Owner' || currentUserRole === 'Admin') && (
+                      <button
+                        onClick={() => { setView('settings'); setUserDropdownOpen(false); }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors border-t border-slate-100 dark:border-slate-700"
+                      >
+                        <Settings className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                        Settings
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </header>
 
