@@ -4,6 +4,7 @@ import AssessmentForm from './components/AssessmentForm';
 import DMAInsightHub from './components/DMAInsightHub';
 import TaskManagement from './components/TaskManagement';
 import CarbonWizard from './components/CarbonWizard';
+import CarbonDashboard from './components/CarbonDashboard';
 import MaterialityMatrix from './components/MaterialityMatrix';
 import BusinessModelCanvas from './components/BusinessModelCanvas';
 import SwotAnalysisWizard from './components/SwotAnalysisWizard';
@@ -71,7 +72,7 @@ const App: React.FC = () => {
   };
 
   // UI state
-  const [view, setView] = useState<'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub' | 'tasks' | 'carbon_wizard'>('overview');
+  const [view, setView] = useState<'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub' | 'tasks' | 'carbon_wizard' | 'carbon_dashboard'>('overview');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [editingAssessment, setEditingAssessment] = useState<AssessmentData | null>(null);
@@ -256,6 +257,7 @@ const App: React.FC = () => {
               <NavItem active={view === 'kpi'} collapsed={isSidebarCollapsed} onClick={() => setView('kpi')} icon={<TrendingUp />} label="Performance (KPI)" />
               <NavItem active={view === 'tasks'} collapsed={isSidebarCollapsed} onClick={() => setView('tasks')} icon={<ListChecks />} label="Tasks" />
               <NavItem active={view === 'carbon_wizard'} collapsed={isSidebarCollapsed} onClick={() => setView('carbon_wizard')} icon={<Leaf />} label="Carbon Quest" />
+              <NavItem active={view === 'carbon_dashboard'} collapsed={isSidebarCollapsed} onClick={() => setView('carbon_dashboard')} icon={<BarChart3 />} label="Carbon Dashboard" />
             </NavSection>
 
             <div className="space-y-1">
@@ -320,7 +322,7 @@ const App: React.FC = () => {
                   {(view === 'profile' || view === 'canvas' || view === 'swot' || view === 'kpi') && 'My Business'}
                   {(view === 'dm_dashboard' || view === 'assess' || view === 'report' || view === 'insight_hub') && 'Double Materiality'}
                   {view === 'tasks' && 'Action Plan'}
-                  {view === 'carbon_wizard' && 'Carbon Accounting'}
+                  {(view === 'carbon_wizard' || view === 'carbon_dashboard') && 'Carbon Accounting'}
                 </span>
                 <ChevronRight className="w-4 h-4 hidden sm:block" />
                 <span className="truncate">
@@ -335,6 +337,7 @@ const App: React.FC = () => {
                   {view === 'insight_hub' && 'DMA Insight Hub'}
                   {view === 'tasks' && 'Task Management'}
                   {view === 'carbon_wizard' && 'Carbon Quest Wizard'}
+                  {view === 'carbon_dashboard' && 'Carbon Dashboard'}
                 </span>
               </div>
             </div>
@@ -569,8 +572,16 @@ const App: React.FC = () => {
                     currentUserId={user.id}
                     profile={profile.data}
                     bmcData={canvas.data}
-                    onComplete={() => setView('overview')}
-                    onSkip={() => setView('overview')}
+                    onComplete={() => setView('carbon_dashboard')}
+                    onSkip={() => setView('carbon_dashboard')}
+                  />
+                )}
+
+                {view === 'carbon_dashboard' && (
+                  <CarbonDashboard
+                    orgId={organization.id}
+                    currentUserId={user.id}
+                    onRunWizard={() => setView('carbon_wizard')}
                   />
                 )}
               </>
