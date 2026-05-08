@@ -243,6 +243,39 @@ export async function fetchAiUsageLog(
 }
 
 // =================================================================
+// USER PROFILE  (1 row per user, owned by that user)
+// =================================================================
+
+export interface UserProfile {
+  user_id: string;
+  display_name: string | null;
+  phone: string | null;
+  mobile: string | null;
+  notes: string | null;
+  updated_at: string | null;
+}
+
+export async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("user_id, display_name, phone, mobile, notes, updated_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data as UserProfile | null;
+}
+
+export async function upsertUserProfile(
+  userId: string,
+  updates: Pick<UserProfile, 'display_name' | 'phone' | 'mobile' | 'notes'>
+): Promise<void> {
+  const { error } = await supabase
+    .from("user_profiles")
+    .upsert({ user_id: userId, ...updates }, { onConflict: "user_id" });
+  if (error) throw error;
+}
+
+// =================================================================
 // COMPANY PROFILE  (1 row per org)
 // =================================================================
 

@@ -11,6 +11,7 @@ import SwotAnalysisWizard from './components/SwotAnalysisWizard';
 import DataCompletenessDashboard from './components/DataCompletenessDashboard';
 import CompanyProfileForm from './components/CompanyProfileForm';
 import SettingsDashboard from './components/SettingsDashboard';
+import UserProfilePage from './components/UserProfilePage';
 import PerformanceDashboard from './components/PerformanceDashboard';
 import SustainabilityStatement from './components/SustainabilityStatement';
 import MaterialTopicsList from './components/MaterialTopicsList';
@@ -28,7 +29,7 @@ import {
   saveQualityCheck, saveDMAInsight, clearDMAInsight, loadDMAInsight, saveDMASuggestedTasks,
 } from './services/dbService';
 import { setOrganizationContext } from './services/geminiService';
-import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, ChevronDown, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2, ListChecks, Zap, Leaf, Settings } from 'lucide-react';
+import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, ChevronDown, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2, ListChecks, Zap, Leaf, Settings, UserCircle, ChevronUp, ScatterChart } from 'lucide-react';
 import type { InsightHubResponse, QualityCheck } from './types';
 
 const DEFAULT_PROFILE: CompanyProfile = {
@@ -73,7 +74,8 @@ const App: React.FC = () => {
   };
 
   // UI state
-  const [view, setView] = useState<'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub' | 'tasks' | 'carbon_wizard' | 'carbon_dashboard' | 'settings'>('overview');
+  const [view, setView] = useState<'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub' | 'tasks' | 'carbon_wizard' | 'carbon_dashboard' | 'settings' | 'user_profile'>('overview');
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [editingAssessment, setEditingAssessment] = useState<AssessmentData | null>(null);
@@ -85,10 +87,19 @@ const App: React.FC = () => {
   // so AI auto-fill knows which issues to address
   const [hubQualityCheck, setHubQualityCheck] = useState<QualityCheck | null>(null);
 
-  // Sidebar nav group open/close state
-  const [myBusinessOpen, setMyBusinessOpen] = useState(true);
-  const [doubleMaterialityOpen, setDoubleMaterialityOpen] = useState(true);
-  const [measurementOpen, setMeasurementOpen] = useState(true);
+  // Sidebar nav group open/close state — persisted per-device in localStorage
+  const [myBusinessOpen, setMyBusinessOpen] = useState(() => {
+    try { return localStorage.getItem('nav_myBusiness') !== 'false'; } catch { return true; }
+  });
+  const [doubleMaterialityOpen, setDoubleMaterialityOpen] = useState(() => {
+    try { return localStorage.getItem('nav_doubleMateriality') !== 'false'; } catch { return true; }
+  });
+  const [measurementOpen, setMeasurementOpen] = useState(() => {
+    try { return localStorage.getItem('nav_measurement') !== 'false'; } catch { return true; }
+  });
+  useEffect(() => { try { localStorage.setItem('nav_myBusiness', String(myBusinessOpen)); } catch {} }, [myBusinessOpen]);
+  useEffect(() => { try { localStorage.setItem('nav_doubleMateriality', String(doubleMaterialityOpen)); } catch {} }, [doubleMaterialityOpen]);
+  useEffect(() => { try { localStorage.setItem('nav_measurement', String(measurementOpen)); } catch {} }, [measurementOpen]);
 
   // DB-backed singleton data (auto-save + manual save)
   const orgId = organization?.id ?? null;
@@ -129,8 +140,8 @@ const App: React.FC = () => {
     return () => { cancelled = true; };
   }, [orgId]);
 
-  // Close mobile sidebar on route change
-  useEffect(() => { setIsMobileSidebarOpen(false); }, [view]);
+  // Close mobile sidebar and user dropdown on route change
+  useEffect(() => { setIsMobileSidebarOpen(false); setUserDropdownOpen(false); }, [view]);
 
   // Handle Google Drive OAuth callback redirect (?google_drive=connected|error)
   useEffect(() => {
@@ -267,7 +278,7 @@ const App: React.FC = () => {
             </NavSection>
 
             <NavSection label="Double Materiality" open={doubleMaterialityOpen} onToggle={() => setDoubleMaterialityOpen(v => !v)} sidebarCollapsed={isSidebarCollapsed}>
-              <NavItem active={view === 'dm_dashboard'} collapsed={isSidebarCollapsed} onClick={() => setView('dm_dashboard')} icon={<BarChart3 />} label="Dashboard" />
+              <NavItem active={view === 'dm_dashboard'} collapsed={isSidebarCollapsed} onClick={() => setView('dm_dashboard')} icon={<ScatterChart />} label="Dashboard" />
               <NavItem active={view === 'assess'} collapsed={isSidebarCollapsed} onClick={() => { setView('assess'); setIsFormOpen(false); setEditingAssessment(null); }} icon={<Plus />} label="Assessments" />
               <NavItem active={view === 'insight_hub'} collapsed={isSidebarCollapsed} onClick={() => setView('insight_hub')} icon={<Zap className="w-5 h-5" />} label="Insight Hub" />
             </NavSection>
@@ -283,53 +294,16 @@ const App: React.FC = () => {
               <NavItem active={view === 'report'} collapsed={isSidebarCollapsed} onClick={() => setView('report')} icon={<FileText />} label="Reports" />
             </div>
 
-            <div className="space-y-1">
-              <NavItem active={view === 'settings'} collapsed={isSidebarCollapsed} onClick={() => setView('settings')} icon={<Settings />} label="Settings" />
-            </div>
           </nav>
 
-          <div className="p-4 border-t border-slate-800 dark:border-slate-900 space-y-3 flex-shrink-0">
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className={`w-full flex items-center px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 transition-colors ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
-              <span className="flex items-center gap-2">
-                {darkMode ? <Moon className="w-4 h-4 text-indigo-400" /> : <Sun className="w-4 h-4 text-amber-400" />}
-                {!isSidebarCollapsed && <span>{darkMode ? 'Dark Mode' : 'Light Mode'}</span>}
-              </span>
-              {!isSidebarCollapsed && (
-                <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${darkMode ? 'bg-indigo-600' : 'bg-slate-600'}`}>
-                  <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${darkMode ? 'translate-x-4' : 'translate-x-0'}`} />
-                </div>
-              )}
-            </button>
-
-            {isSidebarCollapsed && (
-              <button onClick={toggleSidebarCollapse} className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-white">
+          {/* Expand button — only shown when sidebar is collapsed */}
+          {isSidebarCollapsed && (
+            <div className="border-t border-slate-800 dark:border-slate-900 p-2 flex-shrink-0">
+              <button onClick={toggleSidebarCollapse} className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-white transition-colors">
                 <ChevronsRight className="w-4 h-4" />
               </button>
-            )}
-
-            <div className={`flex items-center gap-3 pt-2 ${isSidebarCollapsed ? 'justify-center' : ''}`}>
-              <div className="w-8 h-8 rounded-full bg-esg-700 flex items-center justify-center text-white font-bold flex-shrink-0">
-                {(user.email ?? '?').charAt(0).toUpperCase()}
-              </div>
-              {!isSidebarCollapsed && (
-                <div className="overflow-hidden flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{user.email}</p>
-                  <p className="text-xs text-slate-500 truncate">{currentUserRole ?? 'Member'} · {profile.data.name || 'Workspace'}</p>
-                </div>
-              )}
-              {!isSidebarCollapsed && (
-                <button
-                  onClick={signOut}
-                  title="Sign out"
-                  className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
-              )}
             </div>
-          </div>
+          )}
         </aside>
 
         {/* Main content */}
@@ -347,6 +321,7 @@ const App: React.FC = () => {
                   {view === 'tasks' && 'Action Plan'}
                   {(view === 'carbon_wizard' || view === 'carbon_dashboard') && 'Carbon Accounting'}
                   {view === 'settings' && 'Workspace'}
+                  {view === 'user_profile' && 'Account'}
                 </span>
                 <ChevronRight className="w-4 h-4 hidden sm:block" />
                 <span className="truncate">
@@ -363,10 +338,90 @@ const App: React.FC = () => {
                   {view === 'carbon_wizard' && 'Carbon Quest Wizard'}
                   {view === 'carbon_dashboard' && 'Carbon Dashboard'}
                   {view === 'settings' && 'Settings'}
+                  {view === 'user_profile' && 'My Profile'}
                 </span>
               </div>
             </div>
-            <span className="text-sm text-slate-500 dark:text-slate-400 font-medium hidden sm:inline">FY {new Date().getFullYear()}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-500 dark:text-slate-400 font-medium hidden sm:inline">FY {new Date().getFullYear()}</span>
+
+              {/* User avatar — clicking opens dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setUserDropdownOpen(v => !v)}
+                  title={user.email ?? ''}
+                  className="flex items-center gap-1.5 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-full bg-esg-700 flex items-center justify-center text-white flex-shrink-0">
+                    <UserCircle className="w-5 h-5" />
+                  </div>
+                  {userDropdownOpen
+                    ? <ChevronUp className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                    : <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                  }
+                </button>
+
+                {/* Dropdown */}
+                {userDropdownOpen && (
+                  <div className="absolute top-full right-0 mt-1 w-56 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden">
+
+                    {/* Identity header */}
+                    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+                      <p className="text-sm font-medium text-slate-800 dark:text-white truncate">{user.email}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                        {currentUserRole ?? 'Member'} · {profile.data.name || 'Workspace'}
+                      </p>
+                    </div>
+
+                    {/* My Profile */}
+                    <button
+                      onClick={() => { setView('user_profile'); setUserDropdownOpen(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors"
+                    >
+                      <UserCircle className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      My Profile
+                    </button>
+
+                    {/* Dark / Light mode toggle */}
+                    <button
+                      onClick={() => setDarkMode(v => !v)}
+                      className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors"
+                    >
+                      <span className="flex items-center gap-3">
+                        {darkMode
+                          ? <Moon className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                          : <Sun className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                        }
+                        {darkMode ? 'Dark Mode' : 'Light Mode'}
+                      </span>
+                      <div className={`w-8 h-4 rounded-full p-0.5 transition-colors flex-shrink-0 ${darkMode ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                        <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${darkMode ? 'translate-x-4' : 'translate-x-0'}`} />
+                      </div>
+                    </button>
+
+                    {/* Settings — Owner / Admin only */}
+                    {(currentUserRole === 'Owner' || currentUserRole === 'Admin') && (
+                      <button
+                        onClick={() => { setView('settings'); setUserDropdownOpen(false); }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors"
+                      >
+                        <Settings className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                        Settings
+                      </button>
+                    )}
+
+                    {/* Sign out */}
+                    <button
+                      onClick={signOut}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors border-t border-slate-100 dark:border-slate-700"
+                    >
+                      <LogOut className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </header>
 
           <div className="p-4 md:p-8 max-w-[100vw] overflow-x-hidden">
@@ -613,6 +668,13 @@ const App: React.FC = () => {
                     currentUserRole={currentUserRole}
                     members={members}
                     onMembersChanged={refetchOrg}
+                  />
+                )}
+
+                {view === 'user_profile' && (
+                  <UserProfilePage
+                    userId={user.id}
+                    userEmail={user.email ?? ''}
                   />
                 )}
               </>
