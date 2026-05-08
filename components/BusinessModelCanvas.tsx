@@ -98,7 +98,7 @@ const ArrayFieldEditor: React.FC<ArrayFieldEditorProps> = ({ items, onChange, pl
 
   return (
     <div className="border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 focus-within:border-esg-400 transition-colors">
-      <ul className="p-3 space-y-2 min-h-[80px] max-h-56 overflow-y-auto">
+      <ul className="p-3 space-y-2 min-h-[100px] max-h-64 overflow-y-auto">
         {items.map((item, i) => (
           <li key={i} className="flex items-center gap-2 group">
             <span className="text-slate-300 dark:text-slate-600 text-sm flex-shrink-0">•</span>
@@ -325,7 +325,7 @@ const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, profile, saveSta
               hint="Fixed costs, Variable costs, Economies of scale"
               value={data.costStructure}
               onChange={(v) => handleChange('costStructure', v)}
-              className="h-auto md:h-32 min-h-[140px]"
+              className="h-auto md:h-56 min-h-[220px]"
               height=""
             />
             <CanvasCard
@@ -333,7 +333,7 @@ const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, profile, saveSta
               hint="Asset sale, Usage fee, Subscription, Licensing"
               value={data.revenueStreams}
               onChange={(v) => handleChange('revenueStreams', v)}
-              className="h-auto md:h-32 min-h-[140px]"
+              className="h-auto md:h-56 min-h-[220px]"
               height=""
             />
           </div>
@@ -347,7 +347,7 @@ const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, profile, saveSta
               hint="Pollution, Waste, Social stress (Negative externalities)"
               value={data.ecoSocialCosts}
               onChange={(v) => handleChange('ecoSocialCosts', v)}
-              className="h-auto md:h-32 min-h-[140px]"
+              className="h-auto md:h-56 min-h-[220px]"
               height=""
               headerColor="text-red-600 dark:text-red-400"
             />
@@ -356,7 +356,7 @@ const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, profile, saveSta
               hint="Carbon reduction, Community dev, Wellbeing (Positive externalities)"
               value={data.ecoSocialBenefits}
               onChange={(v) => handleChange('ecoSocialBenefits', v)}
-              className="h-auto md:h-32 min-h-[140px]"
+              className="h-auto md:h-56 min-h-[220px]"
               height=""
               headerColor="text-esg-600 dark:text-esg-400"
             />
