@@ -243,6 +243,151 @@ async function handleAdminDashboard(): Promise<object> {
 }
 
 // ---------------------------------------------------------------------------
+// Post-auth: create_company
+// ---------------------------------------------------------------------------
+async function handleCreateCompany(body: any): Promise<object> {
+  const companyName = (body.company_name ?? '').trim();
+  const ownerEmail  = (body.owner_email  ?? '').trim().toLowerCase();
+  const tier        = (body.tier ?? 'free') as string;
+
+  if (!companyName) throw Object.assign(new Error('company_name is required'), { status: 400 });
+  if (!ownerEmail)  throw Object.assign(new Error('owner_email is required'),  { status: 400 });
+  if (!['free','starter','pro','enterprise'].includes(tier))
+    throw Object.assign(new Error('Invalid tier'), { status: 400 });
+
+  const sb = getAdminClient();
+
+  // 1. Get or create the Supabase Auth user
+  const { data: listData } = await sb.auth.admin.listUsers({ perPage: 1000 });
+  const existingUser = (listData?.users ?? []).find(
+    (u: any) => u.email?.toLowerCase() === ownerEmail
+  );
+
+  let userId: string;
+  let isNewUser = false;
+
+  if (existingUser) {
+    userId = existingUser.id;
+  } else {
+    const { data: created, error: createErr } = await sb.auth.admin.createUser({
+      email:          ownerEmail,
+      email_confirm:  true,
+    });
+    if (createErr || !created.user) {
+      throw Object.assign(new Error(createErr?.message ?? 'Failed to create user'), { status: 500 });
+    }
+    userId    = created.user.id;
+    isNewUser = true;
+  }
+
+  // 2. Create org
+  const { data: org, error: orgErr } = await sb
+    .from('organizations').insert({ tier }).select('id').single();
+  if (orgErr) throw Object.assign(new Error(orgErr.message), { status: 500 });
+
+  // 3. Create company profile (name only; rest stays blank)
+  const { error: profileErr } = await sb.from('company_profiles').insert({
+    organization_id: org.id,
+    name:            companyName,
+  });
+  if (profileErr) throw Object.assign(new Error(profileErr.message), { status: 500 });
+
+  // 4. Add owner to org_members
+  const { error: memberErr } = await sb.from('organization_members').insert({
+    organization_id: org.id,
+    user_id:         userId,
+    role:            'Owner',
+    email:           ownerEmail,
+  });
+  if (memberErr) throw Object.assign(new Error(memberErr.message), { status: 500 });
+
+  // 5. Send magic-link invite to new users so they can sign in
+  let devLink: string | undefined;
+  if (isNewUser) {
+    const { data: linkData } = await sb.auth.admin.generateLink({
+      type: 'magiclink', email: ownerEmail,
+      options: { redirectTo: appUrl },
+    });
+    const magicLink = linkData?.properties?.action_link ?? null;
+    if (magicLink) {
+      if (resendApiKey) {
+        await sendOwnerInviteEmail(ownerEmail, magicLink, companyName);
+      } else {
+        console.info(`\n[admin] ✉️  OWNER INVITE LINK (dev):\n${magicLink}\n`);
+        devLink = magicLink;
+      }
+    }
+  }
+
+  console.info('[admin] create_company:', companyName, 'owner:', ownerEmail, 'org:', org.id);
+  return { created: true, organization_id: org.id, company_name: companyName, dev_link: devLink };
+}
+
+// ---------------------------------------------------------------------------
+// Post-auth: list_pending_users
+// ---------------------------------------------------------------------------
+async function handleListPendingUsers(): Promise<object> {
+  const sb = getAdminClient();
+
+  // Fetch all auth users + current members in parallel
+  const [usersRes, membersRes] = await Promise.all([
+    sb.auth.admin.listUsers({ perPage: 1000 }),
+    sb.from('organization_members').select('user_id'),
+  ]);
+
+  if (usersRes.error) throw Object.assign(new Error(usersRes.error.message), { status: 500 });
+
+  const memberIds = new Set((membersRes.data ?? []).map((m: any) => m.user_id));
+
+  const pending = (usersRes.data?.users ?? [])
+    .filter((u: any) => !memberIds.has(u.id) && u.email)
+    .map((u: any) => ({
+      id:              u.id,
+      email:           u.email,
+      created_at:      u.created_at,
+      last_sign_in_at: u.last_sign_in_at ?? null,
+    }));
+
+  return { users: pending };
+}
+
+// ---------------------------------------------------------------------------
+// Post-auth: assign_user_to_company
+// ---------------------------------------------------------------------------
+async function handleAssignUserToCompany(body: any): Promise<object> {
+  const userId  = (body.user_id         ?? '').trim();
+  const orgId   = (body.organization_id ?? '').trim();
+  const role    = (body.role            ?? 'Manager') as string;
+
+  if (!userId) throw Object.assign(new Error('user_id is required'),         { status: 400 });
+  if (!orgId)  throw Object.assign(new Error('organization_id is required'), { status: 400 });
+  if (!['Owner','Admin','Manager','Consultant'].includes(role))
+    throw Object.assign(new Error('Invalid role'), { status: 400 });
+
+  const sb = getAdminClient();
+
+  // Resolve email from auth.users
+  const { data: userData, error: userErr } = await sb.auth.admin.getUserById(userId);
+  if (userErr || !userData.user) throw Object.assign(new Error('User not found'), { status: 404 });
+
+  // Guard: already a member of this org
+  const { data: dup } = await sb.from('organization_members')
+    .select('id').eq('organization_id', orgId).eq('user_id', userId).maybeSingle();
+  if (dup) throw Object.assign(new Error('User is already a member of this company'), { status: 409 });
+
+  const { error: insertErr } = await sb.from('organization_members').insert({
+    organization_id: orgId,
+    user_id:         userId,
+    role,
+    email:           userData.user.email ?? '',
+  });
+  if (insertErr) throw Object.assign(new Error(insertErr.message), { status: 500 });
+
+  console.info('[admin] assign_user_to_company:', userId, '->', orgId, 'role:', role);
+  return { assigned: true, user_id: userId, organization_id: orgId, role };
+}
+
+// ---------------------------------------------------------------------------
 // Post-auth: list_companies
 // ---------------------------------------------------------------------------
 async function handleListCompanies(): Promise<object> {
@@ -254,7 +399,7 @@ async function handleListCompanies(): Promise<object> {
       .select('id, tier, is_active, created_at')
       .order('created_at', { ascending: false }),
     sb.from('company_profiles')
-      .select('organization_id, company_name'),
+      .select('organization_id, name'),
     sb.from('organization_members')
       .select('organization_id'),
   ]);
@@ -264,7 +409,7 @@ async function handleListCompanies(): Promise<object> {
   // Build lookup maps
   const nameMap: Record<string, string> = {};
   for (const p of profilesRes.data ?? []) {
-    nameMap[p.organization_id] = p.company_name ?? '(unnamed)';
+    nameMap[p.organization_id] = p.name ?? '(unnamed)';
   }
 
   const memberCount: Record<string, number> = {};
@@ -393,6 +538,55 @@ async function handleDeactivateAdmin(body: any, actorEmail: string): Promise<obj
 
   console.info('[admin] Deactivated platform admin:', target.email, 'by:', actorEmail);
   return { deactivated: true, email: target.email };
+}
+
+// ---------------------------------------------------------------------------
+// Email helper — owner invite email (sent when a new company is created)
+// ---------------------------------------------------------------------------
+async function sendOwnerInviteEmail(toEmail: string, magicLink: string, companyName: string): Promise<void> {
+  const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><title>Welcome to Aeternum Ally</title></head>
+<body style="margin:0;padding:0;background:#020617;font-family:Inter,'Helvetica Neue',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#020617;padding:48px 16px;">
+<tr><td align="center">
+<table width="100%" style="max-width:480px;background:#0f172a;border:1px solid #1e293b;border-radius:16px;overflow:hidden;">
+  <tr><td style="background:#14532d;padding:24px 32px;text-align:center;">
+    <span style="color:#fff;font-size:18px;font-weight:700;">🌿 Aeternum Ally</span><br/>
+    <span style="color:#86efac;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Sustainability Reporting Platform</span>
+  </td></tr>
+  <tr><td style="padding:32px;">
+    <p style="margin:0 0 8px;color:#94a3b8;font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">You've been added</p>
+    <h1 style="margin:0 0 16px;color:#f1f5f9;font-size:20px;font-weight:700;">Welcome to ${companyName}</h1>
+    <p style="margin:0 0 24px;color:#94a3b8;font-size:15px;line-height:1.6;">
+      Your company <strong style="color:#e2e8f0;">${companyName}</strong> has been set up on Aeternum Ally.
+      Click below to sign in as Owner and start your sustainability journey.
+      Valid for <strong style="color:#e2e8f0;">60 minutes</strong>, single use.
+    </p>
+    <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+      <tr><td style="background:#16a34a;border-radius:10px;">
+        <a href="${magicLink}" style="display:inline-block;padding:14px 28px;color:#fff;font-size:15px;font-weight:600;text-decoration:none;">Sign in to Aeternum Ally →</a>
+      </td></tr>
+    </table>
+  </td></tr>
+  <tr><td style="padding:0 32px 24px;"><p style="margin:0;color:#475569;font-size:11px;word-break:break-all;font-family:monospace;">${magicLink}</p></td></tr>
+  <tr><td style="padding:16px 32px;border-top:1px solid #1e293b;text-align:center;">
+    <p style="margin:0;color:#334155;font-size:12px;">Aeternum Ally · Sustainability Reporting · Do not reply</p>
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
+
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${resendApiKey}` },
+    body: JSON.stringify({
+      from:    `Aeternum Ally <${fromEmail}>`,
+      to:      [toEmail],
+      subject: `🌿 Welcome to Aeternum Ally — Your company ${companyName} is ready`,
+      html,
+    }),
+  });
+  if (!res.ok) throw new Error(`Resend error ${res.status}: ${await res.text()}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -551,8 +745,11 @@ export const handler: Handler = async (event) => {
 
       switch (action) {
         case 'admin_dashboard':    result = await handleAdminDashboard();                        break;
-        case 'list_companies':     result = await handleListCompanies();                         break;
-        case 'set_company_status': result = await handleSetCompanyStatus(body);                  break;
+        case 'create_company':          result = await handleCreateCompany(body);              break;
+        case 'list_companies':          result = await handleListCompanies();                   break;
+        case 'set_company_status':      result = await handleSetCompanyStatus(body);            break;
+        case 'list_pending_users':      result = await handleListPendingUsers();                break;
+        case 'assign_user_to_company':  result = await handleAssignUserToCompany(body);         break;
         case 'list_admins':        result = await handleListAdmins();                            break;
         case 'add_admin':         result = await handleAddAdmin(body, actorEmail);              break;
         case 'deactivate_admin':  result = await handleDeactivateAdmin(body, actorEmail);       break;
