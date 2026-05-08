@@ -336,46 +336,38 @@ const App: React.FC = () => {
             <div className="flex items-center gap-2">
               <span className="text-sm text-slate-500 dark:text-slate-400 font-medium hidden sm:inline">FY {new Date().getFullYear()}</span>
 
-              {/* Sign out */}
-              <button
-                onClick={signOut}
-                title="Sign out"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                <span className="hidden sm:inline">Sign out</span>
-              </button>
-
-              {/* User avatar dropdown */}
+              {/* User avatar — clicking opens dropdown */}
               <div className="relative">
                 <button
                   onClick={() => setUserDropdownOpen(v => !v)}
-                  className="flex items-center gap-2.5 pl-1 pr-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                  title={user.email ?? ''}
+                  className="flex items-center gap-1.5 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                 >
-                  <div className="w-8 h-8 rounded-full bg-esg-700 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                    {(user.email ?? '?').charAt(0).toUpperCase()}
-                  </div>
-                  <div className="hidden sm:block text-left min-w-0">
-                    <p className="text-sm font-medium text-slate-800 dark:text-white truncate max-w-[160px] leading-tight">
-                      {user.email}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[160px] leading-tight">
-                      {currentUserRole ?? 'Member'} · {profile.data.name || 'Workspace'}
-                    </p>
+                  <div className="w-8 h-8 rounded-full bg-esg-700 flex items-center justify-center text-white flex-shrink-0">
+                    <UserCircle className="w-5 h-5" />
                   </div>
                   {userDropdownOpen
-                    ? <ChevronUp className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 hidden sm:block" />
-                    : <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 hidden sm:block" />
+                    ? <ChevronUp className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                    : <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                   }
                 </button>
 
                 {/* Dropdown */}
                 {userDropdownOpen && (
-                  <div className="absolute top-full right-0 mt-1 w-52 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden">
+                  <div className="absolute top-full right-0 mt-1 w-56 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden">
+
+                    {/* Identity header */}
+                    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+                      <p className="text-sm font-medium text-slate-800 dark:text-white truncate">{user.email}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                        {currentUserRole ?? 'Member'} · {profile.data.name || 'Workspace'}
+                      </p>
+                    </div>
+
                     {/* My Profile */}
                     <button
                       onClick={() => { setView('user_profile'); setUserDropdownOpen(false); }}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors"
                     >
                       <UserCircle className="w-4 h-4 text-slate-400 flex-shrink-0" />
                       My Profile
@@ -384,7 +376,7 @@ const App: React.FC = () => {
                     {/* Dark / Light mode toggle */}
                     <button
                       onClick={() => setDarkMode(v => !v)}
-                      className="w-full flex items-center justify-between gap-3 px-4 py-3 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors"
+                      className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors"
                     >
                       <span className="flex items-center gap-3">
                         {darkMode
@@ -402,12 +394,21 @@ const App: React.FC = () => {
                     {(currentUserRole === 'Owner' || currentUserRole === 'Admin') && (
                       <button
                         onClick={() => { setView('settings'); setUserDropdownOpen(false); }}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors border-t border-slate-100 dark:border-slate-700"
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors"
                       >
                         <Settings className="w-4 h-4 text-slate-400 flex-shrink-0" />
                         Settings
                       </button>
                     )}
+
+                    {/* Sign out */}
+                    <button
+                      onClick={signOut}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors border-t border-slate-100 dark:border-slate-700"
+                    >
+                      <LogOut className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      Sign out
+                    </button>
                   </div>
                 )}
               </div>
