@@ -11,19 +11,13 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
   updated_at  timestamptz NOT NULL DEFAULT now()
 );
 
--- Keep updated_at current automatically
-CREATE OR REPLACE FUNCTION public.set_updated_at()
-RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
-
+-- Keep updated_at current automatically.
+-- Reuses the existing update_updated_at() function defined in schema.sql /
+-- migration 001 so we don't create a duplicate trigger function.
 DROP TRIGGER IF EXISTS trg_user_profiles_updated_at ON public.user_profiles;
 CREATE TRIGGER trg_user_profiles_updated_at
   BEFORE UPDATE ON public.user_profiles
-  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
 -- RLS: each user can only read and write their own row
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
