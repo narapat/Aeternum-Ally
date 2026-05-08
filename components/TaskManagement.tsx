@@ -6,6 +6,7 @@ import {
 import {
   fetchTasks, upsertTask, deleteTask,
   fetchSuggestedTasks, dismissSuggestedTask, promoteSuggestedTask, saveSuggestedTasks,
+  restoreSuggestedTask, fetchDismissedSuggestedTasks,
 } from '../services/dbService';
 import { generateTasks } from '../services/geminiService';
 import {
@@ -858,6 +859,90 @@ const ManagerTab: React.FC<ManagerProps> = ({
           onClose={() => setShowAddModal(false)}
           onSaved={(task) => { setTasks(prev => [task, ...prev]); setShowAddModal(false); }}
         />
+      )}
+
+      <DismissedSuggestionsPanel orgId={orgId} currentUserId={currentUserId} />
+    </div>
+  );
+};
+
+// ── Dismissed Suggestions Panel ───────────────────────────────────────────────
+
+const DismissedSuggestionsPanel: React.FC<{ orgId: string; currentUserId: string }> = ({ orgId, currentUserId }) => {
+  const [open, setOpen] = useState(false);
+  const [dismissed, setDismissed] = useState<SuggestedTask[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    fetchDismissedSuggestedTasks(orgId)
+      .then(setDismissed)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [open, orgId]);
+
+  const handleRestore = async (id: string) => {
+    setBusy(id);
+    try {
+      await restoreSuggestedTask(id);
+      setDismissed(prev => prev.filter(t => t.id !== id));
+    } catch {}
+    setBusy(null);
+  };
+
+  return (
+    <div className="mt-6 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
+      >
+        <span className="flex items-center gap-2">
+          <RefreshCw className="w-4 h-4" />
+          Dismissed Suggestions
+        </span>
+        {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+      </button>
+
+      {open && (
+        <div className="p-4">
+          {loading ? (
+            <div className="flex items-center gap-2 text-slate-400 text-sm py-4">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+            </div>
+          ) : dismissed.length === 0 ? (
+            <p className="text-sm text-slate-400 dark:text-slate-500 py-4 text-center">
+              No dismissed suggestions.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {dismissed.map(task => (
+                <div
+                  key={task.id}
+                  className="flex items-center justify-between gap-3 py-2 px-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-900/50"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{task.title}</p>
+                    {task.esrs_ref && (
+                      <p className="text-xs text-slate-400 dark:text-slate-500">{task.esrs_ref}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busy === task.id}
+                    onClick={() => handleRestore(task.id)}
+                    className="flex-shrink-0 flex items-center gap-1 px-3 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-700 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 disabled:opacity-50 transition-colors"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    Restore
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

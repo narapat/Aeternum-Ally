@@ -384,6 +384,8 @@ const App: React.FC = () => {
                     onSaveKpi={handleSaveKpi}
                     onDeleteKpi={handleDeleteKpi}
                     profile={profile.data}
+                    orgId={organization?.id}
+                    currentUserId={user?.id}
                   />
                 )}
 
@@ -407,7 +409,7 @@ const App: React.FC = () => {
                         <MaterialityMatrix data={assessments} />
                       </div>
                       <div className="min-h-[400px]">
-                        <MaterialTopicsList assessments={assessments} onEdit={handleEditAssessment} onDelete={handleDeleteAssessment} />
+                        <MaterialTopicsList assessments={assessments} onEdit={handleEditAssessment} onDelete={handleDeleteAssessment} orgId={organization?.id} currentUserId={user?.id} />
                       </div>
                     </div>
                   </div>
@@ -469,7 +471,7 @@ const App: React.FC = () => {
                             <div className="p-8 text-center border border-dashed border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-slate-400">No assessments recorded yet.</div>
                           ) : (
                             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                              <MaterialTopicsList assessments={assessments} onEdit={handleEditAssessment} onDelete={handleDeleteAssessment} />
+                              <MaterialTopicsList assessments={assessments} onEdit={handleEditAssessment} onDelete={handleDeleteAssessment} orgId={organization?.id} currentUserId={user?.id} />
                             </div>
                           )}
                         </div>

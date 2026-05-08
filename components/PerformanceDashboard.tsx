@@ -1,18 +1,22 @@
 
-import React, { useState } from 'react';
-import { KPI, BSCPerspective, RACI, CompanyProfile } from '../types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { KPI, BSCPerspective, RACI, CompanyProfile, SuggestedTask } from '../types';
 import { generateKPISuggestions } from '../services/geminiService';
 import {
   TrendingUp, Users, Settings, BookOpen, Plus,
   Link, ArrowUpRight, User, Loader2, Save, Trash2
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { fetchSuggestedTasks } from '../services/dbService';
+import AmbientTaskBadge from './AmbientTaskBadge';
 
 interface Props {
   kpis: KPI[];
   onSaveKpi: (kpi: KPI) => Promise<void>;
   onDeleteKpi: (id: string) => Promise<void>;
   profile: CompanyProfile;
+  orgId?: string;
+  currentUserId?: string;
 }
 
 const PERSPECTIVE_CONFIG = {
@@ -22,10 +26,21 @@ const PERSPECTIVE_CONFIG = {
   [BSCPerspective.LEARNING]: { color: 'bg-purple-100 text-purple-800', border: 'border-purple-200', icon: <BookOpen className="w-5 h-5" /> },
 };
 
-const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, profile }) => {
+const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, profile, orgId, currentUserId }) => {
   const [viewMode, setViewMode] = useState<'map' | 'tracking'>('map');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
+  const [suggestedTasks, setSuggestedTasks] = useState<SuggestedTask[]>([]);
+
+  const loadSuggested = useCallback(async () => {
+    if (!orgId) return;
+    try {
+      const tasks = await fetchSuggestedTasks(orgId);
+      setSuggestedTasks(tasks.filter(t => t.source_type === 'kpi'));
+    } catch {}
+  }, [orgId]);
+
+  useEffect(() => { loadSuggested(); }, [loadSuggested]);
 
   const handleDelete = async (id: string) => {
     await onDeleteKpi(id);
@@ -76,7 +91,14 @@ const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, p
       )}
 
       {viewMode === 'map' ? (
-        <StrategyMap kpis={kpis} onEdit={(k) => { setEditingKpi(k); setIsFormOpen(true); }} />
+        <StrategyMap
+          kpis={kpis}
+          onEdit={(k) => { setEditingKpi(k); setIsFormOpen(true); }}
+          suggestedTasks={suggestedTasks}
+          orgId={orgId}
+          currentUserId={currentUserId}
+          onSuggestionsChanged={loadSuggested}
+        />
       ) : (
         <TrackingList kpis={kpis} onEdit={(k) => { setEditingKpi(k); setIsFormOpen(true); }} onDelete={handleDelete} />
       )}
@@ -85,7 +107,14 @@ const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, p
 };
 
 // --- Sub-Component: Strategy Map View ---
-const StrategyMap: React.FC<{ kpis: KPI[], onEdit: (k: KPI) => void }> = ({ kpis, onEdit }) => {
+const StrategyMap: React.FC<{
+    kpis: KPI[];
+    onEdit: (k: KPI) => void;
+    suggestedTasks: SuggestedTask[];
+    orgId?: string;
+    currentUserId?: string;
+    onSuggestionsChanged: () => void;
+}> = ({ kpis, onEdit, suggestedTasks, orgId, currentUserId, onSuggestionsChanged }) => {
     const perspectives = [
         BSCPerspective.FINANCIAL,
         BSCPerspective.CUSTOMER,
@@ -118,7 +147,16 @@ const StrategyMap: React.FC<{ kpis: KPI[], onEdit: (k: KPI) => void }> = ({ kpis
                                 ) : (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
                                         {pKpis.map(kpi => (
-                                            <StrategyCard key={kpi.id} kpi={kpi} allKpis={kpis} onClick={() => onEdit(kpi)} />
+                                            <StrategyCard
+                                                key={kpi.id}
+                                                kpi={kpi}
+                                                allKpis={kpis}
+                                                onClick={() => onEdit(kpi)}
+                                                suggestedTasks={orgId ? suggestedTasks.filter(t => t.source_id === kpi.id) : []}
+                                                orgId={orgId}
+                                                currentUserId={currentUserId}
+                                                onSuggestionsChanged={onSuggestionsChanged}
+                                            />
                                         ))}
                                     </div>
                                 )}
@@ -131,17 +169,39 @@ const StrategyMap: React.FC<{ kpis: KPI[], onEdit: (k: KPI) => void }> = ({ kpis
     );
 };
 
-const StrategyCard: React.FC<{ kpi: KPI, allKpis: KPI[], onClick: () => void }> = ({ kpi, allKpis, onClick }) => {
+const StrategyCard: React.FC<{
+    kpi: KPI;
+    allKpis: KPI[];
+    onClick: () => void;
+    suggestedTasks: SuggestedTask[];
+    orgId?: string;
+    currentUserId?: string;
+    onSuggestionsChanged: () => void;
+}> = ({ kpi, allKpis, onClick, suggestedTasks, orgId, currentUserId, onSuggestionsChanged }) => {
     const progress = (kpi.currentValue / kpi.targetValue) * 100;
     const linked = allKpis.filter(k => kpi.linkedKpiIds.includes(k.id));
-    
+
     return (
-        <div 
+        <div
             onClick={onClick}
             className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-esg-400 cursor-pointer hover:shadow-md transition-all bg-slate-50 dark:bg-slate-900/50 group"
         >
             <div className="flex justify-between items-start mb-2">
-                <h4 className="font-bold text-slate-800 dark:text-white text-sm group-hover:text-esg-600 transition-colors">{kpi.name}</h4>
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                        <h4 className="font-bold text-slate-800 dark:text-white text-sm group-hover:text-esg-600 transition-colors">{kpi.name}</h4>
+                        {orgId && currentUserId && (
+                            <span onClick={e => e.stopPropagation()}>
+                                <AmbientTaskBadge
+                                    tasks={suggestedTasks}
+                                    orgId={orgId}
+                                    currentUserId={currentUserId}
+                                    onChanged={onSuggestionsChanged}
+                                />
+                            </span>
+                        )}
+                    </div>
+                </div>
                 <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${progress >= 100 ? 'bg-emerald-100 text-emerald-800' : progress >= 70 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>
                     {Math.round(progress)}%
                 </span>
