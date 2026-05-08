@@ -4,6 +4,7 @@ import {
   LogOut, ChevronRight, Menu, X,
 } from 'lucide-react';
 import AdminDashboard from './AdminDashboard';
+import AdminUsersPanel from './AdminUsersPanel';
 
 type AdminView = 'dashboard' | 'companies' | 'ai_usage' | 'admins';
 
@@ -21,7 +22,7 @@ const AdminShell: React.FC<Props> = ({ adminToken, adminEmail, onSignOut }) => {
     { id: 'dashboard',  label: 'Dashboard',       icon: <LayoutDashboard className="w-5 h-5" /> },
     { id: 'companies',  label: 'Companies',        icon: <Building2 className="w-5 h-5" />,  badge: 'soon' },
     { id: 'ai_usage',   label: 'AI Usage',         icon: <Zap className="w-5 h-5" />,         badge: 'soon' },
-    { id: 'admins',     label: 'Admin Users',      icon: <Users className="w-5 h-5" />,       badge: 'soon' },
+    { id: 'admins',     label: 'Admin Users',      icon: <Users className="w-5 h-5" /> },
   ];
 
   const VIEW_LABELS: Record<AdminView, string> = {
@@ -142,8 +143,9 @@ const AdminShell: React.FC<Props> = ({ adminToken, adminEmail, onSignOut }) => {
         {/* Content */}
         <div className="flex-1 p-4 md:p-8 overflow-auto">
           {view === 'dashboard' && <AdminDashboard adminToken={adminToken} />}
+          {view === 'admins'    && <AdminUsersPanel adminToken={adminToken} adminEmail={adminEmail} />}
 
-          {view !== 'dashboard' && (
+          {(view === 'companies' || view === 'ai_usage') && (
             <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
               <div className="w-16 h-16 rounded-2xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center mb-4">
                 {NAV.find(n => n.id === view)?.icon}
