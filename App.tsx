@@ -10,6 +10,7 @@ import BusinessModelCanvas from './components/BusinessModelCanvas';
 import SwotAnalysisWizard from './components/SwotAnalysisWizard';
 import DataCompletenessDashboard from './components/DataCompletenessDashboard';
 import CompanyProfileForm from './components/CompanyProfileForm';
+import SettingsDashboard from './components/SettingsDashboard';
 import PerformanceDashboard from './components/PerformanceDashboard';
 import SustainabilityStatement from './components/SustainabilityStatement';
 import MaterialTopicsList from './components/MaterialTopicsList';
@@ -27,7 +28,7 @@ import {
   saveQualityCheck, saveDMAInsight, clearDMAInsight, loadDMAInsight, saveDMASuggestedTasks,
 } from './services/dbService';
 import { setOrganizationContext } from './services/geminiService';
-import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, ChevronDown, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2, ListChecks, Zap, Leaf } from 'lucide-react';
+import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, ChevronDown, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2, ListChecks, Zap, Leaf, Settings } from 'lucide-react';
 import type { InsightHubResponse, QualityCheck } from './types';
 
 const DEFAULT_PROFILE: CompanyProfile = {
@@ -72,7 +73,7 @@ const App: React.FC = () => {
   };
 
   // UI state
-  const [view, setView] = useState<'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub' | 'tasks' | 'carbon_wizard' | 'carbon_dashboard'>('overview');
+  const [view, setView] = useState<'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub' | 'tasks' | 'carbon_wizard' | 'carbon_dashboard' | 'settings'>('overview');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [editingAssessment, setEditingAssessment] = useState<AssessmentData | null>(null);
@@ -281,6 +282,10 @@ const App: React.FC = () => {
             <div className="space-y-1">
               <NavItem active={view === 'report'} collapsed={isSidebarCollapsed} onClick={() => setView('report')} icon={<FileText />} label="Reports" />
             </div>
+
+            <div className="space-y-1">
+              <NavItem active={view === 'settings'} collapsed={isSidebarCollapsed} onClick={() => setView('settings')} icon={<Settings />} label="Settings" />
+            </div>
           </nav>
 
           <div className="p-4 border-t border-slate-800 dark:border-slate-900 space-y-3 flex-shrink-0">
@@ -341,6 +346,7 @@ const App: React.FC = () => {
                   {(view === 'dm_dashboard' || view === 'assess' || view === 'report' || view === 'insight_hub') && 'Double Materiality'}
                   {view === 'tasks' && 'Action Plan'}
                   {(view === 'carbon_wizard' || view === 'carbon_dashboard') && 'Carbon Accounting'}
+                  {view === 'settings' && 'Workspace'}
                 </span>
                 <ChevronRight className="w-4 h-4 hidden sm:block" />
                 <span className="truncate">
@@ -356,6 +362,7 @@ const App: React.FC = () => {
                   {view === 'tasks' && 'Task Management'}
                   {view === 'carbon_wizard' && 'Carbon Quest Wizard'}
                   {view === 'carbon_dashboard' && 'Carbon Dashboard'}
+                  {view === 'settings' && 'Settings'}
                 </span>
               </div>
             </div>
@@ -395,11 +402,7 @@ const App: React.FC = () => {
                     saveStatus={profile.saveStatus}
                     isDirty={profile.isDirty}
                     saveError={profile.errorMessage}
-                    organizationId={organization.id}
-                    currentUserId={user.id}
-                    currentUserRole={currentUserRole}
-                    members={members}
-                    onMembersChanged={refetchOrg}
+                    onOpenSettings={() => setView('settings')}
                   />
                 )}
 
@@ -600,6 +603,16 @@ const App: React.FC = () => {
                     orgId={organization.id}
                     currentUserId={user.id}
                     onRunWizard={() => setView('carbon_wizard')}
+                  />
+                )}
+
+                {view === 'settings' && (
+                  <SettingsDashboard
+                    organizationId={organization.id}
+                    currentUserId={user.id}
+                    currentUserRole={currentUserRole}
+                    members={members}
+                    onMembersChanged={refetchOrg}
                   />
                 )}
               </>
