@@ -243,6 +243,158 @@ async function handleAdminDashboard(): Promise<object> {
 }
 
 // ---------------------------------------------------------------------------
+// Post-auth: list_admins
+// ---------------------------------------------------------------------------
+async function handleListAdmins(): Promise<object> {
+  const sb = getAdminClient();
+  const { data, error } = await sb
+    .from('platform_admins')
+    .select('id, email, is_active, created_by, created_at')
+    .order('created_at', { ascending: true });
+  if (error) throw Object.assign(new Error(error.message), { status: 500 });
+  return { admins: data ?? [] };
+}
+
+// ---------------------------------------------------------------------------
+// Post-auth: add_admin
+// ---------------------------------------------------------------------------
+async function handleAddAdmin(body: any, actorEmail: string): Promise<object> {
+  const email = (body.email ?? '').trim().toLowerCase();
+  if (!email) throw Object.assign(new Error('email is required'), { status: 400 });
+
+  const sb = getAdminClient();
+
+  // Check if already an admin
+  const { data: existing } = await sb
+    .from('platform_admins').select('id, is_active').eq('email', email).maybeSingle();
+  if (existing) {
+    if (existing.is_active) throw Object.assign(new Error('This email is already an active platform admin'), { status: 409 });
+    // Re-activate if previously deactivated
+    const { error } = await sb.from('platform_admins').update({ is_active: true }).eq('id', existing.id);
+    if (error) throw Object.assign(new Error(error.message), { status: 500 });
+    console.info('[admin] Re-activated platform admin:', email);
+    return { added: true, reactivated: true, email };
+  }
+
+  // Look up actor's row to set created_by
+  const { data: actorRow } = await sb
+    .from('platform_admins').select('id').eq('email', actorEmail).maybeSingle();
+
+  // Upsert Supabase Auth user and generate an invitation magic link
+  const { data: linkData, error: linkError } = await sb.auth.admin.generateLink({
+    type: 'magiclink',
+    email,
+    options: { redirectTo: `${appUrl}/admin` },
+  });
+  if (linkError) {
+    console.error('[admin] generateLink failed:', linkError.message);
+    throw Object.assign(new Error('Failed to generate invitation link'), { status: 500 });
+  }
+
+  // Insert platform_admins row
+  const { error: insertError } = await sb.from('platform_admins').insert({
+    email,
+    created_by: actorRow?.id ?? null,
+  });
+  if (insertError) throw Object.assign(new Error(insertError.message), { status: 500 });
+
+  const magicLink = linkData?.properties?.action_link ?? null;
+
+  // Send invitation email if Resend is configured
+  if (resendApiKey && magicLink) {
+    await sendAdminInviteEmail(email, magicLink, actorEmail);
+  } else if (magicLink) {
+    console.info(`\n[admin] ✉️  ADMIN INVITE LINK (dev — no RESEND_API_KEY):\n${magicLink}\n`);
+  }
+
+  console.info('[admin] Added platform admin:', email, 'by:', actorEmail);
+  return { added: true, reactivated: false, email, dev_link: resendApiKey ? undefined : (magicLink ?? undefined) };
+}
+
+// ---------------------------------------------------------------------------
+// Post-auth: deactivate_admin
+// ---------------------------------------------------------------------------
+async function handleDeactivateAdmin(body: any, actorEmail: string): Promise<object> {
+  const id = (body.id ?? '').trim();
+  if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
+
+  const sb = getAdminClient();
+
+  // Fetch the target row so we can prevent self-deactivation
+  const { data: target, error: fetchError } = await sb
+    .from('platform_admins').select('id, email, is_active').eq('id', id).maybeSingle();
+  if (fetchError || !target) throw Object.assign(new Error('Admin not found'), { status: 404 });
+  if (target.email.toLowerCase() === actorEmail.toLowerCase()) {
+    throw Object.assign(new Error('You cannot deactivate your own account'), { status: 403 });
+  }
+  if (!target.is_active) throw Object.assign(new Error('Admin is already inactive'), { status: 409 });
+
+  const { error } = await sb.from('platform_admins').update({ is_active: false }).eq('id', id);
+  if (error) throw Object.assign(new Error(error.message), { status: 500 });
+
+  console.info('[admin] Deactivated platform admin:', target.email, 'by:', actorEmail);
+  return { deactivated: true, email: target.email };
+}
+
+// ---------------------------------------------------------------------------
+// Email helper — admin invitation email via Resend
+// ---------------------------------------------------------------------------
+async function sendAdminInviteEmail(toEmail: string, magicLink: string, invitedBy: string): Promise<void> {
+  const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><title>Aeternum Ally Admin Invitation</title></head>
+<body style="margin:0;padding:0;background:#020617;font-family:Inter,'Helvetica Neue',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#020617;padding:48px 16px;">
+<tr><td align="center">
+<table width="100%" style="max-width:480px;background:#0f172a;border:1px solid #1e293b;border-radius:16px;overflow:hidden;">
+  <tr><td style="background:#14532d;padding:24px 32px;text-align:center;">
+    <span style="color:#fff;font-size:18px;font-weight:700;">🛡️ Aeternum Ally</span><br/>
+    <span style="color:#86efac;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Platform Admin Invitation</span>
+  </td></tr>
+  <tr><td style="padding:32px;">
+    <p style="margin:0 0 8px;color:#94a3b8;font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">You've been invited</p>
+    <h1 style="margin:0 0 16px;color:#f1f5f9;font-size:20px;font-weight:700;">Admin portal access granted</h1>
+    <p style="margin:0 0 24px;color:#94a3b8;font-size:15px;line-height:1.6;">
+      <strong style="color:#e2e8f0;">${invitedBy}</strong> has granted you
+      <strong style="color:#e2e8f0;">Platform Admin</strong> access to Aeternum Ally.
+      Click below to sign in — valid for <strong style="color:#e2e8f0;">60 minutes</strong>, single use.
+    </p>
+    <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+      <tr><td style="background:#16a34a;border-radius:10px;">
+        <a href="${magicLink}" style="display:inline-block;padding:14px 28px;color:#fff;font-size:15px;font-weight:600;text-decoration:none;">Accept &amp; Sign in →</a>
+      </td></tr>
+    </table>
+    <table cellpadding="0" cellspacing="0" style="background:#1e293b;border:1px solid #334155;border-radius:10px;width:100%;">
+      <tr><td style="padding:16px 20px;">
+        <p style="margin:0 0 4px;color:#fbbf24;font-size:12px;font-weight:600;text-transform:uppercase;">⚠️ Security Notice</p>
+        <p style="margin:0;color:#94a3b8;font-size:13px;line-height:1.5;">
+          This link grants <strong style="color:#e2e8f0;">platform-level access</strong> to all companies and data.
+          If you did not expect this invitation, ignore this email — it expires automatically.
+        </p>
+      </td></tr>
+    </table>
+  </td></tr>
+  <tr><td style="padding:0 32px 24px;"><p style="margin:0;color:#475569;font-size:11px;word-break:break-all;font-family:monospace;">${magicLink}</p></td></tr>
+  <tr><td style="padding:16px 32px;border-top:1px solid #1e293b;text-align:center;">
+    <p style="margin:0;color:#334155;font-size:12px;">Aeternum Ally · Platform Administration · Do not reply</p>
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
+
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resendApiKey}` },
+    body: JSON.stringify({
+      from:    `Aeternum Ally Admin <${fromEmail}>`,
+      to:      [toEmail],
+      subject: "🛡️ You've been invited to the Aeternum Ally Admin Portal",
+      html,
+    }),
+  });
+  if (!res.ok) throw new Error(`Resend error ${res.status}: ${await res.text()}`);
+}
+
+// ---------------------------------------------------------------------------
 // Email helper — custom admin-branded HTML via Resend
 // ---------------------------------------------------------------------------
 async function sendAdminMagicLinkEmail(toEmail: string, magicLink: string): Promise<void> {
@@ -336,10 +488,13 @@ export const handler: Handler = async (event) => {
 
     } else {
       // ── Post-auth actions (admin JWT required) ──────────────────────────
-      await requireAdmin(authHeader);
+      const { email: actorEmail } = await requireAdmin(authHeader);
 
       switch (action) {
-        case 'admin_dashboard': result = await handleAdminDashboard(); break;
+        case 'admin_dashboard':   result = await handleAdminDashboard();                        break;
+        case 'list_admins':       result = await handleListAdmins();                            break;
+        case 'add_admin':         result = await handleAddAdmin(body, actorEmail);              break;
+        case 'deactivate_admin':  result = await handleDeactivateAdmin(body, actorEmail);       break;
         default:
           return { statusCode: 400, headers: cors, body: JSON.stringify({ error: `Unknown action: ${action}` }) };
       }
