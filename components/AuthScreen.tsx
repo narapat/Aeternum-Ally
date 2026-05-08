@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from "react";
-import { Mail, Lock, Loader2, AlertCircle, Info, Send } from "lucide-react";
+import { Mail, Lock, Loader2, AlertCircle, Info, Send, ArrowLeft, CheckCircle } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 
 const AuthScreen: React.FC = () => {
-  const { signIn, signUp } = useAuth();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const { signIn, signUp, resetPasswordForEmail } = useAuth();
+  const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [forgotDone, setForgotDone] = useState(false);
 
   // Expired invite link state
   const [showResendForm, setShowResendForm] = useState(false);
@@ -43,6 +44,15 @@ const AuthScreen: React.FC = () => {
     } catch {}
     setResendLoading(false);
     setResendDone(true);
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setIsLoading(true);
+    await resetPasswordForEmail(email.trim()); // always show success (don't leak whether email exists)
+    setIsLoading(false);
+    setForgotDone(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -142,12 +152,14 @@ const AuthScreen: React.FC = () => {
         <div className="w-full max-w-md">
           <div className="mb-8">
             <h2 className="text-3xl font-heading font-bold text-slate-800 dark:text-white mb-2">
-              {mode === "signin" ? "Welcome back" : "Create your account"}
+              {mode === "signin" ? "Welcome back" : mode === "signup" ? "Create your account" : "Reset password"}
             </h2>
             <p className="text-slate-500 dark:text-slate-400 font-sans">
               {mode === "signin"
                 ? "Sign in to continue your sustainability journey."
-                : "Start managing your ESG reporting today."}
+                : mode === "signup"
+                ? "Start managing your ESG reporting today."
+                : "Enter your email and we'll send you a reset link."}
             </p>
           </div>
 
@@ -203,7 +215,68 @@ const AuthScreen: React.FC = () => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          {/* ── Forgot password panel ── */}
+          {mode === "forgot" && (
+            <div className="space-y-4">
+              {forgotDone ? (
+                <div className="flex flex-col items-center text-center gap-3 py-4">
+                  <CheckCircle className="w-10 h-10 text-emerald-500" />
+                  <div>
+                    <p className="font-semibold text-slate-800 dark:text-white">Check your inbox</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                      If an account exists for <span className="font-medium text-slate-700 dark:text-slate-200">{email}</span>,
+                      a password reset link has been sent.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => { setMode("signin"); setForgotDone(false); setError(null); }}
+                    className="flex items-center gap-1.5 text-sm font-semibold hover:underline mt-1"
+                    style={{ color: "#004d4d" }}
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" /> Back to sign in
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                  {error && (
+                    <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
+                      <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><span>{error}</span>
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Email</label>
+                    <div className="relative">
+                      <Mail className="absolute top-3 left-3 w-4 h-4 text-slate-400" />
+                      <input
+                        type="email" required value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        placeholder="you@company.com"
+                        className="w-full pl-10 p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#004d4d] text-sm"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="submit" disabled={isLoading || !email}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-lg font-heading font-semibold transition-all disabled:opacity-50 shadow-md"
+                    style={{ backgroundColor: "#ccff00", color: "#004d4d" }}
+                  >
+                    {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                    Send reset link
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setMode("signin"); setError(null); }}
+                    className="w-full flex items-center justify-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" /> Back to sign in
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
+
+          {/* ── Sign-in / sign-up form ── */}
+          {mode !== "forgot" && <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
                 Email
@@ -275,9 +348,22 @@ const AuthScreen: React.FC = () => {
               {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
               {mode === "signin" ? "Sign in" : "Create account"}
             </button>
-          </form>
 
-          <div className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
+            {/* Forgot password link — only on sign-in */}
+            {mode === "signin" && (
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => { setMode("forgot"); setError(null); setInfo(null); setForgotDone(false); }}
+                  className="text-sm text-slate-500 dark:text-slate-400 hover:underline"
+                >
+                  Forgot your password?
+                </button>
+              </div>
+            )}
+          </form>}
+
+          {mode !== "forgot" && <div className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
             {mode === "signin" ? (
               <>
                 Don't have an account yet?{" "}
@@ -309,7 +395,7 @@ const AuthScreen: React.FC = () => {
                 </button>
               </>
             )}
-          </div>
+          </div>}
         </div>
       </div>
     </div>

@@ -2,8 +2,9 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Users, Sparkles, TrendingUp, Clock, Loader2, AlertCircle,
   UserPlus, CheckCircle2, Copy, ShieldOff, RefreshCw, XCircle,
-  Save, Zap, Brain, Key, ShieldCheck, Eye, EyeOff, Hash, DollarSign,
+  Save, Zap, Brain, Key, ShieldCheck, Eye, EyeOff, Hash, DollarSign, KeyRound,
 } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend,
@@ -217,6 +218,9 @@ const TeamSection: React.FC<TeamSectionProps> = ({
 }) => {
   const canManage = currentUserRole === 'Owner' || currentUserRole === 'Admin';
   const isOwner   = currentUserRole === 'Owner';
+  const { resetPasswordForEmail } = useAuth();
+  const [resetingId,    setResetingId]    = useState<string | null>(null);
+  const [resetSentId,   setResetSentId]   = useState<string | null>(null);
 
   const [inviteEmail, setInviteEmail]   = useState('');
   const [inviteRole, setInviteRole]     = useState<Exclude<OrgRole, 'Owner'>>('Manager');
@@ -330,6 +334,15 @@ const TeamSection: React.FC<TeamSectionProps> = ({
     } finally {
       setResendingId(null);
     }
+  };
+
+  const handleResetPassword = async (memberId: string, email: string | null) => {
+    if (!email) return;
+    setResetingId(memberId);
+    await resetPasswordForEmail(email); // always succeeds silently — don't reveal account existence
+    setResetingId(null);
+    setResetSentId(memberId);
+    setTimeout(() => setResetSentId(null), 4000);
   };
 
   const handleRoleChange = async (memberId: string, newRole: OrgRole) => {
@@ -545,12 +558,35 @@ const TeamSection: React.FC<TeamSectionProps> = ({
                     <td className="p-3 text-slate-500 dark:text-slate-400 text-xs">{new Date(m.joined_at).toLocaleDateString()}</td>
                     {isOwner && (
                       <td className="p-3 text-right">
-                        {!isMemberOwner && !isSelf && (
-                          <button onClick={() => handleDeactivate(m.id, m.email)}
-                            className="flex items-center gap-1 text-xs px-2 py-1 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors">
-                            <ShieldOff className="w-3.5 h-3.5" /> Deactivate
-                          </button>
-                        )}
+                        <div className="flex items-center justify-end gap-1">
+                          {/* Reset password — available for any member except self */}
+                          {canManage && !isSelf && m.email && (
+                            resetSentId === m.id ? (
+                              <span className="flex items-center gap-1 text-xs px-2 py-1 text-emerald-600 dark:text-emerald-400">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Sent
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleResetPassword(m.id, m.email)}
+                                disabled={resetingId === m.id}
+                                className="flex items-center gap-1 text-xs px-2 py-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded transition-colors disabled:opacity-50"
+                                title={`Send password reset email to ${m.email}`}
+                              >
+                                {resetingId === m.id
+                                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  : <KeyRound className="w-3.5 h-3.5" />}
+                                Reset pwd
+                              </button>
+                            )
+                          )}
+                          {/* Deactivate — owners only, not self, not other owners */}
+                          {!isMemberOwner && !isSelf && (
+                            <button onClick={() => handleDeactivate(m.id, m.email)}
+                              className="flex items-center gap-1 text-xs px-2 py-1 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors">
+                              <ShieldOff className="w-3.5 h-3.5" /> Deactivate
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>

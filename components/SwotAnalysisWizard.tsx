@@ -87,15 +87,14 @@ const SwotAnalysisWizard: React.FC<Props> = ({ data, onChange, profile, bmcData,
   const [step, setStep] = useState<number>(0);
   const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});
 
-  const handleGenerateInternal = async () => {
-    setLoadingMap(m => ({ ...m, internal: true }));
+  const handleGenerateInternalField = async (field: 'strengths' | 'weaknesses') => {
+    setLoadingMap(m => ({ ...m, [field]: true }));
     const result = await generateSwotInternal(profile, bmcData);
-    onChange({
-      ...data,
-      strengths: result.strengths.length > 0 ? result.strengths : data.strengths,
-      weaknesses: result.weaknesses.length > 0 ? result.weaknesses : data.weaknesses,
-    });
-    setLoadingMap(m => ({ ...m, internal: false }));
+    if (field === 'strengths' && result.strengths.length > 0)
+      onChange({ ...data, strengths: result.strengths });
+    else if (field === 'weaknesses' && result.weaknesses.length > 0)
+      onChange({ ...data, weaknesses: result.weaknesses });
+    setLoadingMap(m => ({ ...m, [field]: false }));
   };
 
   const handleGenerateExternal = async (field: 'opportunities' | 'threats') => {
@@ -107,26 +106,27 @@ const SwotAnalysisWizard: React.FC<Props> = ({ data, onChange, profile, bmcData,
 
   const renderStepInternal = () => (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200 dark:border-slate-700 pb-4 gap-4">
-        <div>
-          <h3 className="text-xl font-bold text-slate-800 dark:text-white">Step 1: Internal Factors</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Analyze your Strengths and Weaknesses based on your Business Model Canvas.</p>
-        </div>
-        <button
-          onClick={handleGenerateInternal}
-          disabled={loadingMap.internal}
-          className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 px-4 py-2 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors text-sm font-medium w-full sm:w-auto justify-center"
-        >
-          {loadingMap.internal ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-          Auto-Analyze Internal
-        </button>
+      <div className="border-b border-slate-200 dark:border-slate-700 pb-4">
+        <h3 className="text-xl font-bold text-slate-800 dark:text-white">Step 1: Internal Factors</h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Analyze your Strengths and Weaknesses based on your Business Model Canvas.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Strengths */}
         <div className="space-y-2">
-          <label className="flex items-center gap-2 font-bold text-emerald-700 dark:text-emerald-400">
-            <TrendingUp className="w-5 h-5" /> Strengths
-          </label>
+          <div className="flex justify-between items-center">
+            <label className="flex items-center gap-2 font-bold text-emerald-700 dark:text-emerald-400">
+              <TrendingUp className="w-5 h-5" /> Strengths
+            </label>
+            <button
+              onClick={() => handleGenerateInternalField('strengths')}
+              disabled={loadingMap.strengths}
+              className="flex items-center gap-1.5 text-xs bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-3 py-1.5 rounded-full hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
+            >
+              {loadingMap.strengths ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+              AI Suggest
+            </button>
+          </div>
           <ArrayFieldEditor
             items={data.strengths}
             onChange={(items) => onChange({ ...data, strengths: items })}
@@ -134,10 +134,22 @@ const SwotAnalysisWizard: React.FC<Props> = ({ data, onChange, profile, bmcData,
             focusRingColor="focus:ring-emerald-500"
           />
         </div>
+
+        {/* Weaknesses */}
         <div className="space-y-2">
-          <label className="flex items-center gap-2 font-bold text-amber-600 dark:text-amber-400">
-            <AlertTriangle className="w-5 h-5" /> Weaknesses
-          </label>
+          <div className="flex justify-between items-center">
+            <label className="flex items-center gap-2 font-bold text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="w-5 h-5" /> Weaknesses
+            </label>
+            <button
+              onClick={() => handleGenerateInternalField('weaknesses')}
+              disabled={loadingMap.weaknesses}
+              className="flex items-center gap-1.5 text-xs bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 px-3 py-1.5 rounded-full hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors"
+            >
+              {loadingMap.weaknesses ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+              AI Suggest
+            </button>
+          </div>
           <ArrayFieldEditor
             items={data.weaknesses}
             onChange={(items) => onChange({ ...data, weaknesses: items })}

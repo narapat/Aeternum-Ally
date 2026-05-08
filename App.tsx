@@ -16,6 +16,7 @@ import PerformanceDashboard from './components/PerformanceDashboard';
 import SustainabilityStatement from './components/SustainabilityStatement';
 import MaterialTopicsList from './components/MaterialTopicsList';
 import AuthScreen from './components/AuthScreen';
+import ResetPasswordModal from './components/ResetPasswordModal';
 import OrgSetupScreen from './components/OrgSetupScreen';
 import { useAuth } from './hooks/useAuth';
 import { useOrganization } from './hooks/useOrganization';
@@ -29,6 +30,7 @@ import {
   saveQualityCheck, saveDMAInsight, clearDMAInsight, loadDMAInsight, saveDMASuggestedTasks,
 } from './services/dbService';
 import { setOrganizationContext } from './services/geminiService';
+import { supabase } from './lib/supabaseClient';
 import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, ChevronDown, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2, ListChecks, Zap, Leaf, Settings, UserCircle, ChevronUp, ScatterChart } from 'lucide-react';
 import type { InsightHubResponse, QualityCheck } from './types';
 
@@ -72,6 +74,15 @@ const App: React.FC = () => {
       return next;
     });
   };
+
+  // Password recovery — shown when Supabase fires a PASSWORD_RECOVERY event
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setShowPasswordReset(true);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   // UI state
   const [view, setView] = useState<'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub' | 'tasks' | 'carbon_wizard' | 'carbon_dashboard' | 'settings' | 'user_profile'>('overview');
@@ -223,6 +234,9 @@ const App: React.FC = () => {
   // ----- Loading / auth gates -----
   if (authLoading) return <FullScreenLoader label="Signing you in…" />;
   if (!user) return <AuthScreen />;
+
+  // Password recovery modal — shown over any view when user follows a reset link
+  if (showPasswordReset) return <ResetPasswordModal onDone={() => setShowPasswordReset(false)} />;
   if (orgLoading) return <FullScreenLoader label="Loading your workspace…" />;
   if (!organization) {
     return (
@@ -483,17 +497,13 @@ const App: React.FC = () => {
                       </button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
-                      <StatCard title="Assessments Completed" value={assessments.length.toString()} icon={<FileText className="text-blue-500" />} />
-                      <StatCard title="Material Topics Identified" value={materialTopics.length.toString()} icon={<AlertTriangle className="text-amber-500" />} />
-                      <StatCard title="High Impact Risks" value={assessments.filter(a => a.financialMaterialityValue > 60).length.toString()} icon={<CheckCircle className="text-esg-500" />} />
+                      <StatCard title="Assessments Completed" value={assessments.length.toString()} icon={<FileText className="text-blue-500" />} description="Total ESRS topics assessed across all categories" />
+                      <StatCard title="Material Topics Identified" value={materialTopics.length.toString()} icon={<AlertTriangle className="text-amber-500" />} description="Topics scoring ≥ 40 on financial or impact materiality" />
+                      <StatCard title="High Impact Risks" value={assessments.filter(a => a.financialMaterialityValue > 60).length.toString()} icon={<CheckCircle className="text-esg-500" />} description="Topics with financial materiality score > 60 (orange dots on matrix)" />
                     </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                      <div className="lg:col-span-2 min-h-[300px]">
-                        <MaterialityMatrix data={assessments} />
-                      </div>
-                      <div className="min-h-[400px]">
-                        <MaterialTopicsList assessments={assessments} onEdit={handleEditAssessment} onDelete={handleDeleteAssessment} orgId={organization?.id} currentUserId={user?.id} />
-                      </div>
+                    <div className="space-y-6">
+                      <MaterialityMatrix data={assessments} />
+                      <MaterialTopicsList assessments={assessments} onEdit={handleEditAssessment} onDelete={handleDeleteAssessment} orgId={organization?.id} currentUserId={user?.id} />
                     </div>
                   </div>
                 )}
@@ -526,38 +536,32 @@ const App: React.FC = () => {
                 {view === 'assess' && (
                   <div className="animate-in fade-in duration-500">
                     {!isFormOpen ? (
-                      <div className="text-center py-12 px-4">
-                        <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <Plus className="w-8 h-8 text-slate-400" />
-                        </div>
-                        <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Start a Double Materiality Assessment</h2>
-                        <p className="text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-8">
-                          Use our AI-assisted tool to identify impacts, risks, and opportunities based on your <strong>Business Model Canvas</strong> and ESRS guidelines.
-                        </p>
-                        <button onClick={() => { setIsFormOpen(true); setEditingAssessment(null); }} className="bg-esg-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-esg-700 transition-colors shadow-lg shadow-esg-900/20 w-full sm:w-auto">
-                          New Assessment
-                        </button>
-                        <div className="mt-12 text-left w-full">
-                          <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-4 mb-4">
-                            <h3 className="font-bold text-slate-800 dark:text-white">Assessment History</h3>
-                            {assessments.length > 0 && (
-                              <button
-                                onClick={() => setView('insight_hub')}
-                                className="flex items-center gap-2 bg-esg-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-esg-700 transition-colors"
-                              >
-                                Review &amp; Continue
-                                <ChevronRight className="w-4 h-4" />
-                              </button>
-                            )}
-                          </div>
-                          {assessments.length === 0 ? (
-                            <div className="p-8 text-center border border-dashed border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-slate-400">No assessments recorded yet.</div>
-                          ) : (
-                            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                              <MaterialTopicsList assessments={assessments} onEdit={handleEditAssessment} onDelete={handleDeleteAssessment} orgId={organization?.id} currentUserId={user?.id} />
-                            </div>
+                      <div className="space-y-4">
+                        {/* Action bar */}
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <button
+                            onClick={() => { setIsFormOpen(true); setEditingAssessment(null); }}
+                            className="flex items-center gap-2 bg-esg-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-esg-700 transition-colors"
+                          >
+                            <Plus className="w-4 h-4" /> New Assessment
+                          </button>
+                          {assessments.length > 0 && (
+                            <button
+                              onClick={() => setView('insight_hub')}
+                              className="flex items-center gap-2 bg-esg-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-esg-700 transition-colors"
+                            >
+                              Review &amp; Continue
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
                           )}
                         </div>
+
+                        {/* List */}
+                        {assessments.length === 0 ? (
+                          <div className="p-8 text-center border border-dashed border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-slate-400">No assessments recorded yet. Click <strong>New Assessment</strong> to get started.</div>
+                        ) : (
+                          <MaterialTopicsList assessments={assessments} onEdit={handleEditAssessment} onDelete={handleDeleteAssessment} orgId={organization?.id} currentUserId={user?.id} />
+                        )}
                       </div>
                     ) : (
                       <div className="w-full h-full">
@@ -594,7 +598,7 @@ const App: React.FC = () => {
                     bmcData={canvas.data}
                     swotData={swot.data}
                     onBack={() => setView('assess')}
-                    onContinue={() => setView('tasks')}
+                    onContinue={() => setView('kpi')}
                     cachedInsight={cachedInsight}
                     onInsightReady={(result) => {
                       setCachedInsight(result);
@@ -725,12 +729,13 @@ const NavSection = ({ label, open, onToggle, sidebarCollapsed, children }: {
   </div>
 );
 
-const StatCard = ({ title, value, icon }: { title: string, value: string, icon: React.ReactNode }) => (
+const StatCard = ({ title, value, icon, description }: { title: string, value: string, icon: React.ReactNode, description?: string }) => (
   <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-4 transition-colors">
     <div className="w-12 h-12 bg-slate-50 dark:bg-slate-900 rounded-full flex items-center justify-center border border-slate-100 dark:border-slate-700 flex-shrink-0">{icon}</div>
     <div className="min-w-0">
       <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{title}</p>
       <p className="text-2xl font-bold text-slate-800 dark:text-white">{value}</p>
+      {description && <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 leading-relaxed">{description}</p>}
     </div>
   </div>
 );

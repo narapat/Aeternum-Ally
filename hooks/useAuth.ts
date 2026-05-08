@@ -9,6 +9,8 @@ interface UseAuthResult {
   signUp: (email: string, password: string) => Promise<{ error: string | null }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  resetPasswordForEmail: (email: string) => Promise<{ error: string | null }>;
+  updatePassword: (newPassword: string) => Promise<{ error: string | null }>;
 }
 
 export function useAuth(): UseAuthResult {
@@ -49,6 +51,18 @@ export function useAuth(): UseAuthResult {
     await supabase.auth.signOut();
   };
 
+  const resetPasswordForEmail = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}`,
+    });
+    return { error: error?.message ?? null };
+  };
+
+  const updatePassword = async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    return { error: error?.message ?? null };
+  };
+
   return {
     user: session?.user ?? null,
     session,
@@ -56,5 +70,7 @@ export function useAuth(): UseAuthResult {
     signUp,
     signIn,
     signOut,
+    resetPasswordForEmail,
+    updatePassword,
   };
 }
