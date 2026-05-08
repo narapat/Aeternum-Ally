@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import AdminDashboard from './AdminDashboard';
 import AdminUsersPanel from './AdminUsersPanel';
+import CompanyListPanel from './CompanyListPanel';
 
 type AdminView = 'dashboard' | 'companies' | 'ai_usage' | 'admins';
 
@@ -20,7 +21,7 @@ const AdminShell: React.FC<Props> = ({ adminToken, adminEmail, onSignOut }) => {
 
   const NAV: { id: AdminView; label: string; icon: React.ReactNode; badge?: string }[] = [
     { id: 'dashboard',  label: 'Dashboard',       icon: <LayoutDashboard className="w-5 h-5" /> },
-    { id: 'companies',  label: 'Companies',        icon: <Building2 className="w-5 h-5" />,  badge: 'soon' },
+    { id: 'companies',  label: 'Companies',        icon: <Building2 className="w-5 h-5" /> },
     { id: 'ai_usage',   label: 'AI Usage',         icon: <Zap className="w-5 h-5" />,         badge: 'soon' },
     { id: 'admins',     label: 'Admin Users',      icon: <Users className="w-5 h-5" /> },
   ];
@@ -143,9 +144,10 @@ const AdminShell: React.FC<Props> = ({ adminToken, adminEmail, onSignOut }) => {
         {/* Content */}
         <div className="flex-1 p-4 md:p-8 overflow-auto">
           {view === 'dashboard' && <AdminDashboard adminToken={adminToken} />}
+          {view === 'companies' && <CompanyListPanel adminToken={adminToken} />}
           {view === 'admins'    && <AdminUsersPanel adminToken={adminToken} adminEmail={adminEmail} />}
 
-          {(view === 'companies' || view === 'ai_usage') && (
+          {view === 'ai_usage' && (
             <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
               <div className="w-16 h-16 rounded-2xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center mb-4">
                 {NAV.find(n => n.id === view)?.icon}

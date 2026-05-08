@@ -226,7 +226,7 @@ async function handleAdminDashboard(): Promise<object> {
 
   const [orgsRes, membersRes, aiTodayRes, aiErrorsRes] = await Promise.all([
     sb.from('organizations').select('id, is_active'),
-    sb.from('org_members').select('id', { count: 'exact', head: true }),
+    sb.from('organization_members').select('id', { count: 'exact', head: true }),
     sb.from('ai_usage_log').select('id', { count: 'exact', head: true }).gte('created_at', today.toISOString()),
     sb.from('ai_usage_log').select('id', { count: 'exact', head: true }).not('error', 'is', null),
   ]);
@@ -240,6 +240,65 @@ async function handleAdminDashboard(): Promise<object> {
     aiCallsToday:      aiTodayRes.count ?? 0,
     aiErrorsTotal:     aiErrorsRes.count ?? 0,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Post-auth: list_companies
+// ---------------------------------------------------------------------------
+async function handleListCompanies(): Promise<object> {
+  const sb = getAdminClient();
+
+  // Fetch orgs + company profiles (name) + member counts in parallel
+  const [orgsRes, profilesRes, membersRes] = await Promise.all([
+    sb.from('organizations')
+      .select('id, tier, is_active, created_at')
+      .order('created_at', { ascending: false }),
+    sb.from('company_profiles')
+      .select('organization_id, company_name'),
+    sb.from('organization_members')
+      .select('organization_id'),
+  ]);
+
+  if (orgsRes.error)  throw Object.assign(new Error(orgsRes.error.message),  { status: 500 });
+
+  // Build lookup maps
+  const nameMap: Record<string, string> = {};
+  for (const p of profilesRes.data ?? []) {
+    nameMap[p.organization_id] = p.company_name ?? '(unnamed)';
+  }
+
+  const memberCount: Record<string, number> = {};
+  for (const m of membersRes.data ?? []) {
+    memberCount[m.organization_id] = (memberCount[m.organization_id] ?? 0) + 1;
+  }
+
+  const companies = (orgsRes.data ?? []).map((o: any) => ({
+    id:           o.id,
+    name:         nameMap[o.id] ?? '(unnamed)',
+    tier:         o.tier ?? 'free',
+    is_active:    o.is_active !== false,
+    member_count: memberCount[o.id] ?? 0,
+    created_at:   o.created_at,
+  }));
+
+  return { companies };
+}
+
+// ---------------------------------------------------------------------------
+// Post-auth: set_company_status
+// ---------------------------------------------------------------------------
+async function handleSetCompanyStatus(body: any): Promise<object> {
+  const id        = (body.id        ?? '').trim();
+  const is_active = body.is_active;
+  if (!id)                      throw Object.assign(new Error('id is required'),        { status: 400 });
+  if (typeof is_active !== 'boolean') throw Object.assign(new Error('is_active (boolean) is required'), { status: 400 });
+
+  const sb = getAdminClient();
+  const { error } = await sb.from('organizations').update({ is_active }).eq('id', id);
+  if (error) throw Object.assign(new Error(error.message), { status: 500 });
+
+  console.info('[admin] set_company_status:', id, '->', is_active);
+  return { updated: true, id, is_active };
 }
 
 // ---------------------------------------------------------------------------
@@ -491,8 +550,10 @@ export const handler: Handler = async (event) => {
       const { email: actorEmail } = await requireAdmin(authHeader);
 
       switch (action) {
-        case 'admin_dashboard':   result = await handleAdminDashboard();                        break;
-        case 'list_admins':       result = await handleListAdmins();                            break;
+        case 'admin_dashboard':    result = await handleAdminDashboard();                        break;
+        case 'list_companies':     result = await handleListCompanies();                         break;
+        case 'set_company_status': result = await handleSetCompanyStatus(body);                  break;
+        case 'list_admins':        result = await handleListAdmins();                            break;
         case 'add_admin':         result = await handleAddAdmin(body, actorEmail);              break;
         case 'deactivate_admin':  result = await handleDeactivateAdmin(body, actorEmail);       break;
         default:
