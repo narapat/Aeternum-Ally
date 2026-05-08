@@ -2,9 +2,10 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Building2, Search, RefreshCw, Loader2, AlertCircle,
   CheckCircle, ChevronUp, ChevronDown, X, ShieldOff, ShieldCheck,
-  Plus, Mail, Users,
+  Plus, Mail, Users, Download,
 } from 'lucide-react';
 import PendingUsersPanel from './PendingUsersPanel';
+import CompanyExportModal from './CompanyExportModal';
 
 interface Company {
   id:           string;
@@ -205,6 +206,7 @@ const CompanyListPanel: React.FC<Props> = ({ adminToken }) => {
   const [toggling,     setToggling]     = useState<string | null>(null);
   const [actionMsg,    setActionMsg]    = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [createModal,  setCreateModal]  = useState<{ open: boolean; prefillEmail: string }>({ open: false, prefillEmail: '' });
+  const [exportModal,  setExportModal]  = useState<{ open: boolean; id: string; name: string }>({ open: false, id: '', name: '' });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -429,21 +431,30 @@ const CompanyListPanel: React.FC<Props> = ({ adminToken }) => {
                               : <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700"><ShieldOff className="w-3 h-3" /> Inactive</span>}
                           </td>
                           <td className="px-4 py-3.5 text-right">
-                            <button
-                              onClick={() => handleToggleStatus(company)}
-                              disabled={isToggling}
-                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                                company.is_active
-                                  ? 'text-red-400 hover:text-white hover:bg-red-700 border border-red-800/50 hover:border-red-700'
-                                  : 'text-esg-400 hover:text-white hover:bg-esg-700 border border-esg-800/50 hover:border-esg-700'
-                              }`}
-                            >
-                              {isToggling
-                                ? <><Loader2 className="w-3 h-3 animate-spin" /> Updating…</>
-                                : company.is_active
-                                  ? <><ShieldOff className="w-3 h-3" /> Deactivate</>
-                                  : <><ShieldCheck className="w-3 h-3" /> Reactivate</>}
-                            </button>
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => setExportModal({ open: true, id: company.id, name: company.name })}
+                                title="Export company data"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-600 border border-slate-600 hover:border-slate-500 rounded-lg transition-all"
+                              >
+                                <Download className="w-3 h-3" /> Export
+                              </button>
+                              <button
+                                onClick={() => handleToggleStatus(company)}
+                                disabled={isToggling}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                                  company.is_active
+                                    ? 'text-red-400 hover:text-white hover:bg-red-700 border border-red-800/50 hover:border-red-700'
+                                    : 'text-esg-400 hover:text-white hover:bg-esg-700 border border-esg-800/50 hover:border-esg-700'
+                                }`}
+                              >
+                                {isToggling
+                                  ? <><Loader2 className="w-3 h-3 animate-spin" /> Updating…</>
+                                  : company.is_active
+                                    ? <><ShieldOff className="w-3 h-3" /> Deactivate</>
+                                    : <><ShieldCheck className="w-3 h-3" /> Reactivate</>}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -471,6 +482,16 @@ const CompanyListPanel: React.FC<Props> = ({ adminToken }) => {
             setCreateModal({ open: true, prefillEmail: email });
             setTab('companies');
           }}
+        />
+      )}
+
+      {/* Export modal */}
+      {exportModal.open && (
+        <CompanyExportModal
+          companyId={exportModal.id}
+          companyName={exportModal.name}
+          adminToken={adminToken}
+          onClose={() => setExportModal({ open: false, id: '', name: '' })}
         />
       )}
 
