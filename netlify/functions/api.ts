@@ -50,7 +50,7 @@ const handler = async (event: any) => {
     });
   }
 
-  const ai = new GoogleGenAI({ apiKey });
+  // ai is instantiated later (after BYOK settings are resolved) — placeholder kept for structure
   const admin = createClient(supabaseUrl, serviceKey);
 
   // ------------------------------------------------------------------
@@ -98,18 +98,51 @@ const handler = async (event: any) => {
   }
 
   // ------------------------------------------------------------------
-  // 4. Look up the org's chosen model
+  // 4. Look up the org's chosen model + BYOK settings
   // ------------------------------------------------------------------
   const { data: settings } = await admin
     .from("organization_ai_settings")
-    .select("model")
+    .select("model, use_byok, byok_provider, byok_api_key, soft_quota_monthly")
     .eq("organization_id", organization_id)
     .maybeSingle();
   const model = settings?.model ?? DEFAULT_MODEL;
 
+  // Determine which API key to use and record the quota type
+  const useBYOK = settings?.use_byok === true && !!settings?.byok_api_key;
+  const resolvedApiKey = useBYOK ? settings!.byok_api_key! : apiKey!;
+  const quotaType: string = useBYOK ? "byok" : "platform_free";
+
+  // ------------------------------------------------------------------
+  // 4a. Soft quota check (platform calls only, BYOK bypasses)
+  // ------------------------------------------------------------------
+  if (!useBYOK) {
+    const PLATFORM_SOFT_LIMIT = settings?.soft_quota_monthly ?? 100;
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+
+    const { count: monthlyCount } = await admin
+      .from("ai_usage_log")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organization_id)
+      .eq("success", true)
+      .gte("created_at", monthStart.toISOString());
+
+    const callsUsed = monthlyCount ?? 0;
+
+    // Soft limit: log a warning but do NOT block. Admins can raise via soft_quota_monthly.
+    if (callsUsed >= PLATFORM_SOFT_LIMIT) {
+      console.warn(
+        `[quota] org=${organization_id} used=${callsUsed}/${PLATFORM_SOFT_LIMIT} — soft limit reached (proceeding anyway)`
+      );
+    }
+  }
+
   // ------------------------------------------------------------------
   // 5. Run the action with timing + usage tracking
   // ------------------------------------------------------------------
+  // Instantiate AI client now that we know which key to use
+  const ai = new GoogleGenAI({ apiKey: resolvedApiKey });
   const start = Date.now();
   let result: any = null;
   let inputTokens = 0;
@@ -184,6 +217,7 @@ const handler = async (event: any) => {
       error_message: success ? null : errorMessage,
       http_status: success ? null : upstreamStatus,
       estimated_cost_usd: success ? Number(estimateCost(model, inputTokens, outputTokens).toFixed(6)) : 0,
+      quota_type: quotaType,
     });
   } catch (logErr) {
     console.warn("Failed to log AI usage:", logErr);
