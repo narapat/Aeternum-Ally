@@ -501,13 +501,9 @@ const App: React.FC = () => {
                       <StatCard title="Material Topics Identified" value={materialTopics.length.toString()} icon={<AlertTriangle className="text-amber-500" />} />
                       <StatCard title="High Impact Risks" value={assessments.filter(a => a.financialMaterialityValue > 60).length.toString()} icon={<CheckCircle className="text-esg-500" />} />
                     </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                      <div className="lg:col-span-2 min-h-[300px]">
-                        <MaterialityMatrix data={assessments} />
-                      </div>
-                      <div className="min-h-[400px]">
-                        <MaterialTopicsList assessments={assessments} onEdit={handleEditAssessment} onDelete={handleDeleteAssessment} orgId={organization?.id} currentUserId={user?.id} />
-                      </div>
+                    <div className="space-y-6">
+                      <MaterialityMatrix data={assessments} />
+                      <MaterialTopicsList assessments={assessments} onEdit={handleEditAssessment} onDelete={handleDeleteAssessment} orgId={organization?.id} currentUserId={user?.id} />
                     </div>
                   </div>
                 )}
