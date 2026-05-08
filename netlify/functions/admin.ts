@@ -33,7 +33,7 @@ const supabaseUrl    = process.env.SUPABASE_URL    ?? process.env.VITE_SUPABASE_
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
 const appUrl         = process.env.VITE_APP_URL    ?? 'http://localhost:8888';
 const resendApiKey   = process.env.RESEND_API_KEY  ?? '';
-const fromEmail      = process.env.RESEND_FROM_EMAIL ?? 'noreply@aeternum-ally.com';
+const fromEmail      = process.env.RESEND_FROM_EMAIL ?? 'noreply@aeternumally.com';
 
 function getAdminClient() {
   if (!supabaseUrl || !serviceRoleKey) throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
