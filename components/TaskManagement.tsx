@@ -10,6 +10,7 @@ import {
   restoreSuggestedTask, fetchDismissedSuggestedTasks,
 } from '../services/dbService';
 import { generateTasks } from '../services/geminiService';
+import EvidenceBadge from './EvidenceBadge';
 import {
   Sparkles, ListChecks, RefreshCw, CheckCircle2, Circle, Clock,
   AlertCircle, Loader2, ChevronDown, ChevronUp, Trash2, ArrowUpRight,
@@ -850,6 +851,14 @@ const ManagerTab: React.FC<ManagerProps> = ({
                           {task.esrs_ref}
                         </span>
                       )}
+                      <span onClick={e => e.stopPropagation()}>
+                        <EvidenceBadge
+                          linkedToType="task"
+                          linkedToId={task.id}
+                          orgId={orgId}
+                          currentUserId={currentUserId}
+                        />
+                      </span>
                     </div>
 
                     {task.description && (

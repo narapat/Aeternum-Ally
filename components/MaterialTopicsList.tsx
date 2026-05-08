@@ -4,6 +4,7 @@ import { AssessmentData, SuggestedTask } from '../types';
 import { Edit2, Trash2, Filter, ArrowUpDown, Layers, CheckCircle2, Circle } from 'lucide-react';
 import { fetchSuggestedTasks } from '../services/dbService';
 import AmbientTaskBadge from './AmbientTaskBadge';
+import EvidenceBadge from './EvidenceBadge';
 
 interface Props {
   assessments: AssessmentData[];
@@ -194,6 +195,16 @@ const TopicItem: React.FC<{
                                 currentUserId={currentUserId}
                                 onChanged={onSuggestionsChanged}
                             />
+                        )}
+                        {orgId && currentUserId && data.id && (
+                            <span onClick={e => e.stopPropagation()}>
+                                <EvidenceBadge
+                                    linkedToType="assessment"
+                                    linkedToId={data.id}
+                                    orgId={orgId}
+                                    currentUserId={currentUserId}
+                                />
+                            </span>
                         )}
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1">{data.impactDescription}</p>

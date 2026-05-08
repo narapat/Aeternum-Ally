@@ -131,6 +131,24 @@ const App: React.FC = () => {
   // Close mobile sidebar on route change
   useEffect(() => { setIsMobileSidebarOpen(false); }, [view]);
 
+  // Handle Google Drive OAuth callback redirect (?google_drive=connected|error)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gd = params.get('google_drive');
+    if (!gd) return;
+    // Clean the query string without a page reload
+    const clean = window.location.pathname;
+    window.history.replaceState({}, '', clean);
+    if (gd === 'connected') {
+      // Show a brief success toast — re-use the existing alert for now
+      // (a toast library can be added later if desired)
+      console.info('Google Drive connected successfully.');
+    } else if (gd === 'error') {
+      const msg = params.get('message') ?? 'Google Drive connection failed.';
+      alert(`Google Drive: ${decodeURIComponent(msg)}`);
+    }
+  }, []);
+
   // Tell the AI service which organization is active so requests carry the org_id.
   useEffect(() => { setOrganizationContext(orgId); }, [orgId]);
 
