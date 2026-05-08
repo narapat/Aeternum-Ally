@@ -90,7 +90,7 @@ const AdminApp: React.FC = () => {
           window.history.replaceState(null, '', '/admin');
 
           const newSession: AdminSession = {
-            token:     sbSession.access_token,
+            token:     json.token,   // custom admin JWT returned by verify_admin
             email:     json.email,
             expiresAt: Date.now() + 55 * 60 * 1000,
           };
