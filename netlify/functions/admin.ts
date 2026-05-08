@@ -243,6 +243,149 @@ async function handleAdminDashboard(): Promise<object> {
 }
 
 // ---------------------------------------------------------------------------
+// Post-auth: AI usage — shared fetch helper
+// ---------------------------------------------------------------------------
+async function fetchAIUsage(sb: ReturnType<typeof getAdminClient>, since?: string) {
+  let q = sb.from('ai_usage_log')
+    .select('organization_id, action, quota_type, input_tokens, output_tokens, duration_ms, success, estimated_cost_usd, created_at');
+  if (since) q = q.gte('created_at', since);
+  const { data, error } = await q;
+  if (error) throw Object.assign(new Error(error.message), { status: 500 });
+  return (data ?? []) as {
+    organization_id: string; action: string; quota_type: string | null;
+    input_tokens: number | null; output_tokens: number | null;
+    duration_ms: number | null; success: boolean;
+    estimated_cost_usd: number | null; created_at: string;
+  }[];
+}
+
+// ---------------------------------------------------------------------------
+// Post-auth: admin_ai_usage_summary  (all-time platform totals)
+// ---------------------------------------------------------------------------
+async function handleAdminAIUsageSummary(): Promise<object> {
+  const sb   = getAdminClient();
+  const rows = await fetchAIUsage(sb);
+
+  const totalCalls      = rows.length;
+  const totalInput      = rows.reduce((s, r) => s + (r.input_tokens  ?? 0), 0);
+  const totalOutput     = rows.reduce((s, r) => s + (r.output_tokens ?? 0), 0);
+  const totalCost       = rows.reduce((s, r) => s + Number(r.estimated_cost_usd ?? 0), 0);
+  const errorCount      = rows.filter(r => !r.success).length;
+  const errorRate       = totalCalls > 0 ? (errorCount / totalCalls) * 100 : 0;
+
+  return { totalCalls, totalInput, totalOutput, totalCost, errorCount, errorRate };
+}
+
+// ---------------------------------------------------------------------------
+// Post-auth: admin_ai_usage_by_month  (last 12 months, stacked by quota_type)
+// ---------------------------------------------------------------------------
+async function handleAdminAIUsageByMonth(): Promise<object> {
+  const sb    = getAdminClient();
+  const since = new Date();
+  since.setMonth(since.getMonth() - 11);
+  since.setDate(1);
+  since.setHours(0, 0, 0, 0);
+
+  const rows = await fetchAIUsage(sb, since.toISOString());
+
+  // Build map: YYYY-MM → { byok, platform, total }
+  const map: Record<string, { month: string; byok: number; platform: number; total: number }> = {};
+
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(since);
+    d.setMonth(d.getMonth() + i);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    map[key] = { month: key, byok: 0, platform: 0, total: 0 };
+  }
+
+  for (const r of rows) {
+    const key = r.created_at.slice(0, 7);
+    if (!map[key]) continue;
+    map[key].total += 1;
+    if (r.quota_type === 'byok') map[key].byok += 1;
+    else                          map[key].platform += 1;
+  }
+
+  return { months: Object.values(map) };
+}
+
+// ---------------------------------------------------------------------------
+// Post-auth: admin_ai_usage_by_action  (all-time, grouped by action)
+// ---------------------------------------------------------------------------
+async function handleAdminAIUsageByAction(): Promise<object> {
+  const sb   = getAdminClient();
+  const rows = await fetchAIUsage(sb);
+
+  const map: Record<string, {
+    action: string; calls: number; input_tokens: number;
+    output_tokens: number; errors: number; total_ms: number;
+  }> = {};
+
+  for (const r of rows) {
+    if (!map[r.action]) map[r.action] = {
+      action: r.action, calls: 0, input_tokens: 0,
+      output_tokens: 0, errors: 0, total_ms: 0,
+    };
+    const e = map[r.action];
+    e.calls        += 1;
+    e.input_tokens  += r.input_tokens  ?? 0;
+    e.output_tokens += r.output_tokens ?? 0;
+    e.total_ms      += r.duration_ms   ?? 0;
+    if (!r.success) e.errors += 1;
+  }
+
+  const actions = Object.values(map).map(e => ({
+    ...e,
+    avg_ms: e.calls > 0 ? Math.round(e.total_ms / e.calls) : 0,
+  })).sort((a, b) => b.calls - a.calls);
+
+  return { actions };
+}
+
+// ---------------------------------------------------------------------------
+// Post-auth: admin_ai_top_orgs  (top 10 orgs this month by call count)
+// ---------------------------------------------------------------------------
+async function handleAdminAITopOrgs(): Promise<object> {
+  const sb    = getAdminClient();
+  const start = new Date();
+  start.setDate(1); start.setHours(0, 0, 0, 0);
+
+  const rows = await fetchAIUsage(sb, start.toISOString());
+
+  // Count calls per org
+  const counts: Record<string, number> = {};
+  for (const r of rows) counts[r.organization_id] = (counts[r.organization_id] ?? 0) + 1;
+
+  const top10 = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([org_id, calls]) => ({ org_id, calls }));
+
+  if (top10.length === 0) return { orgs: [] };
+
+  // Fetch names + tiers
+  const ids = top10.map(o => o.org_id);
+  const [profilesRes, orgsRes] = await Promise.all([
+    sb.from('company_profiles').select('organization_id, name').in('organization_id', ids),
+    sb.from('organizations').select('id, tier').in('id', ids),
+  ]);
+
+  const nameMap: Record<string, string> = {};
+  for (const p of profilesRes.data ?? []) nameMap[p.organization_id] = p.name ?? '(unnamed)';
+  const tierMap: Record<string, string> = {};
+  for (const o of orgsRes.data ?? []) tierMap[o.id] = o.tier ?? 'free';
+
+  const orgs = top10.map(o => ({
+    org_id: o.org_id,
+    name:   nameMap[o.org_id] ?? '(unnamed)',
+    tier:   tierMap[o.org_id] ?? 'free',
+    calls:  o.calls,
+  }));
+
+  return { orgs };
+}
+
+// ---------------------------------------------------------------------------
 // Post-auth: export_company_data
 // ---------------------------------------------------------------------------
 
@@ -816,6 +959,10 @@ export const handler: Handler = async (event) => {
 
       switch (action) {
         case 'admin_dashboard':    result = await handleAdminDashboard();                        break;
+        case 'admin_ai_usage_summary':  result = await handleAdminAIUsageSummary();            break;
+        case 'admin_ai_usage_by_month': result = await handleAdminAIUsageByMonth();            break;
+        case 'admin_ai_usage_by_action':result = await handleAdminAIUsageByAction();           break;
+        case 'admin_ai_top_orgs':       result = await handleAdminAITopOrgs();                 break;
         case 'export_company_data':     result = await handleExportCompanyData(body);          break;
         case 'create_company':          result = await handleCreateCompany(body);              break;
         case 'list_companies':          result = await handleListCompanies();                   break;

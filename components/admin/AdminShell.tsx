@@ -6,6 +6,7 @@ import {
 import AdminDashboard from './AdminDashboard';
 import AdminUsersPanel from './AdminUsersPanel';
 import CompanyListPanel from './CompanyListPanel';
+import AdminAIUsagePanel from './AdminAIUsagePanel';
 
 type AdminView = 'dashboard' | 'companies' | 'ai_usage' | 'admins';
 
@@ -22,7 +23,7 @@ const AdminShell: React.FC<Props> = ({ adminToken, adminEmail, onSignOut }) => {
   const NAV: { id: AdminView; label: string; icon: React.ReactNode; badge?: string }[] = [
     { id: 'dashboard',  label: 'Dashboard',       icon: <LayoutDashboard className="w-5 h-5" /> },
     { id: 'companies',  label: 'Companies',        icon: <Building2 className="w-5 h-5" /> },
-    { id: 'ai_usage',   label: 'AI Usage',         icon: <Zap className="w-5 h-5" />,         badge: 'soon' },
+    { id: 'ai_usage',   label: 'AI Usage',         icon: <Zap className="w-5 h-5" /> },
     { id: 'admins',     label: 'Admin Users',      icon: <Users className="w-5 h-5" /> },
   ];
 
@@ -146,20 +147,7 @@ const AdminShell: React.FC<Props> = ({ adminToken, adminEmail, onSignOut }) => {
           {view === 'dashboard' && <AdminDashboard adminToken={adminToken} />}
           {view === 'companies' && <CompanyListPanel adminToken={adminToken} />}
           {view === 'admins'    && <AdminUsersPanel adminToken={adminToken} adminEmail={adminEmail} />}
-
-          {view === 'ai_usage' && (
-            <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
-              <div className="w-16 h-16 rounded-2xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center mb-4">
-                {NAV.find(n => n.id === view)?.icon}
-              </div>
-              <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-1">
-                {VIEW_LABELS[view]}
-              </h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Coming soon — tracked in subsequent issues.
-              </p>
-            </div>
-          )}
+          {view === 'ai_usage'  && <AdminAIUsagePanel adminToken={adminToken} />}
         </div>
       </main>
     </div>
