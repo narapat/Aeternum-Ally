@@ -33,7 +33,7 @@ const supabaseUrl    = process.env.SUPABASE_URL    ?? process.env.VITE_SUPABASE_
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
 const appUrl         = process.env.VITE_APP_URL    ?? 'http://localhost:8888';
 const resendApiKey   = process.env.RESEND_API_KEY  ?? '';
-const fromEmail      = process.env.RESEND_FROM_EMAIL ?? 'noreply@aeternum-ally.com';
+const fromEmail      = process.env.RESEND_FROM_EMAIL ?? 'noreply@aeternumally.com';
 
 function getAdminClient() {
   if (!supabaseUrl || !serviceRoleKey) throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
@@ -188,8 +188,15 @@ async function handleRequestAdminMagicLink(body: any): Promise<object> {
     return { sent: true, dev_link: magicLink };
   }
 
-  await sendAdminMagicLinkEmail(email, magicLink);
-  return { sent: true };
+  try {
+    await sendAdminMagicLinkEmail(email, magicLink);
+    return { sent: true };
+  } catch (emailErr: any) {
+    // Email sending failed (e.g. domain not verified in Resend).
+    // Fall back to returning the link directly so the admin is never locked out.
+    console.error('[admin] Resend failed, returning dev_link fallback:', emailErr?.message);
+    return { sent: true, dev_link: magicLink, email_error: emailErr?.message };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -646,7 +653,12 @@ async function handleCreateCompany(body: any): Promise<object> {
     const magicLink = linkData?.properties?.action_link ?? null;
     if (magicLink) {
       if (resendApiKey) {
-        await sendOwnerInviteEmail(ownerEmail, magicLink, companyName);
+        try {
+          await sendOwnerInviteEmail(ownerEmail, magicLink, companyName);
+        } catch (emailErr: any) {
+          console.error('[admin] Owner invite email failed, using dev_link fallback:', emailErr?.message);
+          devLink = magicLink;
+        }
       } else {
         console.info(`\n[admin] ✉️  OWNER INVITE LINK (dev):\n${magicLink}\n`);
         devLink = magicLink;
@@ -839,15 +851,22 @@ async function handleAddAdmin(body: any, actorEmail: string): Promise<object> {
 
   const magicLink = linkData?.properties?.action_link ?? null;
 
-  // Send invitation email if Resend is configured
+  // Send invitation email if Resend is configured; fall back to dev_link on failure
+  let adminDevLink: string | undefined;
   if (resendApiKey && magicLink) {
-    await sendAdminInviteEmail(email, magicLink, actorEmail);
+    try {
+      await sendAdminInviteEmail(email, magicLink, actorEmail);
+    } catch (emailErr: any) {
+      console.error('[admin] Admin invite email failed, using dev_link fallback:', emailErr?.message);
+      adminDevLink = magicLink;
+    }
   } else if (magicLink) {
     console.info(`\n[admin] ✉️  ADMIN INVITE LINK (dev — no RESEND_API_KEY):\n${magicLink}\n`);
+    adminDevLink = magicLink;
   }
 
   console.info('[admin] Added platform admin:', email, 'by:', actorEmail);
-  return { added: true, reactivated: false, email, dev_link: resendApiKey ? undefined : (magicLink ?? undefined) };
+  return { added: true, reactivated: false, email, dev_link: adminDevLink };
 }
 
 // ---------------------------------------------------------------------------

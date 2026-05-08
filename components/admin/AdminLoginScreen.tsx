@@ -12,10 +12,11 @@ const AdminLoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
   const [mode, setMode]         = useState<Mode>('password');
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
-  const [showPw, setShowPw]     = useState(false);
-  const [stage, setStage]       = useState<Stage>('input');
-  const [errorMsg, setError]    = useState('');
-  const [devLink, setDevLink]   = useState<string | null>(null);
+  const [showPw, setShowPw]       = useState(false);
+  const [stage, setStage]         = useState<Stage>('input');
+  const [errorMsg, setError]      = useState('');
+  const [devLink, setDevLink]     = useState<string | null>(null);
+  const [emailErr, setEmailErr]   = useState<string | null>(null);
 
   // ── Password login (bootstrap: table must be empty) ──────────────────────
   const handlePasswordLogin = async (e: React.FormEvent) => {
@@ -70,8 +71,9 @@ const AdminLoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'Failed to send link');
 
-      // Dev mode: server returns the link directly when RESEND_API_KEY is not set
+      // dev_link is returned when Resend is not set OR when email sending fails
       if (json.dev_link) setDevLink(json.dev_link);
+      if (json.email_error) setEmailErr(json.email_error);
 
       setStage('sent');
     } catch (err: any) {
@@ -80,7 +82,7 @@ const AdminLoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
     }
   };
 
-  const handleReset = () => { setStage('input'); setError(''); setDevLink(null); };
+  const handleReset = () => { setStage('input'); setError(''); setDevLink(null); setEmailErr(null); };
 
   const switchMode = (m: Mode) => { setMode(m); handleReset(); };
 
@@ -108,10 +110,12 @@ const AdminLoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
             {devLink && (
               <div className="bg-amber-950/40 border border-amber-700/50 rounded-lg p-3 space-y-2">
                 <p className="text-xs font-semibold text-amber-400 uppercase tracking-wide">
-                  ⚠️ Dev mode — no RESEND_API_KEY set
+                  ⚠️ {emailErr ? 'Email delivery failed' : 'Dev mode — no RESEND_API_KEY set'}
                 </p>
                 <p className="text-xs text-amber-300/70">
-                  No email was sent. Use the link below to sign in:
+                  {emailErr
+                    ? `Email could not be sent (${emailErr}). Use the link below to sign in:`
+                    : 'No email was sent. Use the link below to sign in:'}
                 </p>
                 <a
                   href={devLink}
