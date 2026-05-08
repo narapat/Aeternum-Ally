@@ -497,9 +497,9 @@ const App: React.FC = () => {
                       </button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
-                      <StatCard title="Assessments Completed" value={assessments.length.toString()} icon={<FileText className="text-blue-500" />} />
-                      <StatCard title="Material Topics Identified" value={materialTopics.length.toString()} icon={<AlertTriangle className="text-amber-500" />} />
-                      <StatCard title="High Impact Risks" value={assessments.filter(a => a.financialMaterialityValue > 60).length.toString()} icon={<CheckCircle className="text-esg-500" />} />
+                      <StatCard title="Assessments Completed" value={assessments.length.toString()} icon={<FileText className="text-blue-500" />} description="Total ESRS topics assessed across all categories" />
+                      <StatCard title="Material Topics Identified" value={materialTopics.length.toString()} icon={<AlertTriangle className="text-amber-500" />} description="Topics scoring ≥ 40 on financial or impact materiality" />
+                      <StatCard title="High Impact Risks" value={assessments.filter(a => a.financialMaterialityValue > 60).length.toString()} icon={<CheckCircle className="text-esg-500" />} description="Topics with financial materiality score > 60 (orange dots on matrix)" />
                     </div>
                     <div className="space-y-6">
                       <MaterialityMatrix data={assessments} />
@@ -729,12 +729,13 @@ const NavSection = ({ label, open, onToggle, sidebarCollapsed, children }: {
   </div>
 );
 
-const StatCard = ({ title, value, icon }: { title: string, value: string, icon: React.ReactNode }) => (
+const StatCard = ({ title, value, icon, description }: { title: string, value: string, icon: React.ReactNode, description?: string }) => (
   <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-4 transition-colors">
     <div className="w-12 h-12 bg-slate-50 dark:bg-slate-900 rounded-full flex items-center justify-center border border-slate-100 dark:border-slate-700 flex-shrink-0">{icon}</div>
     <div className="min-w-0">
       <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{title}</p>
       <p className="text-2xl font-bold text-slate-800 dark:text-white">{value}</p>
+      {description && <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 leading-relaxed">{description}</p>}
     </div>
   </div>
 );
