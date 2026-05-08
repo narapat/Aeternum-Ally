@@ -38,9 +38,26 @@ if (!supabaseAnonKey) missing.push('VITE_SUPABASE_ANON_KEY');
 if (missing.length > 0) {
   renderConfigError(missing);
 } else {
-  // Route /admin to the Platform Admin portal; everything else → tenant App.
-  const isAdminRoute = window.location.pathname.startsWith('/admin');
-  const appModule = isAdminRoute ? import('./AdminApp') : import('./App');
+  // ── Admin magic-link intercept ──────────────────────────────────────────
+  // When an admin requests a magic link, AdminLoginScreen sets the flag
+  // 'admin_otp_pending' in localStorage.  Supabase may redirect back to the
+  // Site URL (root '/') rather than '/admin' if '/admin' is not in its
+  // allowed-redirect-URLs list.  We catch that here: if the URL hash contains
+  // an access_token AND the pending flag is set, redirect to /admin so
+  // AdminApp can pick up the session — before any React tree is rendered.
+  const hash = window.location.hash;
+  const hasMagicLinkToken = hash.includes('access_token') && hash.includes('type=magiclink');
+  const adminOtpPending   = (() => { try { return localStorage.getItem('admin_otp_pending') === '1'; } catch { return false; } })();
+
+  if (hasMagicLinkToken && adminOtpPending && !window.location.pathname.startsWith('/admin')) {
+    try { localStorage.removeItem('admin_otp_pending'); } catch {}
+    // Redirect to /admin, keeping the hash so AdminApp can exchange the token
+    window.location.replace('/admin' + hash);
+    // Stop — the page will reload at /admin
+  } else {
+    // Route /admin to the Platform Admin portal; everything else → tenant App.
+    const isAdminRoute = window.location.pathname.startsWith('/admin');
+    const appModule = isAdminRoute ? import('./AdminApp') : import('./App');
 
   // Dynamic import so module-load errors (e.g. Supabase client init) become
   // visible UI instead of a blank page.
@@ -66,4 +83,5 @@ if (missing.length > 0) {
         </div>
       `;
     });
+  } // end else (no magic-link intercept)
 }

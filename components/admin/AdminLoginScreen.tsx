@@ -30,6 +30,9 @@ const AdminLoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
       });
 
       if (error) throw error;
+      // Mark that an admin OTP is in-flight so index.tsx can intercept the
+      // Supabase redirect even if it lands on '/' instead of '/admin'
+      try { localStorage.setItem('admin_otp_pending', '1'); } catch {}
       setStage('sent');
     } catch (err: any) {
       setError(err?.message ?? 'Failed to send magic link');
@@ -38,6 +41,7 @@ const AdminLoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
   };
 
   const handleResend = () => {
+    try { localStorage.removeItem('admin_otp_pending'); } catch {}
     setStage('input');
     setError('');
   };
