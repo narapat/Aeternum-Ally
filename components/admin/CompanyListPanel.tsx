@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import PendingUsersPanel from './PendingUsersPanel';
 import CompanyExportModal from './CompanyExportModal';
+import CompanyStatsPanel from './CompanyStatsPanel';
 
 interface Company {
   id:           string;
@@ -19,6 +20,8 @@ interface Company {
 type SortKey = 'name' | 'tier' | 'member_count' | 'created_at' | 'is_active';
 type SortDir = 'asc' | 'desc';
 type Tab     = 'companies' | 'pending';
+
+interface DetailView { id: string; name: string; is_active: boolean; }
 
 interface Props {
   adminToken: string;
@@ -207,6 +210,7 @@ const CompanyListPanel: React.FC<Props> = ({ adminToken }) => {
   const [actionMsg,    setActionMsg]    = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [createModal,  setCreateModal]  = useState<{ open: boolean; prefillEmail: string }>({ open: false, prefillEmail: '' });
   const [exportModal,  setExportModal]  = useState<{ open: boolean; id: string; name: string }>({ open: false, id: '', name: '' });
+  const [detailView,   setDetailView]   = useState<DetailView | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -274,6 +278,19 @@ const CompanyListPanel: React.FC<Props> = ({ adminToken }) => {
   const activeCompanies = companies
     .filter(c => c.is_active)
     .map(c => ({ id: c.id, name: c.name }));
+
+  // ── Company detail view ───────────────────────────────────────────────────
+  if (detailView) {
+    return (
+      <CompanyStatsPanel
+        companyId={detailView.id}
+        companyName={detailView.name}
+        isActive={detailView.is_active}
+        adminToken={adminToken}
+        onBack={() => setDetailView(null)}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -413,14 +430,17 @@ const CompanyListPanel: React.FC<Props> = ({ adminToken }) => {
                       return (
                         <tr key={company.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                           <td className="px-4 py-3.5">
-                            <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => setDetailView({ id: company.id, name: company.name, is_active: company.is_active })}
+                              className="flex items-center gap-3 group text-left"
+                            >
                               <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${company.is_active ? 'bg-esg-700' : 'bg-slate-500'}`}>
                                 {company.name.charAt(0).toUpperCase()}
                               </div>
-                              <span className={`font-medium truncate max-w-[160px] ${company.is_active ? 'text-slate-800 dark:text-white' : 'text-slate-400 dark:text-slate-500 line-through'}`}>
+                              <span className={`font-medium truncate max-w-[160px] group-hover:underline ${company.is_active ? 'text-slate-800 dark:text-white' : 'text-slate-400 dark:text-slate-500 line-through'}`}>
                                 {company.name}
                               </span>
-                            </div>
+                            </button>
                           </td>
                           <td className="px-4 py-3.5 hidden md:table-cell"><TierBadge tier={company.tier} /></td>
                           <td className="px-4 py-3.5 text-slate-500 dark:text-slate-400 hidden sm:table-cell">{company.member_count}</td>
