@@ -17,14 +17,16 @@
  * calls batchCountEvidence() once and distributes the results.
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, DragEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { Paperclip, ExternalLink, Trash2, Plus, X, Link, Loader2, FileText, Image, File, AlertCircle, ChevronLeft } from 'lucide-react';
+import { Paperclip, ExternalLink, Trash2, Plus, X, Link, Loader2, FileText, Image, File, AlertCircle, ChevronLeft, UploadCloud, Zap } from 'lucide-react';
 import {
   fetchEvidence,
   countEvidence,
   linkExternalEvidence,
   deleteEvidence,
+  uploadDirectEvidence,
+  getStorageQuota,
 } from '../services/evidenceService';
 import {
   isGoogleDriveConfigured,
@@ -51,7 +53,7 @@ interface Props {
 }
 
 type AddMethod = 'url' | 'google_drive' | 'onedrive';
-type ModalView = 'list' | 'add_method' | 'add_url' | 'add_drive';
+type ModalView = 'list' | 'add_method' | 'add_url' | 'add_drive' | 'add_upload';
 
 const STORAGE_ICONS: Record<StorageType, React.ReactNode> = {
   google_drive:     <span className="text-blue-500">▲</span>,
@@ -149,6 +151,10 @@ const EvidenceModal: React.FC<ModalProps> = ({
   const [driveConnected, setDriveConnected] = useState(false);
   const [driveCheckDone, setDriveCheckDone] = useState(false);
 
+  // Storage quota (fetched lazily when upload view is first opened)
+  const [quota, setQuota]             = useState<{ used_mb: number; total_mb: number; available_mb: number } | null>(null);
+  const [quotaLoaded, setQuotaLoaded] = useState(false);
+
   // ── Load evidence list ───────────────────────────────────────────────────
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -217,6 +223,27 @@ const EvidenceModal: React.FC<ModalProps> = ({
   const [driveFile, setDriveFile] = useState<{
     id: string; name: string; url: string; mimeType: string; sizeBytes: number | null;
   } | null>(null);
+
+  // ── Load storage quota (lazy, on upload view open) ────────────────────────
+  const loadQuota = useCallback(async () => {
+    if (quotaLoaded) return;
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) return;
+      const q = await getStorageQuota(orgId, token);
+      setQuota(q);
+    } catch {
+      // quota unavailable — server will enforce limits
+    } finally {
+      setQuotaLoaded(true);
+    }
+  }, [orgId, quotaLoaded]);
+
+  const openUploadView = () => {
+    setView('add_upload');
+    loadQuota();
+  };
 
   // ── Navigate back ─────────────────────────────────────────────────────────
   const back = () => { setView('list'); setError(null); };
@@ -334,9 +361,9 @@ const EvidenceModal: React.FC<ModalProps> = ({
               <MethodCard
                 icon="📤"
                 title="Upload File"
-                subtitle="Direct upload — Pro tier only"
-                disabled
+                subtitle="Direct upload up to 25 MB — Pro tier"
                 badge={<span className="text-xs bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 px-1.5 py-0.5 rounded font-medium">Pro</span>}
+                onClick={openUploadView}
               />
             </div>
           )}
@@ -365,6 +392,18 @@ const EvidenceModal: React.FC<ModalProps> = ({
               onError={setError}
             />
           )}
+
+          {/* DIRECT UPLOAD */}
+          {view === 'add_upload' && (
+            <FileUploadForm
+              linkedToType={linkedToType}
+              linkedToId={linkedToId}
+              orgId={orgId}
+              quota={quota}
+              onSaved={() => { back(); loadItems(); }}
+              onError={setError}
+            />
+          )}
         </div>
 
         {/* Footer */}
@@ -388,55 +427,94 @@ const EvidenceModal: React.FC<ModalProps> = ({
 // Sub-components
 // ─────────────────────────────────────────────────────────────────────────────
 
+const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp']);
+
 const EvidenceItem: React.FC<{
   item: EvidenceAttachment;
   onDelete: () => void;
   busy: boolean;
-}> = ({ item, onDelete, busy }) => (
-  <div className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 group">
-    <div className="flex-shrink-0 mt-0.5">{fileIcon(item.file_type)}</div>
-    <div className="flex-1 min-w-0">
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <span className="font-medium text-sm text-slate-800 dark:text-white truncate max-w-[240px]">
-          {item.file_name}
-        </span>
-        {item.file_type && (
-          <span className="text-xs text-slate-400 uppercase font-mono">{item.file_type}</span>
-        )}
-        <span className="flex-shrink-0">{STORAGE_ICONS[item.storage_type]}</span>
+}> = ({ item, onDelete, busy }) => {
+  const ext = (item.file_type ?? '').toLowerCase();
+  const isImage = IMAGE_EXTS.has(ext);
+  const isPdf   = ext === 'pdf';
+  const previewUrl = item.external_url ?? null;
+
+  return (
+    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 overflow-hidden group">
+      {/* Image preview strip */}
+      {isImage && previewUrl && (
+        <div className="relative h-24 bg-slate-100 dark:bg-slate-800 overflow-hidden">
+          <img
+            src={previewUrl}
+            alt={item.file_name}
+            className="w-full h-full object-cover"
+            loading="lazy"
+            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/20" />
+        </div>
+      )}
+      {isPdf && previewUrl && (
+        <div className="h-10 bg-red-50 dark:bg-red-900/20 flex items-center gap-2 px-3">
+          <FileText className="w-4 h-4 text-red-500" />
+          <span className="text-xs text-red-600 dark:text-red-400 font-medium">PDF Document</span>
+          <a
+            href={previewUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-auto text-xs text-red-500 hover:underline"
+            onClick={e => e.stopPropagation()}
+          >
+            Open ↗
+          </a>
+        </div>
+      )}
+      <div className="flex items-start gap-3 p-3">
+        <div className="flex-shrink-0 mt-0.5">{fileIcon(item.file_type)}</div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-medium text-sm text-slate-800 dark:text-white truncate max-w-[240px]">
+              {item.file_name}
+            </span>
+            {item.file_type && (
+              <span className="text-xs text-slate-400 uppercase font-mono">{item.file_type}</span>
+            )}
+            <span className="flex-shrink-0">{STORAGE_ICONS[item.storage_type]}</span>
+          </div>
+          {item.file_size_mb != null && (
+            <p className="text-xs text-slate-400">{item.file_size_mb.toFixed(1)} MB</p>
+          )}
+          {item.notes && (
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2 italic">{item.notes}</p>
+          )}
+          <p className="text-xs text-slate-400 mt-0.5">Added {fmtDate(item.uploaded_at)}</p>
+        </div>
+        <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {(item.external_url || item.storage_path) && (
+            <a
+              href={item.external_url ?? `/.netlify/functions/evidence/download/${item.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500 transition-colors"
+              title="Open file"
+              onClick={e => e.stopPropagation()}
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          )}
+          <button
+            onClick={onDelete}
+            disabled={busy}
+            className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-500 transition-colors"
+            title="Remove evidence"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
-      {item.file_size_mb != null && (
-        <p className="text-xs text-slate-400">{item.file_size_mb.toFixed(1)} MB</p>
-      )}
-      {item.notes && (
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2 italic">{item.notes}</p>
-      )}
-      <p className="text-xs text-slate-400 mt-0.5">Added {fmtDate(item.uploaded_at)}</p>
     </div>
-    <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-      {(item.external_url || item.storage_path) && (
-        <a
-          href={item.external_url ?? `/.netlify/functions/evidence/download/${item.id}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500 transition-colors"
-          title="Open file"
-          onClick={e => e.stopPropagation()}
-        >
-          <ExternalLink className="w-3.5 h-3.5" />
-        </a>
-      )}
-      <button
-        onClick={onDelete}
-        disabled={busy}
-        className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-500 transition-colors"
-        title="Remove evidence"
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  </div>
-);
+  );
+};
 
 const MethodCard: React.FC<{
   icon: string;
@@ -536,7 +614,7 @@ const URLForm: React.FC<{
           onChange={e => setNotes(e.target.value)}
           placeholder="Any additional context…"
           rows={2}
-          className="form-input resize-none"
+          className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
         />
       </FormField>
       <button
@@ -618,7 +696,7 @@ const DriveConfirmForm: React.FC<{
           onChange={e => setNotes(e.target.value)}
           placeholder="Any additional context…"
           rows={2}
-          className="form-input resize-none"
+          className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
         />
       </FormField>
 
@@ -644,5 +722,195 @@ const FormField: React.FC<{ label: string; children: React.ReactNode }> = ({ lab
     {children}
   </div>
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FileUploadForm — Pro tier direct upload
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ALLOWED_EXTS = ['pdf', 'xlsx', 'xls', 'docx', 'doc', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'csv', 'txt'];
+const MAX_SIZE_MB  = 25;
+
+const FileUploadForm: React.FC<{
+  linkedToType: EvidenceLinkedToType;
+  linkedToId:   string;
+  orgId:        string;
+  quota:        { used_mb: number; total_mb: number; available_mb: number } | null;
+  onSaved:      () => void;
+  onError:      (msg: string) => void;
+}> = ({ linkedToType, linkedToId, orgId, quota, onSaved, onError }) => {
+  const [file,          setFile]          = useState<File | null>(null);
+  const [notes,         setNotes]         = useState('');
+  const [uploading,     setUploading]     = useState(false);
+  const [progress,      setProgress]      = useState(0);
+  const [isDragging,    setIsDragging]    = useState(false);
+  const [upgradeNeeded, setUpgradeNeeded] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const validateFile = (f: File): string | null => {
+    const sizeMb = f.size / (1024 * 1024);
+    if (sizeMb > MAX_SIZE_MB) return `File too large (${sizeMb.toFixed(1)} MB). Max is ${MAX_SIZE_MB} MB.`;
+    const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
+    if (!ALLOWED_EXTS.includes(ext)) return `File type .${ext} is not allowed.`;
+    return null;
+  };
+
+  const pickFile = (f: File) => {
+    const err = validateFile(f);
+    if (err) { onError(err); return; }
+    setFile(f);
+    setUpgradeNeeded(false);
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const f = e.dataTransfer.files[0];
+    if (f) pickFile(f);
+  };
+
+  const handleUpload = async () => {
+    if (!file) return;
+    setUploading(true);
+    setProgress(10);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token ?? '';
+      setProgress(40);
+      await uploadDirectEvidence(orgId, {
+        file,
+        linked_to_type: linkedToType,
+        linked_to_id:   linkedToId,
+        notes:          notes.trim() || undefined,
+      }, token);
+      setProgress(100);
+      onSaved();
+    } catch (e: any) {
+      const msg: string = e?.message ?? 'Upload failed.';
+      if (msg.toLowerCase().includes('pro') || msg.toLowerCase().includes('subscription') || msg.toLowerCase().includes('tier')) {
+        setUpgradeNeeded(true);
+      } else {
+        onError(msg);
+      }
+    } finally {
+      setUploading(false);
+      setProgress(0);
+    }
+  };
+
+  // Upgrade prompt — shown when server returns a tier error
+  if (upgradeNeeded) {
+    return (
+      <div className="text-center py-6 space-y-4">
+        <div className="w-12 h-12 rounded-full bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center mx-auto">
+          <Zap className="w-6 h-6 text-violet-600 dark:text-violet-400" />
+        </div>
+        <div>
+          <h4 className="font-bold text-slate-800 dark:text-white mb-1">Pro tier required</h4>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Direct uploads are available on the Pro plan.
+          </p>
+        </div>
+        <ul className="text-xs text-slate-500 dark:text-slate-400 space-y-1 text-left max-w-xs mx-auto">
+          {['Upload files up to 25 MB', '10 GB storage included', 'In-app image & PDF preview', 'Bulk management'].map(f => (
+            <li key={f} className="flex items-center gap-1.5">
+              <span className="w-3.5 h-3.5 text-violet-500">✓</span> {f}
+            </li>
+          ))}
+        </ul>
+        <p className="text-xs text-slate-400">
+          In the meantime, use "Paste a URL" to link cloud-hosted files.
+        </p>
+      </div>
+    );
+  }
+
+  const fileSizeMb = file ? file.size / (1024 * 1024) : 0;
+
+  return (
+    <div className="space-y-3">
+      {/* Quota bar */}
+      {quota && quota.total_mb > 0 && (
+        <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700">
+          <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+            <span>Storage used</span>
+            <span>{quota.used_mb.toFixed(0)} / {quota.total_mb >= 1024 ? `${(quota.total_mb / 1024).toFixed(0)} GB` : `${quota.total_mb} MB`}</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${quota.used_mb / quota.total_mb > 0.9 ? 'bg-red-500' : 'bg-violet-500'}`}
+              style={{ width: `${Math.min(100, (quota.used_mb / quota.total_mb) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Drop zone */}
+      {!file ? (
+        <div
+          onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+          className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors
+            ${isDragging
+              ? 'border-violet-400 bg-violet-50 dark:bg-violet-900/20'
+              : 'border-slate-300 dark:border-slate-600 hover:border-violet-400 hover:bg-slate-50 dark:hover:bg-slate-900/40'
+            }`}
+        >
+          <UploadCloud className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Drop file here or click to browse</p>
+          <p className="text-xs text-slate-400 mt-1">PDF, Word, Excel, images • Max {MAX_SIZE_MB} MB</p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            accept={ALLOWED_EXTS.map(e => `.${e}`).join(',')}
+            onChange={e => { const f = e.target.files?.[0]; if (f) pickFile(f); }}
+          />
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 p-3 bg-violet-50 dark:bg-violet-900/20 rounded-xl border border-violet-200 dark:border-violet-800">
+          <FileText className="w-5 h-5 text-violet-600 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-slate-800 dark:text-white truncate">{file.name}</p>
+            <p className="text-xs text-slate-500">{fileSizeMb.toFixed(1)} MB</p>
+          </div>
+          <button onClick={() => setFile(null)} className="text-slate-400 hover:text-red-500">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Upload progress */}
+      {uploading && (
+        <div className="space-y-1">
+          <div className="h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+            <div className="h-full bg-violet-500 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
+          </div>
+          <p className="text-xs text-center text-slate-400">Uploading… {progress}%</p>
+        </div>
+      )}
+
+      <FormField label="Notes (optional)">
+        <textarea
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          placeholder="Any additional context…"
+          rows={2}
+          className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+        />
+      </FormField>
+
+      <button
+        onClick={handleUpload}
+        disabled={!file || uploading}
+        className="w-full py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+      >
+        {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
+        {uploading ? 'Uploading…' : 'Upload File'}
+      </button>
+    </div>
+  );
+};
 
 export default EvidenceBadge;
