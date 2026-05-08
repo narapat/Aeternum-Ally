@@ -1,22 +1,38 @@
 
-import React, { useState, useMemo } from 'react';
-import { AssessmentData } from '../types';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { AssessmentData, SuggestedTask } from '../types';
 import { Edit2, Trash2, Filter, ArrowUpDown, Layers, CheckCircle2, Circle } from 'lucide-react';
+import { fetchSuggestedTasks } from '../services/dbService';
+import AmbientTaskBadge from './AmbientTaskBadge';
 
 interface Props {
   assessments: AssessmentData[];
   onEdit: (data: AssessmentData) => void;
   onDelete: (id: string) => void;
+  orgId?: string;
+  currentUserId?: string;
 }
 
 type SortOption = 'score' | 'name';
 type GroupOption = 'none' | 'category';
 
-const MaterialTopicsList: React.FC<Props> = ({ assessments, onEdit, onDelete }) => {
+const MaterialTopicsList: React.FC<Props> = ({ assessments, onEdit, onDelete, orgId, currentUserId }) => {
   // Default to TRUE to ensure user sees data immediately after adding
   const [showAll, setShowAll] = useState(true);
   const [sortBy, setSortBy] = useState<SortOption>('score');
   const [groupBy, setGroupBy] = useState<GroupOption>('category');
+
+  const [suggestedTasks, setSuggestedTasks] = useState<SuggestedTask[]>([]);
+
+  const loadSuggested = useCallback(async () => {
+    if (!orgId) return;
+    try {
+      const tasks = await fetchSuggestedTasks(orgId);
+      setSuggestedTasks(tasks.filter(t => t.source_type === 'dma'));
+    } catch {}
+  }, [orgId]);
+
+  useEffect(() => { loadSuggested(); }, [loadSuggested]);
 
   // 1. Filter
   const filteredData = useMemo(() => {
@@ -129,11 +145,15 @@ const MaterialTopicsList: React.FC<Props> = ({ assessments, onEdit, onDelete }) 
                 </div>
              )}
              {(items as AssessmentData[]).map(item => (
-                <TopicItem 
-                    key={item.id} 
-                    data={item} 
-                    onEdit={() => onEdit(item)} 
-                    onDelete={() => onDelete(item.id)} 
+                <TopicItem
+                    key={item.id}
+                    data={item}
+                    onEdit={() => onEdit(item)}
+                    onDelete={() => onDelete(item.id)}
+                    suggestedTasks={orgId ? suggestedTasks.filter(t => t.source_id === item.id) : []}
+                    orgId={orgId}
+                    currentUserId={currentUserId}
+                    onSuggestionsChanged={loadSuggested}
                 />
              ))}
           </div>
@@ -149,15 +169,33 @@ const MaterialTopicsList: React.FC<Props> = ({ assessments, onEdit, onDelete }) 
   );
 };
 
-const TopicItem: React.FC<{ data: AssessmentData, onEdit: () => void, onDelete: () => void }> = ({ data, onEdit, onDelete }) => {
+const TopicItem: React.FC<{
+    data: AssessmentData;
+    onEdit: () => void;
+    onDelete: () => void;
+    suggestedTasks: SuggestedTask[];
+    orgId?: string;
+    currentUserId?: string;
+    onSuggestionsChanged: () => void;
+}> = ({ data, onEdit, onDelete, suggestedTasks, orgId, currentUserId, onSuggestionsChanged }) => {
     return (
-        <div className={`group relative p-3 rounded-lg border transition-all hover:shadow-md ${data.isMaterial 
-            ? 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700' 
+        <div className={`group relative p-3 rounded-lg border transition-all hover:shadow-md ${data.isMaterial
+            ? 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'
             : 'bg-slate-50 dark:bg-slate-900/50 border-slate-100 dark:border-slate-800 opacity-75'
         }`}>
             <div className="flex justify-between items-start mb-2 pr-20">
-                <div>
-                    <h5 className={`font-bold text-sm ${data.isMaterial ? 'text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>{data.topic}</h5>
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <h5 className={`font-bold text-sm ${data.isMaterial ? 'text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>{data.topic}</h5>
+                        {orgId && currentUserId && (
+                            <AmbientTaskBadge
+                                tasks={suggestedTasks}
+                                orgId={orgId}
+                                currentUserId={currentUserId}
+                                onChanged={onSuggestionsChanged}
+                            />
+                        )}
+                    </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1">{data.impactDescription}</p>
                 </div>
             </div>

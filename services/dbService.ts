@@ -638,6 +638,26 @@ export async function dismissSuggestedTask(id: string, userId: string): Promise<
   if (error) throw error;
 }
 
+export async function restoreSuggestedTask(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("suggested_tasks")
+    .update({ dismissed: false, dismissed_at: null, dismissed_by: null })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function fetchDismissedSuggestedTasks(orgId: string): Promise<SuggestedTask[]> {
+  const { data, error } = await supabase
+    .from("suggested_tasks")
+    .select("*")
+    .eq("organization_id", orgId)
+    .eq("dismissed", true)
+    .is("converted_to_task_id", null)
+    .order("dismissed_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map(fromDbSuggestedTask);
+}
+
 export async function promoteSuggestedTask(
   orgId: string,
   suggested: SuggestedTask,
