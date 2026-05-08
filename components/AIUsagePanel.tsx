@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Sparkles, Zap, Brain, Loader2, Save, AlertCircle, CheckCircle2,
-  TrendingUp, DollarSign, Hash,
+  TrendingUp, DollarSign, Hash, Key, ShieldCheck, ShieldOff, Eye, EyeOff,
 } from "lucide-react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
-import { fetchAiSettings, upsertAiSettings, fetchAiUsageLog, type AiUsageRow } from "../services/dbService";
+import {
+  fetchAiSettings, upsertAiSettings, upsertByokSettings, fetchMonthlyCallCount, fetchAiUsageLog,
+  type AiUsageRow,
+} from "../services/dbService";
 import type { OrgRole } from "../types";
 
 interface Props {
@@ -36,35 +39,63 @@ const MODELS: { id: string; label: string; tagline: string; icon: React.ReactNod
 
 const ACTION_LABELS: Record<string, string> = {
   generateAssessmentSuggestions: "Materiality assessment",
-  generateCanvasSuggestion: "Canvas suggestion",
-  generateSwotInternal: "SWOT internal",
-  generateSwotExternal: "SWOT external",
-  generateKPISuggestions: "KPI suggestions",
+  generateAssessmentScoring:     "AI scoring",
+  generateCanvasSuggestion:      "Canvas suggestion",
+  generateSwotInternal:          "SWOT internal",
+  generateSwotExternal:          "SWOT external",
+  generateKPISuggestions:        "KPI suggestions",
   generateSustainabilityStatement: "Sustainability statement",
+  analyzeTopicQuality:           "Quality check",
+  analyzeDMASynthesis:           "DMA synthesis",
+  analyzeDMAQuality:             "DMA quality (legacy)",
+  generateTasks:                 "Task generation",
 };
 
 const ACTION_COLORS: Record<string, string> = {
   generateAssessmentSuggestions: "#3b82f6",
-  generateCanvasSuggestion: "#10b981",
-  generateSwotInternal: "#f59e0b",
-  generateSwotExternal: "#8b5cf6",
-  generateKPISuggestions: "#ec4899",
+  generateAssessmentScoring:     "#60a5fa",
+  generateCanvasSuggestion:      "#10b981",
+  generateSwotInternal:          "#f59e0b",
+  generateSwotExternal:          "#8b5cf6",
+  generateKPISuggestions:        "#ec4899",
   generateSustainabilityStatement: "#06b6d4",
+  analyzeTopicQuality:           "#f97316",
+  analyzeDMASynthesis:           "#84cc16",
+  analyzeDMAQuality:             "#a78bfa",
+  generateTasks:                 "#fb923c",
 };
+
+// Platform soft limit shown in the quota bar (same default as api.ts)
+const PLATFORM_SOFT_LIMIT_DEFAULT = 100;
 
 const AIUsagePanel: React.FC<Props> = ({ organizationId, currentUserRole }) => {
   const canManage = currentUserRole === "Owner" || currentUserRole === "Admin";
 
+  // ── Model selection ──────────────────────────────────────────────
   const [model, setModel] = useState<string>("gemini-2.5-flash");
   const [savedModel, setSavedModel] = useState<string>("gemini-2.5-flash");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saved">("idle");
 
+  // ── BYOK ─────────────────────────────────────────────────────────
+  const [useBYOK, setUseBYOK] = useState(false);
+  const [savedUseBYOK, setSavedUseBYOK] = useState(false);
+  const [byokProvider, setByokProvider] = useState<string>("gemini");
+  const [byokKeyInput, setByokKeyInput] = useState<string>("");   // blank = unchanged
+  const [hasStoredKey, setHasStoredKey] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const [isSavingBYOK, setIsSavingBYOK] = useState(false);
+  const [byokSaveError, setByokSaveError] = useState<string | null>(null);
+  const [byokSaveStatus, setByokSaveStatus] = useState<"idle" | "saved">("idle");
+
+  // ── Usage data ───────────────────────────────────────────────────
   const [usage, setUsage] = useState<AiUsageRow[]>([]);
+  const [monthlyCallCount, setMonthlyCallCount] = useState<number>(0);
+  const [softQuotaMonthly, setSoftQuotaMonthly] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch settings + recent usage on mount
+  // Fetch settings + recent usage + this month's count on mount
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
@@ -72,24 +103,30 @@ const AIUsagePanel: React.FC<Props> = ({ organizationId, currentUserRole }) => {
     Promise.all([
       fetchAiSettings(organizationId),
       fetchAiUsageLog(organizationId, 500),
-    ]).then(([settings, log]) => {
+      fetchMonthlyCallCount(organizationId),
+    ]).then(([settings, log, monthCount]) => {
       if (cancelled) return;
-      if (settings?.model) {
+      if (settings) {
         setModel(settings.model);
         setSavedModel(settings.model);
+        setUseBYOK(settings.use_byok);
+        setSavedUseBYOK(settings.use_byok);
+        setByokProvider(settings.byok_provider ?? "gemini");
+        setHasStoredKey(settings.has_byok_key);
+        setSoftQuotaMonthly(settings.soft_quota_monthly);
       }
       setUsage(log);
+      setMonthlyCallCount(monthCount);
       setIsLoading(false);
     }).catch(() => {
       if (!cancelled) setIsLoading(false);
     });
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [organizationId]);
 
   const isDirty = model !== savedModel;
+  const isByokDirty = useBYOK !== savedUseBYOK || byokKeyInput !== "";
 
   const handleSaveModel = async () => {
     setIsSaving(true);
@@ -103,6 +140,32 @@ const AIUsagePanel: React.FC<Props> = ({ organizationId, currentUserRole }) => {
       setSaveError(error.message);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSaveBYOK = async () => {
+    setIsSavingBYOK(true);
+    setByokSaveError(null);
+    try {
+      const payload: Parameters<typeof upsertByokSettings>[1] = {
+        use_byok: useBYOK,
+        byok_provider: useBYOK ? byokProvider : null,
+      };
+      // Only send key field when user typed something
+      if (byokKeyInput.trim()) payload.byok_api_key = byokKeyInput.trim();
+      // Explicit clear when disabling and a key was stored
+      else if (!useBYOK && hasStoredKey) payload.byok_api_key = null;
+
+      await upsertByokSettings(organizationId, payload);
+      setSavedUseBYOK(useBYOK);
+      setHasStoredKey(useBYOK ? (byokKeyInput.trim() !== "" || hasStoredKey) : false);
+      setByokKeyInput("");
+      setByokSaveStatus("saved");
+      setTimeout(() => setByokSaveStatus("idle"), 3000);
+    } catch (error: any) {
+      setByokSaveError(error.message);
+    } finally {
+      setIsSavingBYOK(false);
     }
   };
 
@@ -253,6 +316,157 @@ const AIUsagePanel: React.FC<Props> = ({ organizationId, currentUserRole }) => {
         )}
       </section>
 
+      {/* ====================== Quota bar ====================== */}
+      {!savedUseBYOK && (
+        <section>
+          <header className="mb-3">
+            <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+              <Hash className="w-4 h-4 text-esg-600" /> Monthly call quota
+            </h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Platform quota resets on the 1st of each month. Enable BYOK below to bypass it.
+            </p>
+          </header>
+
+          <QuotaBar
+            used={monthlyCallCount}
+            limit={softQuotaMonthly ?? PLATFORM_SOFT_LIMIT_DEFAULT}
+          />
+        </section>
+      )}
+
+      {/* ====================== BYOK ====================== */}
+      <section>
+        <header className="mb-4">
+          <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+            <Key className="w-4 h-4 text-esg-600" /> Bring Your Own Key (BYOK)
+          </h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Supply your own Gemini API key to bypass the monthly platform quota and use the model of your choice.
+          </p>
+        </header>
+
+        {byokSaveError && (
+          <div className="mb-3 flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-700 dark:text-red-300">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /> {byokSaveError}
+          </div>
+        )}
+
+        <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 space-y-4">
+          {/* Toggle */}
+          <label className={`flex items-center justify-between gap-3 ${canManage ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}>
+            <div className="flex items-center gap-2">
+              {useBYOK
+                ? <ShieldCheck className="w-5 h-5 text-emerald-500" />
+                : <ShieldOff className="w-5 h-5 text-slate-400" />}
+              <div>
+                <p className="text-sm font-semibold text-slate-800 dark:text-white">
+                  {useBYOK ? "BYOK enabled" : "BYOK disabled"}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {useBYOK
+                    ? "AI calls use your own API key and bypass platform quota."
+                    : "AI calls use the platform Gemini key (quota applies)."}
+                </p>
+              </div>
+            </div>
+            <div
+              role="switch"
+              aria-checked={useBYOK}
+              onClick={() => canManage && setUseBYOK(!useBYOK)}
+              className={`relative inline-flex w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
+                useBYOK ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                  useBYOK ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </div>
+          </label>
+
+          {/* Key input — only shown when BYOK is toggled on */}
+          {useBYOK && (
+            <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-700">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  Provider
+                </label>
+                <select
+                  value={byokProvider}
+                  onChange={(e) => canManage && setByokProvider(e.target.value)}
+                  disabled={!canManage}
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-white text-sm px-3 py-2 disabled:opacity-60"
+                >
+                  <option value="gemini">Google Gemini</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  API Key {hasStoredKey && !byokKeyInput && (
+                    <span className="ml-1 text-emerald-600 dark:text-emerald-400 font-normal">· key stored</span>
+                  )}
+                </label>
+                <div className="relative">
+                  <input
+                    type={showKey ? "text" : "password"}
+                    value={byokKeyInput}
+                    onChange={(e) => canManage && setByokKeyInput(e.target.value)}
+                    disabled={!canManage}
+                    placeholder={hasStoredKey ? "Enter a new key to replace the stored one" : "AIza..."}
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-white text-sm px-3 py-2 pr-10 font-mono disabled:opacity-60"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKey(!showKey)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                  >
+                    {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Your key is stored encrypted on the server and is never sent to the browser.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Save button */}
+          {canManage && (
+            <div className="flex items-center justify-between pt-2">
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                {isByokDirty ? (
+                  <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Unsaved changes
+                  </span>
+                ) : byokSaveStatus === "saved" ? (
+                  <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Saved
+                  </span>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveBYOK}
+                disabled={!isByokDirty || isSavingBYOK}
+                className="flex items-center gap-2 bg-esg-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-esg-700 transition-colors disabled:opacity-50"
+              >
+                {isSavingBYOK ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Save BYOK settings
+              </button>
+            </div>
+          )}
+
+          {!canManage && (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Only Owners and Admins can configure BYOK.
+            </p>
+          )}
+        </div>
+      </section>
+
       {/* ====================== Usage this month ====================== */}
       <section>
         <header className="mb-4">
@@ -374,6 +588,45 @@ const AIUsagePanel: React.FC<Props> = ({ organizationId, currentUserRole }) => {
           </div>
         </div>
       </section>
+    </div>
+  );
+};
+
+const QuotaBar: React.FC<{ used: number; limit: number }> = ({ used, limit }) => {
+  const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const isWarning = pct >= 80 && pct < 100;
+  const isOver = pct >= 100;
+  const barColor = isOver
+    ? "bg-red-500"
+    : isWarning
+    ? "bg-amber-500"
+    : "bg-esg-500";
+
+  return (
+    <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 space-y-2">
+      {(isOver || isWarning) && (
+        <div className={`flex items-start gap-2 p-2.5 rounded-lg text-xs ${
+          isOver
+            ? "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
+            : "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+        }`}>
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          {isOver
+            ? "Soft quota exceeded. AI calls are still allowed but you may want to enable BYOK or contact support."
+            : "Approaching monthly quota. Consider enabling BYOK to avoid interruptions."}
+        </div>
+      )}
+      <div className="flex justify-between items-center text-xs text-slate-600 dark:text-slate-400">
+        <span>{used.toLocaleString()} calls used</span>
+        <span>{limit.toLocaleString()} soft limit</span>
+      </div>
+      <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${barColor}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className="text-xs text-slate-400">{pct}% of monthly soft limit used</p>
     </div>
   );
 };

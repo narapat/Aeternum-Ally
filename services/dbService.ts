@@ -147,26 +147,85 @@ export interface AiUsageRow {
   duration_ms: number | null;
   success: boolean;
   estimated_cost_usd: number | null;
+  quota_type: string | null;
   created_at: string;
+}
+
+export interface AiSettings {
+  model: string;
+  use_byok: boolean;
+  byok_provider: string | null;
+  /** API key is NEVER returned from the server for security. Only a boolean `has_byok_key` is exposed. */
+  has_byok_key: boolean;
+  soft_quota_monthly: number | null;
 }
 
 export async function fetchAiSettings(
   orgId: string
-): Promise<{ model: string } | null> {
+): Promise<AiSettings | null> {
   const { data, error } = await supabase
     .from("organization_ai_settings")
-    .select("model")
+    .select("model, use_byok, byok_provider, byok_api_key, soft_quota_monthly")
     .eq("organization_id", orgId)
     .maybeSingle();
   if (error) throw error;
-  return data as { model: string } | null;
+  if (!data) return null;
+  return {
+    model: data.model ?? "gemini-2.5-flash",
+    use_byok: data.use_byok ?? false,
+    byok_provider: data.byok_provider ?? null,
+    // Never expose the raw key to the browser — just whether one is stored
+    has_byok_key: !!data.byok_api_key,
+    soft_quota_monthly: data.soft_quota_monthly ?? null,
+  };
 }
 
+/** Upserts the AI model choice (always safe to call). */
 export async function upsertAiSettings(orgId: string, model: string): Promise<void> {
   const { error } = await supabase
     .from("organization_ai_settings")
     .upsert({ organization_id: orgId, model }, { onConflict: "organization_id" });
   if (error) throw error;
+}
+
+/** Upserts BYOK fields. Pass `byok_api_key: null` to clear the stored key. */
+export async function upsertByokSettings(
+  orgId: string,
+  settings: {
+    use_byok: boolean;
+    byok_provider: string | null;
+    byok_api_key?: string | null; // omit to leave unchanged
+  }
+): Promise<void> {
+  const payload: Record<string, unknown> = {
+    organization_id: orgId,
+    use_byok: settings.use_byok,
+    byok_provider: settings.byok_provider,
+  };
+  // Only include the key field when explicitly provided
+  if ("byok_api_key" in settings) {
+    payload.byok_api_key = settings.byok_api_key ?? null;
+  }
+  const { error } = await supabase
+    .from("organization_ai_settings")
+    .upsert(payload, { onConflict: "organization_id" });
+  if (error) throw error;
+}
+
+/** Returns the number of successful AI calls made by this org this calendar month. */
+export async function fetchMonthlyCallCount(orgId: string): Promise<number> {
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+
+  const { count, error } = await supabase
+    .from("ai_usage_log")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", orgId)
+    .eq("success", true)
+    .gte("created_at", monthStart.toISOString());
+  if (error) throw error;
+  return count ?? 0;
 }
 
 export async function fetchAiUsageLog(
