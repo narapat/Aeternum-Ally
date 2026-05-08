@@ -243,6 +243,127 @@ async function handleAdminDashboard(): Promise<object> {
 }
 
 // ---------------------------------------------------------------------------
+// Post-auth: company_stats  (all sections in one call)
+// ---------------------------------------------------------------------------
+async function handleCompanyStats(body: any): Promise<object> {
+  const orgId = (body.org_id ?? '').trim();
+  if (!orgId) throw Object.assign(new Error('org_id is required'), { status: 400 });
+
+  const sb = getAdminClient();
+
+  // Fetch everything in parallel
+  const [profileRes, membersRes, invitesRes, aiRes] = await Promise.all([
+    sb.from('company_profiles').select('name').eq('organization_id', orgId).maybeSingle(),
+    sb.from('organization_members').select('user_id, email, role').eq('organization_id', orgId),
+    sb.from('organization_invites').select('email, role, expires_at, created_at').eq('organization_id', orgId),
+    sb.from('ai_usage_log')
+      .select('action, quota_type, input_tokens, output_tokens, duration_ms, success, error_message, created_at')
+      .eq('organization_id', orgId),
+  ]);
+
+  // ── 1. Users & Roles ──────────────────────────────────────────────────────
+  const members = membersRes.data ?? [];
+  const roleBreakdown: Record<string, number> = { Owner: 0, Admin: 0, Manager: 0, Consultant: 0 };
+  for (const m of members) {
+    if (roleBreakdown[m.role] !== undefined) roleBreakdown[m.role]++;
+    else roleBreakdown[m.role] = 1;
+  }
+
+  // ── 2. Invitations ────────────────────────────────────────────────────────
+  const invites    = invitesRes.data ?? [];
+  const memberEmails = new Set(members.map((m: any) => (m.email ?? '').toLowerCase()));
+  const now        = Date.now();
+
+  const inviteStats = invites.map((inv: any) => {
+    let status: string;
+    if (memberEmails.has(inv.email?.toLowerCase() ?? '')) status = 'Accepted';
+    else if (new Date(inv.expires_at).getTime() < now)   status = 'Expired';
+    else                                                   status = 'Pending';
+    return { email: inv.email, role: inv.role, status, created_at: inv.created_at, expires_at: inv.expires_at };
+  });
+
+  const inviteBreakdown = inviteStats.reduce((acc: Record<string, number>, i: any) => {
+    acc[i.status] = (acc[i.status] ?? 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // ── 3. AI Usage ───────────────────────────────────────────────────────────
+  const aiRows = aiRes.data ?? [];
+
+  // Monthly buckets (last 12 months)
+  const monthStart = new Date();
+  monthStart.setMonth(monthStart.getMonth() - 11);
+  monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+
+  const monthMap: Record<string, { month: string; byok: number; platform: number; total: number }> = {};
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(monthStart);
+    d.setMonth(d.getMonth() + i);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    monthMap[key] = { month: key, byok: 0, platform: 0, total: 0 };
+  }
+  for (const r of aiRows) {
+    const key = r.created_at.slice(0, 7);
+    if (!monthMap[key]) continue;
+    monthMap[key].total++;
+    if (r.quota_type === 'byok') monthMap[key].byok++;
+    else                          monthMap[key].platform++;
+  }
+
+  // By action
+  const actionMap: Record<string, { action: string; calls: number; input_tokens: number; output_tokens: number; total_ms: number }> = {};
+  for (const r of aiRows) {
+    if (!actionMap[r.action]) actionMap[r.action] = { action: r.action, calls: 0, input_tokens: 0, output_tokens: 0, total_ms: 0 };
+    const e = actionMap[r.action];
+    e.calls++;
+    e.input_tokens  += r.input_tokens  ?? 0;
+    e.output_tokens += r.output_tokens ?? 0;
+    e.total_ms      += r.duration_ms   ?? 0;
+  }
+  const byAction = Object.values(actionMap)
+    .map(e => ({ ...e, avg_ms: e.calls > 0 ? Math.round(e.total_ms / e.calls) : 0 }))
+    .sort((a, b) => b.calls - a.calls);
+
+  const byok     = aiRows.filter((r: any) => r.quota_type === 'byok').length;
+  const platform = aiRows.length - byok;
+
+  // ── 4. Errors ─────────────────────────────────────────────────────────────
+  const errorRows = aiRows.filter((r: any) => !r.success);
+  const errMap: Record<string, { category: string; count: number; last_seen: string }> = {};
+  for (const r of errorRows) {
+    const cat = (r.error_message ?? 'Unknown error').slice(0, 80);
+    if (!errMap[cat]) errMap[cat] = { category: cat, count: 0, last_seen: r.created_at };
+    errMap[cat].count++;
+    if (r.created_at > errMap[cat].last_seen) errMap[cat].last_seen = r.created_at;
+  }
+  const errors = Object.values(errMap).sort((a, b) => b.count - a.count);
+
+  return {
+    company_name:    profileRes.data?.name ?? '(unnamed)',
+    users: {
+      total:    members.length,
+      by_role:  roleBreakdown,
+    },
+    invitations: {
+      total:      invites.length,
+      breakdown:  inviteBreakdown,
+      recent:     inviteStats.slice(0, 20),
+    },
+    ai_usage: {
+      total_calls:  aiRows.length,
+      byok,
+      platform,
+      by_month:     Object.values(monthMap),
+      by_action:    byAction,
+    },
+    ai_errors: {
+      total:        errorRows.length,
+      by_category:  errors,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Post-auth: AI usage — shared fetch helper
 // ---------------------------------------------------------------------------
 async function fetchAIUsage(sb: ReturnType<typeof getAdminClient>, since?: string) {
@@ -959,6 +1080,7 @@ export const handler: Handler = async (event) => {
 
       switch (action) {
         case 'admin_dashboard':    result = await handleAdminDashboard();                        break;
+        case 'company_stats':           result = await handleCompanyStats(body);               break;
         case 'admin_ai_usage_summary':  result = await handleAdminAIUsageSummary();            break;
         case 'admin_ai_usage_by_month': result = await handleAdminAIUsageByMonth();            break;
         case 'admin_ai_usage_by_action':result = await handleAdminAIUsageByAction();           break;
