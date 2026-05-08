@@ -1,58 +1,45 @@
 import React, { useState } from 'react';
-import { Loader2, ShieldCheck, AlertCircle, LogIn } from 'lucide-react';
+import { Loader2, ShieldCheck, AlertCircle, Mail, CheckCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 interface Props {
   onLoginSuccess: (token: string, email: string) => void;
 }
 
-const AdminLoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
-  const [email, setEmail]       = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
+type Stage = 'input' | 'verifying' | 'sent' | 'error';
 
-  const handleSubmit = async (e: React.FormEvent) => {
+const AdminLoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
+  const [email, setEmail]   = useState('');
+  const [stage, setStage]   = useState<Stage>('input');
+  const [errorMsg, setError] = useState('');
+
+  const handleSendLink = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
+    setStage('verifying');
 
     try {
-      // Step 1: sign in with Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
-        password,
-      });
-
-      if (authError || !authData.session) {
-        throw new Error(authError?.message ?? 'Sign-in failed');
-      }
-
-      const token = authData.session.access_token;
-
-      // Step 2: verify admin status (server-side check + first-admin seed)
-      const res = await fetch('/.netlify/functions/admin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+        options: {
+          // Redirect back to the admin portal after clicking the link
+          emailRedirectTo: `${window.location.origin}/admin`,
+          // Admin account must already exist in Supabase Auth
+          shouldCreateUser: false,
         },
-        body: JSON.stringify({ action: 'verify_admin' }),
       });
 
-      const json = await res.json();
-      if (!res.ok) {
-        // Sign out from Supabase so the session isn't left dangling
-        await supabase.auth.signOut();
-        throw new Error(json.error ?? 'Not authorized as platform admin');
-      }
-
-      onLoginSuccess(token, json.email);
+      if (error) throw error;
+      setStage('sent');
     } catch (err: any) {
-      setError(err?.message ?? 'Login failed');
-    } finally {
-      setLoading(false);
+      setError(err?.message ?? 'Failed to send magic link');
+      setStage('error');
     }
+  };
+
+  const handleResend = () => {
+    setStage('input');
+    setError('');
   };
 
   return (
@@ -67,61 +54,84 @@ const AdminLoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
           <p className="text-slate-400 text-sm mt-1">Aeternum Ally — Platform Administration</p>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl"
-        >
-          {error && (
-            <div className="flex items-start gap-2.5 text-sm text-red-400 bg-red-950/40 border border-red-800/50 rounded-lg px-3 py-2.5">
-              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              {error}
-            </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+
+          {/* Stage: input / verifying / error */}
+          {stage !== 'sent' && (
+            <form onSubmit={handleSendLink} className="space-y-4">
+              <p className="text-sm text-slate-400 text-center">
+                Enter your admin email — we'll send a one-time sign-in link.
+              </p>
+
+              {stage === 'error' && errorMsg && (
+                <div className="flex items-start gap-2.5 text-sm text-red-400 bg-red-950/40 border border-red-800/50 rounded-lg px-3 py-2.5">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  {errorMsg}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
+                  Admin Email
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    required
+                    autoFocus
+                    placeholder="admin@example.com"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:ring-2 focus:ring-esg-500 focus:border-transparent outline-none text-sm transition-colors"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={stage === 'verifying' || !email}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-esg-600 hover:bg-esg-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors text-sm"
+              >
+                {stage === 'verifying' ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Sending link…</>
+                ) : (
+                  <><Mail className="w-4 h-4" /> Send Magic Link</>
+                )}
+              </button>
+            </form>
           )}
 
-          <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              autoFocus
-              placeholder="admin@example.com"
-              className="w-full px-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:ring-2 focus:ring-esg-500 focus:border-transparent outline-none text-sm transition-colors"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
-              Password
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              placeholder="••••••••"
-              className="w-full px-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:ring-2 focus:ring-esg-500 focus:border-transparent outline-none text-sm transition-colors"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading || !email || !password}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-esg-600 hover:bg-esg-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors text-sm mt-2"
-          >
-            {loading ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Verifying…</>
-            ) : (
-              <><LogIn className="w-4 h-4" /> Sign in to Admin Portal</>
-            )}
-          </button>
-        </form>
+          {/* Stage: sent */}
+          {stage === 'sent' && (
+            <div className="text-center space-y-4 py-2">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-esg-900/50 border border-esg-700">
+                <CheckCircle className="w-6 h-6 text-esg-400" />
+              </div>
+              <div>
+                <p className="text-white font-semibold">Check your inbox</p>
+                <p className="text-sm text-slate-400 mt-1.5 leading-relaxed">
+                  A sign-in link was sent to{' '}
+                  <span className="text-white font-medium">{email}</span>.
+                  Click the link in the email — it will bring you straight back here.
+                </p>
+              </div>
+              <p className="text-xs text-slate-500 pt-1">
+                Didn't receive it?{' '}
+                <button
+                  onClick={handleResend}
+                  className="text-slate-400 hover:text-white underline transition-colors"
+                >
+                  Resend
+                </button>
+              </p>
+            </div>
+          )}
+        </div>
 
         <p className="text-center text-xs text-slate-600 mt-6">
-          Platform Admin access only. Tenant app is at <a href="/" className="text-slate-400 hover:text-white underline">/</a>
+          Platform Admin access only. Tenant app is at{' '}
+          <a href="/" className="text-slate-400 hover:text-white underline">/</a>
         </p>
       </div>
     </div>
