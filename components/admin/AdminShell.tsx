@@ -98,7 +98,7 @@ const AdminShell: React.FC<Props> = ({ adminToken, adminEmail, onSignOut }) => {
   );
 
   return (
-    <div className="min-h-screen flex bg-slate-100 dark:bg-slate-900">
+    <div className="h-screen overflow-hidden flex bg-slate-100 dark:bg-slate-900">
       {/* Mobile overlay */}
       {mobileSidebarOpen && (
         <div
@@ -118,7 +118,7 @@ const AdminShell: React.FC<Props> = ({ adminToken, adminEmail, onSignOut }) => {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 flex flex-col min-w-0 lg:ml-0">
+      <main className="flex-1 flex flex-col min-w-0 lg:ml-0 overflow-hidden">
         {/* Header */}
         <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 h-14 flex items-center justify-between px-4 md:px-6 sticky top-0 z-10">
           <div className="flex items-center gap-3">
