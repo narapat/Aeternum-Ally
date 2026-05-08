@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import {
   Task, SuggestedTask, TaskType, TaskStatus, TaskPriority,
   AssessmentData, KPI, SwotAnalysis, CompanyProfile, InsightHubResponse, OrgMember, QualityCheck,
@@ -13,7 +14,7 @@ import {
   Sparkles, ListChecks, RefreshCw, CheckCircle2, Circle, Clock,
   AlertCircle, Loader2, ChevronDown, ChevronUp, Trash2, ArrowUpRight,
   Filter, Plus, CheckSquare, Square, User, CalendarDays, Tag, Shield, TrendingUp,
-  ArrowUpDown, MessageSquare, UserPlus, ChevronRight,
+  ArrowUpDown, MessageSquare, UserPlus, ChevronRight, Download, Upload, X, CheckCircle,
 } from 'lucide-react';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -521,6 +522,10 @@ const ManagerTab: React.FC<ManagerProps> = ({
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
   // Draft note text per task (unsaved until blur)
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  // Import/export
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -535,6 +540,75 @@ const ManagerTab: React.FC<ManagerProps> = ({
   }, [orgId]);
 
   useEffect(() => { load(); }, [load, refreshTrigger]);
+
+  // ── Export ──────────────────────────────────────────────────────────────────
+
+  const handleExport = () => {
+    const rows = tasks.map(t => ({
+      'Task ID': t.id,
+      'Title': t.title,
+      'Description': t.description ?? '',
+      'Type': t.type,
+      'Status': t.status,
+      'Priority': t.priority,
+      'Assignee Email': members.find(m => m.id === t.assignee_id)?.email ?? '',
+      'Due Date': t.due_date ?? '',
+      'ESRS Reference': t.esrs_ref ?? '',
+      'Source': t.source_type,
+      'Notes': t.notes ?? '',
+      'Created At': t.created_at.slice(0, 10),
+      'Completed At': t.completed_at?.slice(0, 10) ?? '',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [
+      { wch: 36 }, { wch: 40 }, { wch: 60 }, { wch: 10 }, { wch: 12 },
+      { wch: 10 }, { wch: 28 }, { wch: 12 }, { wch: 15 }, { wch: 12 },
+      { wch: 40 }, { wch: 12 }, { wch: 12 },
+    ];
+
+    const instructions = XLSX.utils.aoa_to_sheet([
+      ['AeternumAlly — Task Export/Import'],
+      [''],
+      ['HOW TO UPDATE TASKS:'],
+      ['1. Edit ONLY: Status, Assignee Email, Due Date, Notes'],
+      ['2. Do NOT edit: Task ID, Title, Type (required for matching)'],
+      ['3. Valid Status values: todo  |  in_progress  |  done'],
+      ['4. Due Date format: YYYY-MM-DD (e.g. 2026-12-31)'],
+      ['5. Assignee Email must match an existing organisation member'],
+      ['6. Save file and upload via the Import button'],
+      [''],
+      ['NOTES:'],
+      ['- Rows with a blank Task ID are skipped'],
+      ['- Invalid rows are skipped and listed in the results summary'],
+      ['- Completed At is set automatically when Status = done'],
+    ]);
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Tasks');
+    XLSX.utils.book_append_sheet(wb, instructions, 'Instructions');
+
+    const date = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `aeternumally-tasks-${date}.xlsx`);
+  };
+
+  // ── Import ──────────────────────────────────────────────────────────────────
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setImporting(true);
+    try {
+      const result = await parseAndApplyImport(file, tasks, members, orgId);
+      await load();
+      setImportResult(result);
+    } catch (err: any) {
+      setImportResult({ success: 0, failed: 0, errors: [{ row: 0, taskId: '', error: err?.message ?? 'Unknown error' }] });
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const cycleStatus = async (task: Task) => {
     const next = STATUS_CYCLE[task.status];
@@ -677,6 +751,30 @@ const ManagerTab: React.FC<ManagerProps> = ({
         </div>
         <div className="flex-1" />
         <button
+          onClick={handleExport}
+          disabled={tasks.length === 0}
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 text-sm font-medium rounded-lg transition-colors"
+          title="Export tasks to Excel"
+        >
+          <Download className="w-4 h-4" />Export
+        </button>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={importing}
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 text-sm font-medium rounded-lg transition-colors"
+          title="Import tasks from Excel or CSV"
+        >
+          {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+          Import
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".xlsx,.csv"
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+        <button
           onClick={() => setShowAddModal(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-esg-600 hover:bg-esg-700 text-white text-sm font-medium rounded-lg transition-colors"
         >
@@ -690,6 +788,11 @@ const ManagerTab: React.FC<ManagerProps> = ({
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
+
+      {/* Import results */}
+      {importResult && (
+        <ImportResultsBanner result={importResult} onClose={() => setImportResult(null)} />
+      )}
 
       {/* Task list */}
       {filtered.length === 0 ? (
@@ -862,6 +965,159 @@ const ManagerTab: React.FC<ManagerProps> = ({
       )}
 
       <DismissedSuggestionsPanel orgId={orgId} currentUserId={currentUserId} />
+    </div>
+  );
+};
+
+// ── Import helpers + result UI ────────────────────────────────────────────────
+
+interface ImportResult {
+  success: number;
+  failed: number;
+  errors: Array<{ row: number; taskId: string; error: string }>;
+}
+
+async function parseAndApplyImport(
+  file: File,
+  existingTasks: Task[],
+  members: OrgMember[],
+  orgId: string,
+): Promise<ImportResult> {
+  const buffer = await file.arrayBuffer();
+  let rows: Record<string, any>[];
+
+  if (file.name.toLowerCase().endsWith('.csv')) {
+    const text = new TextDecoder().decode(buffer);
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) throw new Error('CSV is empty');
+    const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim());
+    rows = lines.slice(1).map(line => {
+      // Simple CSV parse — handles quoted fields
+      const vals: string[] = [];
+      let cur = '', inQ = false;
+      for (const ch of line) {
+        if (ch === '"') { inQ = !inQ; }
+        else if (ch === ',' && !inQ) { vals.push(cur.trim()); cur = ''; }
+        else cur += ch;
+      }
+      vals.push(cur.trim());
+      return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
+    });
+  } else {
+    const wb = XLSX.read(buffer, { type: 'array' });
+    rows = XLSX.utils.sheet_to_json<Record<string, any>>(wb.Sheets[wb.SheetNames[0]]);
+  }
+
+  const required = ['Task ID', 'Status'];
+  const missing = required.filter(c => !Object.keys(rows[0] ?? {}).includes(c));
+  if (missing.length) throw new Error(`Missing required columns: ${missing.join(', ')}`);
+
+  const taskById = new Map(existingTasks.map(t => [t.id, t]));
+  const memberByEmail = new Map(members.map(m => [m.email.toLowerCase(), m]));
+
+  const result: ImportResult = { success: 0, failed: 0, errors: [] };
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowNum = i + 2;
+    const taskId = String(row['Task ID'] ?? '').trim();
+    if (!taskId) continue;
+
+    const existing = taskById.get(taskId);
+    if (!existing) {
+      result.failed++;
+      result.errors.push({ row: rowNum, taskId, error: 'Task ID not found' });
+      continue;
+    }
+
+    try {
+      const rawStatus = String(row['Status'] ?? '').trim().toLowerCase();
+      const validStatuses: TaskStatus[] = ['todo', 'in_progress', 'done'];
+      if (rawStatus && !validStatuses.includes(rawStatus as TaskStatus))
+        throw new Error(`Invalid status "${row['Status']}" — use: todo, in_progress, done`);
+
+      const rawDate = String(row['Due Date'] ?? '').trim();
+      if (rawDate && !/^\d{4}-\d{2}-\d{2}$/.test(rawDate))
+        throw new Error(`Invalid date "${rawDate}" — use YYYY-MM-DD`);
+
+      let assigneeId: string | null = existing.assignee_id;
+      const rawEmail = String(row['Assignee Email'] ?? '').trim().toLowerCase();
+      if (rawEmail) {
+        const member = memberByEmail.get(rawEmail);
+        if (!member) throw new Error(`Assignee not found: ${rawEmail}`);
+        assigneeId = member.id;
+      } else if (row['Assignee Email'] === '') {
+        assigneeId = null;
+      }
+
+      const status = (rawStatus || existing.status) as TaskStatus;
+      const completedAt = status === 'done' && existing.status !== 'done'
+        ? new Date().toISOString()
+        : status !== 'done' ? null : existing.completed_at;
+
+      await upsertTask(orgId, {
+        ...existing,
+        status,
+        assignee_id: assigneeId,
+        due_date: rawDate || existing.due_date,
+        notes: row['Notes'] !== undefined && String(row['Notes']).trim() !== ''
+          ? String(row['Notes']).trim()
+          : existing.notes,
+        completed_at: completedAt,
+      });
+
+      result.success++;
+    } catch (err: any) {
+      result.failed++;
+      result.errors.push({ row: rowNum, taskId, error: err?.message ?? 'Update failed' });
+    }
+  }
+
+  return result;
+}
+
+const ImportResultsBanner: React.FC<{ result: ImportResult; onClose: () => void }> = ({ result, onClose }) => {
+  const [showErrors, setShowErrors] = useState(false);
+  const allOk = result.failed === 0;
+
+  return (
+    <div className={`rounded-xl border p-4 space-y-2 ${allOk ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          {allOk
+            ? <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+            : <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />}
+          <div>
+            <p className={`font-semibold text-sm ${allOk ? 'text-emerald-800 dark:text-emerald-300' : 'text-amber-800 dark:text-amber-300'}`}>
+              Import complete — {result.success} updated{result.failed > 0 ? `, ${result.failed} failed` : ''}
+            </p>
+          </div>
+        </div>
+        <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex-shrink-0">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {result.errors.length > 0 && (
+        <>
+          <button
+            type="button"
+            onClick={() => setShowErrors(v => !v)}
+            className="text-xs text-amber-700 dark:text-amber-400 underline"
+          >
+            {showErrors ? 'Hide' : 'Show'} {result.errors.length} error{result.errors.length > 1 ? 's' : ''}
+          </button>
+          {showErrors && (
+            <ul className="text-xs text-amber-700 dark:text-amber-300 space-y-0.5 pl-4 list-disc">
+              {result.errors.map((e, i) => (
+                <li key={i}>
+                  {e.row > 0 ? `Row ${e.row}` : 'File'}{e.taskId ? ` (${e.taskId.slice(0, 8)}…)` : ''}: {e.error}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
     </div>
   );
 };
