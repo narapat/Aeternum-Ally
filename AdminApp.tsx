@@ -118,11 +118,12 @@ const AdminApp: React.FC = () => {
     setSession({ token, email, expiresAt: Date.now() + 55 * 60 * 1000 });
   };
 
-  const handleSignOut = async () => {
+  const handleSignOut = () => {
     clearSession();
-    setSession(null);
-    setBootError('');
-    await supabase.auth.signOut();
+    // Silently attempt Supabase sign-out (may be a no-op for password-only logins)
+    supabase.auth.signOut().catch(() => {});
+    // Hard redirect ensures clean state regardless of Supabase session presence
+    window.location.href = '/admin';
   };
 
   // ── Booting ──
