@@ -3,6 +3,7 @@ import { AssessmentData, ESRSTopic, SustainabilityBusinessModel, SwotAnalysis, C
 import AssessmentForm from './components/AssessmentForm';
 import DMAInsightHub from './components/DMAInsightHub';
 import TaskManagement from './components/TaskManagement';
+import CarbonWizard from './components/CarbonWizard';
 import MaterialityMatrix from './components/MaterialityMatrix';
 import BusinessModelCanvas from './components/BusinessModelCanvas';
 import SwotAnalysisWizard from './components/SwotAnalysisWizard';
@@ -25,7 +26,7 @@ import {
   saveQualityCheck, saveDMAInsight, clearDMAInsight, loadDMAInsight, saveDMASuggestedTasks,
 } from './services/dbService';
 import { setOrganizationContext } from './services/geminiService';
-import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, ChevronDown, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2, ListChecks, Zap } from 'lucide-react';
+import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, ChevronDown, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2, ListChecks, Zap, Leaf } from 'lucide-react';
 import type { InsightHubResponse, QualityCheck } from './types';
 
 const DEFAULT_PROFILE: CompanyProfile = {
@@ -70,7 +71,7 @@ const App: React.FC = () => {
   };
 
   // UI state
-  const [view, setView] = useState<'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub' | 'tasks'>('overview');
+  const [view, setView] = useState<'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub' | 'tasks' | 'carbon_wizard'>('overview');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [editingAssessment, setEditingAssessment] = useState<AssessmentData | null>(null);
@@ -254,6 +255,7 @@ const App: React.FC = () => {
             <NavSection label="Measurement" open={measurementOpen} onToggle={() => setMeasurementOpen(v => !v)} sidebarCollapsed={isSidebarCollapsed}>
               <NavItem active={view === 'kpi'} collapsed={isSidebarCollapsed} onClick={() => setView('kpi')} icon={<TrendingUp />} label="Performance (KPI)" />
               <NavItem active={view === 'tasks'} collapsed={isSidebarCollapsed} onClick={() => setView('tasks')} icon={<ListChecks />} label="Tasks" />
+              <NavItem active={view === 'carbon_wizard'} collapsed={isSidebarCollapsed} onClick={() => setView('carbon_wizard')} icon={<Leaf />} label="Carbon Quest" />
             </NavSection>
 
             <div className="space-y-1">
@@ -318,6 +320,7 @@ const App: React.FC = () => {
                   {(view === 'profile' || view === 'canvas' || view === 'swot' || view === 'kpi') && 'My Business'}
                   {(view === 'dm_dashboard' || view === 'assess' || view === 'report' || view === 'insight_hub') && 'Double Materiality'}
                   {view === 'tasks' && 'Action Plan'}
+                  {view === 'carbon_wizard' && 'Carbon Accounting'}
                 </span>
                 <ChevronRight className="w-4 h-4 hidden sm:block" />
                 <span className="truncate">
@@ -331,6 +334,7 @@ const App: React.FC = () => {
                   {view === 'report' && 'Sustainability Statement'}
                   {view === 'insight_hub' && 'DMA Insight Hub'}
                   {view === 'tasks' && 'Task Management'}
+                  {view === 'carbon_wizard' && 'Carbon Quest Wizard'}
                 </span>
               </div>
             </div>
@@ -556,6 +560,17 @@ const App: React.FC = () => {
                       setView('assess');
                     }}
                     onNavigateToKPI={() => setView('kpi')}
+                  />
+                )}
+
+                {view === 'carbon_wizard' && (
+                  <CarbonWizard
+                    orgId={organization.id}
+                    currentUserId={user.id}
+                    profile={profile.data}
+                    bmcData={canvas.data}
+                    onComplete={() => setView('overview')}
+                    onSkip={() => setView('overview')}
                   />
                 )}
               </>
