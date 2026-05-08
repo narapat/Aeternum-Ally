@@ -139,7 +139,7 @@ const MaterialTopicsList: React.FC<Props> = ({ assessments, onEdit, onDelete, or
         {Object.entries(groupedData).map(([groupName, items]) => (
           <div key={groupName} className="space-y-2">
              {groupBy === 'category' && (
-                <div className="sticky top-0 z-10 bg-slate-50/95 dark:bg-slate-800/95 backdrop-blur px-2 py-1.5 -mx-2 border-y border-slate-100 dark:border-slate-700">
+                <div className="px-1 pt-2 pb-1">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         {groupName}
                     </h4>
