@@ -887,12 +887,6 @@ async function generateSustainabilityStatement(
   // Fire header and topic batches. Topics run in batches of 3 (sequential batches,
   // parallel within each batch) to avoid Gemini rate limits and stay within the
   // Netlify function timeout. Header fires concurrently with the first batch.
-  const BATCH_SIZE = 3;
-  const topicBatches: string[][] = [];
-  for (let i = 0; i < topicPrompts.length; i += BATCH_SIZE) {
-    topicBatches.push(topicPrompts.slice(i, i + BATCH_SIZE));
-  }
-
   const headerRespPromise = ai.models.generateContent({
     model,
     contents: headerPrompt,
@@ -908,21 +902,14 @@ async function generateSustainabilityStatement(
     },
   });
 
-  const topicResps: any[] = [];
-  let firstBatch = true;
-  for (const batch of topicBatches) {
-    const batchCalls = batch.map((prompt: string) =>
-      ai.models.generateContent({ model, contents: prompt, config: topicConfig })
-    );
-    // Run header concurrently with the first topic batch
-    const results = firstBatch
-      ? (await Promise.all([headerRespPromise, ...batchCalls])).slice(1)
-      : await Promise.all(batchCalls);
-    topicResps.push(...results);
-    firstBatch = false;
-  }
+  const topicCalls = topicPrompts.map((prompt: string) =>
+    ai.models.generateContent({ model, contents: prompt, config: topicConfig })
+  );
 
-  const headerResp = await headerRespPromise;
+  const [headerResp, ...topicResps] = await Promise.all([
+    headerRespPromise,
+    ...topicCalls
+  ]);
   const header = parseAIJson(headerResp.text, { generalDisclosure: "", strategyDisclosure: "" });
   const topics = topicResps.map((r: any) => parseAIJson(r.text, { topicId: "", topicName: "", disclosureContent: "" }));
 
