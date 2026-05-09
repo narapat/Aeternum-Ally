@@ -332,7 +332,9 @@ const TrackingList: React.FC<{
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                        {Object.entries(groupedKpis).map(([perspective, items]) => {
+                        {[BSCPerspective.FINANCIAL, BSCPerspective.CUSTOMER, BSCPerspective.INTERNAL, BSCPerspective.LEARNING].map(perspective => {
+                            const items = groupedKpis[perspective] || [];
+                            if (items.length === 0) return null;
                             const isCollapsed = collapsedPerspectives[perspective];
                             const config = PERSPECTIVE_CONFIG[perspective as BSCPerspective] || { color: 'bg-slate-100 text-slate-800', icon: null };
                             return (
