@@ -151,13 +151,13 @@ const DataCompletenessDashboard: React.FC<Props> = ({ bmcData, swotData, assessm
             <h3 className="font-bold text-slate-800 dark:text-white">My Tasks</h3>
         </div>
         <div className="divide-y divide-slate-100 dark:divide-slate-700">
-            {tasks.filter(t => t.assigned_to === currentUserId && (t.status === 'inprogress' || t.status === 'new')).length > 0 ? (
-                tasks.filter(t => t.assigned_to === currentUserId && (t.status === 'inprogress' || t.status === 'new')).map(task => (
+            {tasks.filter(t => t.assignee_id === currentUserId && (t.status === 'inprogress' || t.status === 'new')).length > 0 ? (
+                tasks.filter(t => t.assignee_id === currentUserId && (t.status === 'inprogress' || t.status === 'new')).map(task => (
                     <div key={task.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors flex items-center justify-between group cursor-pointer" onClick={() => onNavigate('tasks')}>
                         <div className="flex items-start gap-3">
                             <ListChecks className="w-5 h-5 text-indigo-500 mt-0.5 flex-shrink-0" />
                             <div>
-                                <p className="font-medium text-slate-800 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{task.name}</p>
+                                <p className="font-medium text-slate-800 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{task.title}</p>
                                 <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2 md:line-clamp-none">Status: <span className="uppercase text-xs font-semibold">{task.status}</span></p>
                             </div>
                         </div>
