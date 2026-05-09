@@ -1469,7 +1469,6 @@ const TaskManagement: React.FC<Props> = ({
           targetTaskId={targetTaskId}
           kpis={kpis}
         />
-        />
       )}
     </div>
   );
