@@ -1,17 +1,19 @@
 
 import React from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
-import { SustainabilityBusinessModel, SwotAnalysis, AssessmentData } from '../types';
-import { CheckCircle, Circle, AlertCircle, ArrowRight, Layout, Target, FileText } from 'lucide-react';
+import { SustainabilityBusinessModel, SwotAnalysis, AssessmentData, Task } from '../types';
+import { CheckCircle, Circle, AlertCircle, ArrowRight, Layout, Target, FileText, ListChecks } from 'lucide-react';
 
 interface Props {
   bmcData: SustainabilityBusinessModel;
   swotData: SwotAnalysis;
   assessments: AssessmentData[];
   onNavigate: (view: any) => void;
+  tasks: Task[];
+  currentUserId?: string;
 }
 
-const DataCompletenessDashboard: React.FC<Props> = ({ bmcData, swotData, assessments, onNavigate }) => {
+const DataCompletenessDashboard: React.FC<Props> = ({ bmcData, swotData, assessments, onNavigate, tasks, currentUserId }) => {
   
   // --- Calculation Logic ---
 
@@ -140,6 +142,31 @@ const DataCompletenessDashboard: React.FC<Props> = ({ bmcData, swotData, assessm
                     Go to Dashboard <ArrowRight className="w-4 h-4" />
                 </button>
             </div>
+        </div>
+      </div>
+
+      {/* My Tasks */}
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="p-6 border-b border-slate-200 dark:border-slate-700">
+            <h3 className="font-bold text-slate-800 dark:text-white">My Tasks</h3>
+        </div>
+        <div className="divide-y divide-slate-100 dark:divide-slate-700">
+            {tasks.filter(t => t.assigned_to === currentUserId && (t.status === 'inprogress' || t.status === 'new')).length > 0 ? (
+                tasks.filter(t => t.assigned_to === currentUserId && (t.status === 'inprogress' || t.status === 'new')).map(task => (
+                    <div key={task.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors flex items-center justify-between group cursor-pointer" onClick={() => onNavigate('tasks')}>
+                        <div className="flex items-start gap-3">
+                            <ListChecks className="w-5 h-5 text-indigo-500 mt-0.5 flex-shrink-0" />
+                            <div>
+                                <p className="font-medium text-slate-800 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{task.name}</p>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2 md:line-clamp-none">Status: <span className="uppercase text-xs font-semibold">{task.status}</span></p>
+                            </div>
+                        </div>
+                        <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition-colors flex-shrink-0 ml-2" />
+                    </div>
+                ))
+            ) : (
+                <div className="p-6 text-center text-slate-400 italic">No active tasks assigned to you.</div>
+            )}
         </div>
       </div>
 
