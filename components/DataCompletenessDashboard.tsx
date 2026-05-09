@@ -10,10 +10,10 @@ interface Props {
   assessments: AssessmentData[];
   onNavigate: (view: any) => void;
   tasks: Task[];
-  currentUserId?: string;
+  currentMemberId?: string | null;
 }
 
-const DataCompletenessDashboard: React.FC<Props> = ({ bmcData, swotData, assessments, onNavigate, tasks, currentUserId }) => {
+const DataCompletenessDashboard: React.FC<Props> = ({ bmcData, swotData, assessments, onNavigate, tasks, currentMemberId }) => {
   
   // --- Calculation Logic ---
 
@@ -151,8 +151,8 @@ const DataCompletenessDashboard: React.FC<Props> = ({ bmcData, swotData, assessm
             <h3 className="font-bold text-slate-800 dark:text-white">My Tasks</h3>
         </div>
         <div className="divide-y divide-slate-100 dark:divide-slate-700">
-            {tasks.filter(t => t.assignee_id === currentUserId && (t.status === 'inprogress' || t.status === 'new')).length > 0 ? (
-                tasks.filter(t => t.assignee_id === currentUserId && (t.status === 'inprogress' || t.status === 'new')).map(task => (
+            {tasks.filter(t => t.assignee_id === currentMemberId && (t.status === 'inprogress' || t.status === 'new')).length > 0 ? (
+                tasks.filter(t => t.assignee_id === currentMemberId && (t.status === 'inprogress' || t.status === 'new')).map(task => (
                     <div key={task.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors flex items-center justify-between group cursor-pointer" onClick={() => onNavigate('tasks')}>
                         <div className="flex items-start gap-3">
                             <ListChecks className="w-5 h-5 text-indigo-500 mt-0.5 flex-shrink-0" />

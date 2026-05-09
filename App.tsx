@@ -58,6 +58,8 @@ const App: React.FC = () => {
   const { organization, members, currentUserRole, isLoading: orgLoading, refetch: refetchOrg } =
     useOrganization(user?.id);
 
+  const currentMemberId = members.find(m => m.user_id === user?.id)?.id ?? null;
+
   // Personal preferences stay in localStorage (per-device, not per-org)
   const [darkMode, setDarkMode] = useState(() => {
     try { return localStorage.getItem('aeternum_darkmode') === 'true'; } catch { return false; }
@@ -471,7 +473,7 @@ const App: React.FC = () => {
                       }
                     }}
                     tasks={tasks}
-                    currentUserId={user?.id}
+                    currentMemberId={currentMemberId}
                   />
                 )}
 
