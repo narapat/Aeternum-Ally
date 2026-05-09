@@ -31,6 +31,7 @@ import {
   upsertEmissionEntry,
   deleteEmissionEntry,
   calculateEmissions,
+  deleteEmissionSource,
 } from '../services/emissionFactorService';
 import EvidenceBadge from './EvidenceBadge';
 
@@ -144,6 +145,22 @@ const CarbonDashboard: React.FC<Props> = ({ orgId, currentUserId, onRunWizard })
       setLoading(false);
     }
   }, [orgId]);
+
+  const handleDeleteSource = async (source: EmissionSource) => {
+    const entriesCount = entries.filter(e => e.source_id === source.id).length;
+    let msg = `Are you sure you want to delete "${source.source_name}"?`;
+    if (entriesCount > 0) {
+      msg += `\nThis will also delete ${entriesCount} history entries tied to it!`;
+    }
+    if (!window.confirm(msg)) return;
+
+    try {
+      await deleteEmissionSource(source.id);
+      load();
+    } catch (e) {
+      console.error('Failed to delete source:', e);
+    }
+  };
 
   useEffect(() => { load(); }, [load]);
 
@@ -349,6 +366,13 @@ const CarbonDashboard: React.FC<Props> = ({ orgId, currentUserId, onRunWizard })
                         <History className="w-3 h-3" /> History ({srcEntries.length})
                       </button>
                     )}
+                    <button
+                      onClick={() => handleDeleteSource(src)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 dark:border-red-800 text-red-500 dark:text-red-400 text-xs font-medium rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                      title="Delete emission source and all its history entries"
+                    >
+                      <Trash2 className="w-3 h-3" /> Delete
+                    </button>
                   </div>
                 </div>
               );
