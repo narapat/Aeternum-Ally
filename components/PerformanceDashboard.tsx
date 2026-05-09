@@ -334,14 +334,16 @@ const TrackingList: React.FC<{
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                         {Object.entries(groupedKpis).map(([perspective, items]) => {
                             const isCollapsed = collapsedPerspectives[perspective];
+                            const config = PERSPECTIVE_CONFIG[perspective as BSCPerspective] || { color: 'bg-slate-100 text-slate-800', icon: null };
                             return (
                                 <React.Fragment key={perspective}>
-                                    <tr className="bg-slate-50 dark:bg-slate-900/50 font-semibold cursor-pointer" onClick={() => togglePerspective(perspective)}>
+                                    <tr className={`${config.color} font-semibold cursor-pointer`} onClick={() => togglePerspective(perspective)}>
                                         <td colSpan={8} className="p-4">
-                                            <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                                            <div className="flex items-center gap-2">
                                                 {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                                {config.icon}
                                                 <span className="uppercase tracking-wide text-xs">{perspective}</span>
-                                                <span className="text-xs text-slate-400 font-normal">({items.length} KPIs)</span>
+                                                <span className="text-xs font-normal opacity-75">({items.length} KPIs)</span>
                                             </div>
                                         </td>
                                     </tr>
