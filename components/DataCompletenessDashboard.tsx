@@ -145,28 +145,29 @@ const DataCompletenessDashboard: React.FC<Props> = ({ bmcData, swotData, assessm
         </div>
       </div>
 
-      {/* My Tasks */}
+      {/* Company Task Status */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
         <div className="p-6 border-b border-slate-200 dark:border-slate-700">
-            <h3 className="font-bold text-slate-800 dark:text-white">My Tasks</h3>
+            <h3 className="font-bold text-slate-800 dark:text-white">Company Task Status</h3>
         </div>
-        <div className="divide-y divide-slate-100 dark:divide-slate-700">
-            {tasks.filter(t => t.assignee_id === currentMemberId && (t.status === 'in_progress' || t.status === 'todo')).length > 0 ? (
-                tasks.filter(t => t.assignee_id === currentMemberId && (t.status === 'in_progress' || t.status === 'todo')).map(task => (
-                    <div key={task.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors flex items-center justify-between group cursor-pointer" onClick={() => onNavigate('tasks')}>
-                        <div className="flex items-start gap-3">
-                            <ListChecks className="w-5 h-5 text-indigo-500 mt-0.5 flex-shrink-0" />
-                            <div>
-                                <p className="font-medium text-slate-800 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{task.title}</p>
-                                <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2 md:line-clamp-none">Status: <span className="uppercase text-xs font-semibold">{task.status}</span></p>
-                            </div>
-                        </div>
-                        <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition-colors flex-shrink-0 ml-2" />
-                    </div>
-                ))
-            ) : (
-                <div className="p-6 text-center text-slate-400 italic">No active tasks assigned to you.</div>
-            )}
+        <div className="p-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-xl text-center">
+                <p className="text-2xl font-bold text-slate-800 dark:text-white">{tasks.filter(t => t.status === 'todo').length}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-semibold mt-1">To Do</p>
+            </div>
+            <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl text-center">
+                <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{tasks.filter(t => t.status === 'in_progress').length}</p>
+                <p className="text-xs text-indigo-500 dark:text-indigo-300 uppercase font-semibold mt-1">In Progress</p>
+            </div>
+            <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-xl text-center">
+                <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{tasks.filter(t => t.status === 'done').length}</p>
+                <p className="text-xs text-emerald-500 dark:text-emerald-300 uppercase font-semibold mt-1">Done</p>
+            </div>
+        </div>
+        <div className="p-4 border-t border-slate-100 dark:border-slate-700 flex justify-end">
+            <button onClick={() => onNavigate('tasks')} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 font-medium flex items-center gap-1">
+                Go to Task Manager <ArrowRight className="w-4 h-4" />
+            </button>
         </div>
       </div>
 
