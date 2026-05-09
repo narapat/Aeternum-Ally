@@ -400,6 +400,7 @@ const GeneratorTab: React.FC<GeneratorProps> = ({
                                     onNavigateToDMARecord={onNavigateToDMARecord}
                                     onNavigateToInsightHub={onNavigateToInsightHub}
                                     onNavigateToKPI={onNavigateToKPI}
+                                    kpis={kpis}
                                   />
                                 </div>
                               )}
