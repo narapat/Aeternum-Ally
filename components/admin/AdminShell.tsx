@@ -43,7 +43,10 @@ const AdminShell: React.FC<Props> = ({ adminToken, adminEmail, onSignOut }) => {
             <ShieldCheck className="w-4 h-4 text-white" />
           </div>
           <div>
-            <p className="text-white font-bold text-sm leading-tight">Aeternum Ally</p>
+            <div className="flex items-baseline gap-1.5">
+              <p className="text-white font-bold text-sm leading-tight">Aeternum Ally</p>
+              <span className="text-slate-400 text-[10px] font-semibold">v 1.1.0</span>
+            </div>
             <p className="text-slate-500 text-xs leading-tight">Admin Portal</p>
           </div>
         </div>

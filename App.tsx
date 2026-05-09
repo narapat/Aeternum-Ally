@@ -269,8 +269,9 @@ const App: React.FC = () => {
           <div className={`p-4 sm:p-6 border-b border-slate-800 dark:border-slate-900 flex-shrink-0 flex items-center ${isSidebarCollapsed ? 'justify-center lg:px-2' : 'justify-between'}`}>
             <div className="flex items-center gap-3 overflow-hidden">
               <img src="/favicon.png" alt="" className="w-8 h-8 flex-shrink-0" />
-              <div className={`transition-opacity duration-200 ${isSidebarCollapsed ? 'lg:hidden' : 'opacity-100'}`}>
+              <div className={`transition-opacity duration-200 ${isSidebarCollapsed ? 'lg:hidden' : 'opacity-100'} flex items-baseline gap-2`}>
                 <span className="text-white font-bold text-xl whitespace-nowrap">Aeternum Ally</span>
+                <span className="text-slate-400 text-xs font-semibold whitespace-nowrap">v 1.1.0</span>
               </div>
             </div>
             <button onClick={() => setIsMobileSidebarOpen(false)} className="lg:hidden text-slate-400 hover:text-white">
@@ -323,7 +324,7 @@ const App: React.FC = () => {
 
         {/* Main content */}
         <main className={`flex-1 w-full transition-all duration-300 ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
-          <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 h-16 flex items-center justify-between px-4 md:px-8 sticky top-0 z-10 transition-colors">
+          <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 h-16 flex items-center justify-between px-4 md:px-8 sticky top-0 z-30 transition-colors">
             <div className="flex items-center gap-3 md:gap-4">
               <button onClick={() => setIsMobileSidebarOpen(true)} className="lg:hidden p-2 -ml-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
                 <Menu className="w-6 h-6" />
