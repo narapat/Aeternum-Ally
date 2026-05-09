@@ -18,15 +18,19 @@ const DataCompletenessDashboard: React.FC<Props> = ({ bmcData, swotData, assessm
   // --- Calculation Logic ---
 
   // 1. BMC Completeness (11 Fields)
-  const bmcKeys = Object.keys(bmcData) as (keyof SustainabilityBusinessModel)[];
-  const filledBmc = bmcKeys.filter(k => bmcData[k] && bmcData[k].length > 10).length;
-  const totalBmc = bmcKeys.length;
+  const bmcBlockKeys: (keyof SustainabilityBusinessModel)[] = [
+    'key_partners', 'key_activities', 'key_resources', 'value_proposition',
+    'customer_relationships', 'channels', 'customer_segments', 'cost_structure',
+    'revenue_streams', 'eco_social_costs', 'eco_social_benefits'
+  ];
+  const filledBmc = bmcBlockKeys.filter(k => bmcData[k] && String(bmcData[k]).trim().length > 0).length;
+  const totalBmc = bmcBlockKeys.length;
   const bmcPercent = Math.round((filledBmc / totalBmc) * 100);
 
   // 2. SWOT Completeness (4 Fields)
-  const swotKeys = ['strengths', 'weaknesses', 'opportunities', 'threats'] as (keyof SwotAnalysis)[];
-  const filledSwot = swotKeys.filter(k => swotData[k] && swotData[k].length > 10).length;
-  const totalSwot = 4;
+  const swotBlockKeys: (keyof SwotAnalysis)[] = ['strengths', 'weaknesses', 'opportunities', 'threats'];
+  const filledSwot = swotBlockKeys.filter(k => swotData[k] && String(swotData[k]).trim().length > 0).length;
+  const totalSwot = swotBlockKeys.length;
   const swotPercent = Math.round((filledSwot / totalSwot) * 100);
 
   // 3. Assessments (Target: At least 5 assessments analyzed)
