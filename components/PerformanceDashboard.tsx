@@ -4,7 +4,7 @@ import { KPI, BSCPerspective, RACI, CompanyProfile, SuggestedTask, Task } from '
 import { generateKPISuggestions } from '../services/geminiService';
 import {
   TrendingUp, Users, Settings, BookOpen, Plus,
-  Link, ArrowUpRight, User, Loader2, Save, Trash2
+  Link, ArrowUpRight, User, Loader2, Save, Trash2, ChevronRight, ChevronDown
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { fetchSuggestedTasks, fetchTasks } from '../services/dbService';
@@ -51,6 +51,9 @@ const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, p
   useEffect(() => { loadSuggested(); }, [loadSuggested]);
 
   const handleDelete = async (id: string) => {
+    const kpi = kpis.find(k => k.id === id);
+    const name = kpi ? `"${kpi.name}"` : 'this KPI';
+    if (!window.confirm(`Are you sure you want to delete ${name}?`)) return;
     await onDeleteKpi(id);
   };
 
@@ -125,7 +128,15 @@ const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, p
           onNavigateToTask={onNavigateToTask}
         />
       ) : (
-        <TrackingList kpis={kpis} onEdit={(k) => { setEditingKpi(k); setIsFormOpen(true); }} onDelete={handleDelete} tasks={tasks} onNavigateToTask={onNavigateToTask} />
+        <TrackingList
+          kpis={kpis}
+          onEdit={(k) => { setEditingKpi(k); setIsFormOpen(true); }}
+          onDelete={handleDelete}
+          tasks={tasks}
+          onNavigateToTask={onNavigateToTask}
+          orgId={orgId}
+          currentUserId={currentUserId}
+        />
       )}
     </div>
   );
@@ -279,7 +290,31 @@ const StrategyCard: React.FC<{
 };
 
 // --- Sub-Component: Tracking List ---
-const TrackingList: React.FC<{ kpis: KPI[], onEdit: (k: KPI) => void, onDelete: (id: string) => void, tasks: Task[], onNavigateToTask?: (taskId: string) => void }> = ({ kpis, onEdit, onDelete, tasks, onNavigateToTask }) => {
+const TrackingList: React.FC<{
+  kpis: KPI[],
+  onEdit: (k: KPI) => void,
+  onDelete: (id: string) => void,
+  tasks: Task[],
+  onNavigateToTask?: (taskId: string) => void,
+  orgId?: string,
+  currentUserId?: string
+}> = ({ kpis, onEdit, onDelete, tasks, onNavigateToTask, orgId, currentUserId }) => {
+    const [collapsedPerspectives, setCollapsedPerspectives] = useState<Record<string, boolean>>({});
+
+    const groupedKpis = kpis.reduce((acc, kpi) => {
+      const p = kpi.perspective || 'UNASSIGNED';
+      if (!acc[p]) acc[p] = [];
+      acc[p].push(kpi);
+      return acc;
+    }, {} as Record<string, KPI[]>);
+
+    const togglePerspective = (perspective: string) => {
+      setCollapsedPerspectives(prev => ({
+        ...prev,
+        [perspective]: !prev[perspective]
+      }));
+    };
+
     return (
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="overflow-x-auto">
@@ -291,40 +326,86 @@ const TrackingList: React.FC<{ kpis: KPI[], onEdit: (k: KPI) => void, onDelete: 
                             <th className="p-4 text-left">Target</th>
                             <th className="p-4 text-left">Current</th>
                             <th className="p-4 text-left">Status</th>
+                            <th className="p-4 text-left">Tasks</th>
                             <th className="p-4 text-left">Owner (R)</th>
                             <th className="p-4 text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                        {kpis.map(kpi => {
-                            const progress = (kpi.currentValue / kpi.targetValue) * 100;
+                        {[BSCPerspective.FINANCIAL, BSCPerspective.CUSTOMER, BSCPerspective.INTERNAL, BSCPerspective.LEARNING].map(perspective => {
+                            const items = groupedKpis[perspective] || [];
+                            if (items.length === 0) return null;
+                            const isCollapsed = collapsedPerspectives[perspective];
+                            const config = PERSPECTIVE_CONFIG[perspective as BSCPerspective] || { color: 'bg-slate-100 text-slate-800', icon: null };
                             return (
-                                <tr key={kpi.id} className="hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-800 dark:text-slate-200">
-                                    <td className="p-4 font-medium">{kpi.name}</td>
-                                    <td className="p-4 text-xs uppercase tracking-wide text-slate-500">{kpi.perspective}</td>
-                                    <td className="p-4 font-mono text-slate-600 dark:text-slate-400">{kpi.targetValue.toLocaleString()} {kpi.unit}</td>
-                                    <td className="p-4 font-mono font-bold">{kpi.currentValue.toLocaleString()}</td>
-                                    <td className="p-4">
-                                        <div className="w-24 h-2 bg-slate-100 dark:bg-slate-600 rounded-full overflow-hidden mb-1">
-                                            <div 
-                                                className={`h-full rounded-full ${progress >= 100 ? 'bg-emerald-500' : progress >= 75 ? 'bg-blue-500' : progress >= 50 ? 'bg-amber-500' : 'bg-red-500'}`} 
-                                                style={{ width: `${Math.min(progress, 100)}%` }}
-                                            />
-                                        </div>
-                                        <span className="text-xs text-slate-500">{Math.round(progress)}%</span>
-                                    </td>
-                                    <td className="p-4 text-slate-500">{kpi.raci.responsible}</td>
-                                    <td className="p-4 text-right">
-                                        <div className="flex justify-end gap-2">
-                                            <button onClick={() => onEdit(kpi)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 hover:text-blue-600">
-                                                <Settings className="w-4 h-4" />
-                                            </button>
-                                            <button onClick={() => onDelete(kpi.id)} className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded text-slate-500 hover:text-red-600">
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
+                                <React.Fragment key={perspective}>
+                                    <tr className={`${config.color} font-semibold cursor-pointer`} onClick={() => togglePerspective(perspective)}>
+                                        <td colSpan={8} className="p-4">
+                                            <div className="flex items-center gap-2">
+                                                {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                                {config.icon}
+                                                <span className="uppercase tracking-wide text-xs">{perspective}</span>
+                                                <span className="text-xs font-normal opacity-75">({items.length} KPIs)</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {!isCollapsed && items.map(kpi => {
+                                        const progress = (kpi.currentValue / kpi.targetValue) * 100;
+                                        const kpiTasks = tasks.filter(t => t.source_id === kpi.id);
+                                        const completedTasks = kpiTasks.filter(t => t.status === 'done').length;
+                                        const totalTasks = kpiTasks.length;
+                                        const taskProgress = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+                                        return (
+                                            <tr key={kpi.id} className="hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200">
+                                                <td className="p-4 font-medium">{kpi.name}</td>
+                                                <td className="p-4 text-xs uppercase tracking-wide text-slate-500">{kpi.perspective}</td>
+                                                <td className="p-4 font-mono text-slate-600 dark:text-slate-400">{kpi.targetValue.toLocaleString()} {kpi.unit}</td>
+                                                <td className="p-4 font-mono font-bold">{kpi.currentValue.toLocaleString()}</td>
+                                                <td className="p-4">
+                                                    <div className="w-24 h-2 bg-slate-100 dark:bg-slate-600 rounded-full overflow-hidden mb-1">
+                                                        <div 
+                                                            className={`h-full rounded-full ${progress >= 100 ? 'bg-emerald-500' : progress >= 75 ? 'bg-blue-500' : progress >= 50 ? 'bg-amber-500' : 'bg-red-500'}`} 
+                                                            style={{ width: `${Math.min(progress, 100)}%` }}
+                                                        />
+                                                    </div>
+                                                    <span className="text-xs text-slate-500">{Math.round(progress)}%</span>
+                                                </td>
+                                                <td className="p-4">
+                                                    {totalTasks > 0 ? (
+                                                        <>
+                                                            <div className="w-24 h-2 bg-slate-100 dark:bg-slate-600 rounded-full overflow-hidden mb-1">
+                                                                <div 
+                                                                    className="h-full rounded-full bg-indigo-500" 
+                                                                    style={{ width: `${taskProgress}%` }}
+                                                                />
+                                                            </div>
+                                                            <span className="text-xs text-slate-500">{completedTasks}/{totalTasks} tasks</span>
+                                                        </>
+                                                    ) : (
+                                                        <span className="text-xs text-slate-400">No tasks</span>
+                                                    )}
+                                                </td>
+                                                <td className="p-4 text-slate-500">{kpi.raci.responsible}</td>
+                                                <td className="p-4 text-right">
+                                                    <div className="flex justify-end gap-2 items-center">
+                                                        <EvidenceBadge
+                                                            linkedToType="kpi"
+                                                            linkedToId={kpi.id}
+                                                            orgId={orgId}
+                                                            currentUserId={currentUserId}
+                                                        />
+                                                        <button onClick={() => onEdit(kpi)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 hover:text-blue-600">
+                                                            <Settings className="w-4 h-4" />
+                                                        </button>
+                                                        <button onClick={() => onDelete(kpi.id)} className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded text-slate-500 hover:text-red-600">
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </React.Fragment>
                             );
                         })}
                     </tbody>
