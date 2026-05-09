@@ -356,7 +356,7 @@ const TrackingList: React.FC<{
                                         const totalTasks = kpiTasks.length;
                                         const taskProgress = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
                                         return (
-                                            <tr key={kpi.id} className="hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-800 dark:text-slate-200">
+                                            <tr key={kpi.id} className="hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200">
                                                 <td className="p-4 font-medium">{kpi.name}</td>
                                                 <td className="p-4 text-xs uppercase tracking-wide text-slate-500">{kpi.perspective}</td>
                                                 <td className="p-4 font-mono text-slate-600 dark:text-slate-400">{kpi.targetValue.toLocaleString()} {kpi.unit}</td>
