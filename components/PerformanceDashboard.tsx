@@ -1,13 +1,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { KPI, BSCPerspective, RACI, CompanyProfile, SuggestedTask } from '../types';
+import { KPI, BSCPerspective, RACI, CompanyProfile, SuggestedTask, Task } from '../types';
 import { generateKPISuggestions } from '../services/geminiService';
 import {
   TrendingUp, Users, Settings, BookOpen, Plus,
   Link, ArrowUpRight, User, Loader2, Save, Trash2
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { fetchSuggestedTasks } from '../services/dbService';
+import { fetchSuggestedTasks, fetchTasks } from '../services/dbService';
 import EvidenceBadge from './EvidenceBadge';
 import AmbientTaskBadge from './AmbientTaskBadge';
 
@@ -19,6 +19,7 @@ interface Props {
   orgId?: string;
   currentUserId?: string;
   openKpiId?: string | null;
+  onNavigateToTask?: (taskId: string) => void;
 }
 
 const PERSPECTIVE_CONFIG = {
@@ -28,17 +29,22 @@ const PERSPECTIVE_CONFIG = {
   [BSCPerspective.LEARNING]: { color: 'bg-purple-100 text-purple-800', border: 'border-purple-200', icon: <BookOpen className="w-5 h-5" /> },
 };
 
-const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, profile, orgId, currentUserId, openKpiId }) => {
+const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, profile, orgId, currentUserId, openKpiId, onNavigateToTask }) => {
   const [viewMode, setViewMode] = useState<'map' | 'tracking'>('map');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
   const [suggestedTasks, setSuggestedTasks] = useState<SuggestedTask[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
 
   const loadSuggested = useCallback(async () => {
     if (!orgId) return;
     try {
-      const tasks = await fetchSuggestedTasks(orgId);
-      setSuggestedTasks(tasks.filter(t => t.source_type === 'kpi'));
+      const [sTasks, aTasks] = await Promise.all([
+        fetchSuggestedTasks(orgId),
+        fetchTasks(orgId)
+      ]);
+      setSuggestedTasks(sTasks.filter(t => t.source_type === 'kpi'));
+      setTasks(aTasks.filter(t => t.source_type === 'kpi'));
     } catch {}
   }, [orgId]);
 
@@ -102,6 +108,8 @@ const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, p
             }}
             profile={profile}
             allKpis={kpis}
+            tasks={tasks.filter(t => t.source_id === editingKpi?.id)}
+            onNavigateToTask={onNavigateToTask}
         />
       )}
 
@@ -110,12 +118,14 @@ const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, p
           kpis={kpis}
           onEdit={(k) => { setEditingKpi(k); setIsFormOpen(true); }}
           suggestedTasks={suggestedTasks}
+          tasks={tasks}
           orgId={orgId}
           currentUserId={currentUserId}
           onSuggestionsChanged={loadSuggested}
+          onNavigateToTask={onNavigateToTask}
         />
       ) : (
-        <TrackingList kpis={kpis} onEdit={(k) => { setEditingKpi(k); setIsFormOpen(true); }} onDelete={handleDelete} />
+        <TrackingList kpis={kpis} onEdit={(k) => { setEditingKpi(k); setIsFormOpen(true); }} onDelete={handleDelete} tasks={tasks} onNavigateToTask={onNavigateToTask} />
       )}
     </div>
   );
@@ -126,10 +136,12 @@ const StrategyMap: React.FC<{
     kpis: KPI[];
     onEdit: (k: KPI) => void;
     suggestedTasks: SuggestedTask[];
+    tasks: Task[];
     orgId?: string;
     currentUserId?: string;
     onSuggestionsChanged: () => void;
-}> = ({ kpis, onEdit, suggestedTasks, orgId, currentUserId, onSuggestionsChanged }) => {
+    onNavigateToTask?: (taskId: string) => void;
+}> = ({ kpis, onEdit, suggestedTasks, tasks, orgId, currentUserId, onSuggestionsChanged, onNavigateToTask }) => {
     const perspectives = [
         BSCPerspective.FINANCIAL,
         BSCPerspective.CUSTOMER,
@@ -168,9 +180,11 @@ const StrategyMap: React.FC<{
                                                 allKpis={kpis}
                                                 onClick={() => onEdit(kpi)}
                                                 suggestedTasks={orgId ? suggestedTasks.filter(t => t.source_id === kpi.id) : []}
+                                                tasks={tasks.filter(t => t.source_id === kpi.id)}
                                                 orgId={orgId}
                                                 currentUserId={currentUserId}
                                                 onSuggestionsChanged={onSuggestionsChanged}
+                                                onNavigateToTask={onNavigateToTask}
                                             />
                                         ))}
                                     </div>
@@ -189,10 +203,12 @@ const StrategyCard: React.FC<{
     allKpis: KPI[];
     onClick: () => void;
     suggestedTasks: SuggestedTask[];
+    tasks: Task[];
     orgId?: string;
     currentUserId?: string;
     onSuggestionsChanged: () => void;
-}> = ({ kpi, allKpis, onClick, suggestedTasks, orgId, currentUserId, onSuggestionsChanged }) => {
+    onNavigateToTask?: (taskId: string) => void;
+}> = ({ kpi, allKpis, onClick, suggestedTasks, tasks, orgId, currentUserId, onSuggestionsChanged, onNavigateToTask }) => {
     const progress = (kpi.currentValue / kpi.targetValue) * 100;
     const linked = allKpis.filter(k => kpi.linkedKpiIds.includes(k.id));
 
@@ -233,6 +249,21 @@ const StrategyCard: React.FC<{
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-3 h-8">{kpi.description}</p>
             
+            {tasks.length > 0 && (
+                <div className="mb-3">
+                    <div className="flex justify-between text-[10px] text-slate-500 mb-1">
+                        <span>Tasks Progress</span>
+                        <span>{tasks.filter(t => t.status === 'done').length} / {tasks.length}</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <div 
+                            className="h-full bg-esg-500 transition-all duration-500" 
+                            style={{ width: `${(tasks.filter(t => t.status === 'done').length / tasks.length) * 100}%` }}
+                        />
+                    </div>
+                </div>
+            )}
+
             <div className="flex items-center justify-between text-xs text-slate-400">
                  <div className="flex items-center gap-1" title="Responsible Owner">
                     <User className="w-3 h-3" /> {kpi.raci.responsible || 'Unassigned'}
@@ -248,7 +279,7 @@ const StrategyCard: React.FC<{
 };
 
 // --- Sub-Component: Tracking List ---
-const TrackingList: React.FC<{ kpis: KPI[], onEdit: (k: KPI) => void, onDelete: (id: string) => void }> = ({ kpis, onEdit, onDelete }) => {
+const TrackingList: React.FC<{ kpis: KPI[], onEdit: (k: KPI) => void, onDelete: (id: string) => void, tasks: Task[], onNavigateToTask?: (taskId: string) => void }> = ({ kpis, onEdit, onDelete, tasks, onNavigateToTask }) => {
     return (
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="overflow-x-auto">
@@ -309,10 +340,12 @@ interface KPIFormProps {
   onSave: (kpi: KPI) => Promise<void> | void;
   profile: CompanyProfile;
   allKpis: KPI[];
+  tasks?: Task[];
+  onNavigateToTask?: (taskId: string) => void;
 }
 
 // --- Sub-Component: KPI Form (Modal) ---
-const KPIForm: React.FC<KPIFormProps> = ({ initialData, onClose, onSave, profile, allKpis }) => {
+const KPIForm: React.FC<KPIFormProps> = ({ initialData, onClose, onSave, profile, allKpis, tasks = [], onNavigateToTask }) => {
     const [formData, setFormData] = useState<KPI>(initialData || {
         id: '',
         name: '',
@@ -533,6 +566,39 @@ const KPIForm: React.FC<KPIFormProps> = ({ initialData, onClose, onSave, profile
                                 {allKpis.length <= (formData.id ? 1 : 0) && <span className="text-xs text-slate-400 italic">No other KPIs to link.</span>}
                              </div>
                         </div>
+
+                        {/* Linked Tasks Section */}
+                        {initialData && (
+                            <div className="space-y-2">
+                                <h4 className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2"><BookOpen className="w-4 h-4" /> Linked Tasks</h4>
+                                <div className="border border-slate-200 dark:border-slate-700 rounded p-2 bg-slate-50 dark:bg-slate-950 max-h-40 overflow-y-auto">
+                                    {tasks.length === 0 ? (
+                                        <span className="text-xs text-slate-400 italic">No tasks linked to this KPI.</span>
+                                    ) : (
+                                        <div className="space-y-1">
+                                            {tasks.map(task => (
+                                                <div 
+                                                    key={task.id} 
+                                                    onClick={() => {
+                                                        if (onNavigateToTask) {
+                                                            onClose(); // close modal before navigating
+                                                            onNavigateToTask(task.id);
+                                                        }
+                                                    }}
+                                                    className="flex items-center justify-between p-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 rounded cursor-pointer group transition-colors"
+                                                >
+                                                    <div className="flex items-center gap-2 overflow-hidden">
+                                                        <span className={`flex-shrink-0 w-2 h-2 rounded-full ${task.status === 'done' ? 'bg-emerald-500' : task.status === 'in_progress' ? 'bg-amber-500' : 'bg-slate-400'}`} />
+                                                        <span className="truncate group-hover:text-esg-600 dark:group-hover:text-esg-400 transition-colors">{task.title}</span>
+                                                    </div>
+                                                    <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-esg-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">

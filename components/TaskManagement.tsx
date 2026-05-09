@@ -34,6 +34,7 @@ interface Props {
   // topicCode e.g. "E1" — opens that specific assessment in the form
   onNavigateToDMARecord?: (topicCode: string | null) => void;
   onNavigateToKPI?: () => void;
+  targetTaskId?: string | null;
 }
 
 type Tab = 'generator' | 'manager';
@@ -507,11 +508,12 @@ interface ManagerProps {
   onNavigateToDMARecord?: (topicCode: string | null) => void;
   onNavigateToInsightHub?: () => void;
   onNavigateToKPI?: (kpiIdOrName: string | null) => void;
+  targetTaskId?: string | null;
 }
 
 const ManagerTab: React.FC<ManagerProps> = ({
   orgId, members, currentUserId, refreshTrigger, onGoToGenerator,
-  onNavigateToDMARecord, onNavigateToInsightHub, onNavigateToKPI,
+  onNavigateToDMARecord, onNavigateToInsightHub, onNavigateToKPI, targetTaskId,
 }) => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -541,6 +543,21 @@ const ManagerTab: React.FC<ManagerProps> = ({
   }, [orgId]);
 
   useEffect(() => { load(); }, [load, refreshTrigger]);
+
+  useEffect(() => {
+    if (targetTaskId && tasks.length > 0) {
+      setFilterStatus('all');
+      setFilterType('all');
+      setTimeout(() => {
+        const el = document.getElementById(`task-${targetTaskId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-2', 'ring-esg-500', 'ring-offset-2', 'dark:ring-offset-slate-900', 'transition-all', 'duration-1000');
+          setTimeout(() => el.classList.remove('ring-2', 'ring-esg-500', 'ring-offset-2', 'dark:ring-offset-slate-900', 'transition-all', 'duration-1000'), 2000);
+        }
+      }, 100);
+    }
+  }, [targetTaskId, tasks.length]);
 
   // ── Export ──────────────────────────────────────────────────────────────────
 
@@ -826,6 +843,7 @@ const ManagerTab: React.FC<ManagerProps> = ({
             return (
               <div
                 key={task.id}
+                id={`task-${task.id}`}
                 className={`bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 transition-opacity ${task.status === 'done' ? 'opacity-60' : ''}`}
               >
                 {/* Main row */}
@@ -1381,7 +1399,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ orgId, members, onClose, on
 
 const TaskManagement: React.FC<Props> = ({
   orgId, assessments, kpis, swotData, profile, cachedInsight,
-  members, currentUserId, isSidebarCollapsed,
+  members, currentUserId, isSidebarCollapsed, targetTaskId,
   onNavigateToInsightHub, onNavigateToDMARecord, onNavigateToKPI,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('manager');
@@ -1440,6 +1458,7 @@ const TaskManagement: React.FC<Props> = ({
           onNavigateToDMARecord={onNavigateToDMARecord}
           onNavigateToInsightHub={onNavigateToInsightHub}
           onNavigateToKPI={onNavigateToKPI}
+          targetTaskId={targetTaskId}
         />
       )}
     </div>

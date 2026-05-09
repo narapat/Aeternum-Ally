@@ -98,6 +98,7 @@ const App: React.FC = () => {
   // so AI auto-fill knows which issues to address
   const [hubQualityCheck, setHubQualityCheck] = useState<QualityCheck | null>(null);
   const [targetKpiId, setTargetKpiId] = useState<string | null>(null);
+  const [targetTaskId, setTargetTaskId] = useState<string | null>(null);
 
   // Sidebar nav group open/close state — persisted per-device in localStorage
   const [myBusinessOpen, setMyBusinessOpen] = useState(() => {
@@ -486,6 +487,10 @@ const App: React.FC = () => {
                     orgId={organization?.id}
                     currentUserId={user?.id}
                     openKpiId={targetKpiId}
+                    onNavigateToTask={(taskId) => {
+                      setTargetTaskId(taskId);
+                      setView('tasks');
+                    }}
                   />
                 )}
 
@@ -636,6 +641,7 @@ const App: React.FC = () => {
                     cachedInsight={cachedInsight}
                     members={members}
                     currentUserId={user.id}
+                    targetTaskId={targetTaskId}
                     isSidebarCollapsed={isSidebarCollapsed}
                     onNavigateToInsightHub={() => setView('insight_hub')}
                     onNavigateToDMARecord={(topicCode) => {
