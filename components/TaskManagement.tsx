@@ -903,7 +903,7 @@ const ManagerTab: React.FC<ManagerProps> = ({
                         >
                           <option value="">Unassigned</option>
                           {members.map(m => (
-                            <option key={m.id} value={m.id}>{m.email ?? m.user_id}</option>
+                            <option key={m.user_id} value={m.user_id}>{m.email ?? m.user_id}</option>
                           ))}
                         </select>
                         {/* "Pick up" shortcut for unassigned tasks */}
