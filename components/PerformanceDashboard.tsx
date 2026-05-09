@@ -51,6 +51,9 @@ const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, p
   useEffect(() => { loadSuggested(); }, [loadSuggested]);
 
   const handleDelete = async (id: string) => {
+    const kpi = kpis.find(k => k.id === id);
+    const name = kpi ? `"${kpi.name}"` : 'this KPI';
+    if (!window.confirm(`Are you sure you want to delete ${name}?`)) return;
     await onDeleteKpi(id);
   };
 
@@ -125,7 +128,15 @@ const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, p
           onNavigateToTask={onNavigateToTask}
         />
       ) : (
-        <TrackingList kpis={kpis} onEdit={(k) => { setEditingKpi(k); setIsFormOpen(true); }} onDelete={handleDelete} tasks={tasks} onNavigateToTask={onNavigateToTask} />
+        <TrackingList
+          kpis={kpis}
+          onEdit={(k) => { setEditingKpi(k); setIsFormOpen(true); }}
+          onDelete={handleDelete}
+          tasks={tasks}
+          onNavigateToTask={onNavigateToTask}
+          orgId={orgId}
+          currentUserId={currentUserId}
+        />
       )}
     </div>
   );
@@ -279,7 +290,15 @@ const StrategyCard: React.FC<{
 };
 
 // --- Sub-Component: Tracking List ---
-const TrackingList: React.FC<{ kpis: KPI[], onEdit: (k: KPI) => void, onDelete: (id: string) => void, tasks: Task[], onNavigateToTask?: (taskId: string) => void }> = ({ kpis, onEdit, onDelete, tasks, onNavigateToTask }) => {
+const TrackingList: React.FC<{
+  kpis: KPI[],
+  onEdit: (k: KPI) => void,
+  onDelete: (id: string) => void,
+  tasks: Task[],
+  onNavigateToTask?: (taskId: string) => void,
+  orgId?: string,
+  currentUserId?: string
+}> = ({ kpis, onEdit, onDelete, tasks, onNavigateToTask, orgId, currentUserId }) => {
     return (
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="overflow-x-auto">
@@ -291,6 +310,7 @@ const TrackingList: React.FC<{ kpis: KPI[], onEdit: (k: KPI) => void, onDelete: 
                             <th className="p-4 text-left">Target</th>
                             <th className="p-4 text-left">Current</th>
                             <th className="p-4 text-left">Status</th>
+                            <th className="p-4 text-left">Tasks</th>
                             <th className="p-4 text-left">Owner (R)</th>
                             <th className="p-4 text-right">Actions</th>
                         </tr>
@@ -298,6 +318,10 @@ const TrackingList: React.FC<{ kpis: KPI[], onEdit: (k: KPI) => void, onDelete: 
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                         {kpis.map(kpi => {
                             const progress = (kpi.currentValue / kpi.targetValue) * 100;
+                            const kpiTasks = tasks.filter(t => t.source_id === kpi.id);
+                            const completedTasks = kpiTasks.filter(t => t.status === 'done').length;
+                            const totalTasks = kpiTasks.length;
+                            const taskProgress = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
                             return (
                                 <tr key={kpi.id} className="hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-800 dark:text-slate-200">
                                     <td className="p-4 font-medium">{kpi.name}</td>
@@ -313,9 +337,30 @@ const TrackingList: React.FC<{ kpis: KPI[], onEdit: (k: KPI) => void, onDelete: 
                                         </div>
                                         <span className="text-xs text-slate-500">{Math.round(progress)}%</span>
                                     </td>
+                                    <td className="p-4">
+                                        {totalTasks > 0 ? (
+                                            <>
+                                                <div className="w-24 h-2 bg-slate-100 dark:bg-slate-600 rounded-full overflow-hidden mb-1">
+                                                    <div 
+                                                        className="h-full rounded-full bg-indigo-500" 
+                                                        style={{ width: `${taskProgress}%` }}
+                                                    />
+                                                </div>
+                                                <span className="text-xs text-slate-500">{completedTasks}/{totalTasks} tasks</span>
+                                            </>
+                                        ) : (
+                                            <span className="text-xs text-slate-400">No tasks</span>
+                                        )}
+                                    </td>
                                     <td className="p-4 text-slate-500">{kpi.raci.responsible}</td>
                                     <td className="p-4 text-right">
-                                        <div className="flex justify-end gap-2">
+                                        <div className="flex justify-end gap-2 items-center">
+                                            <EvidenceBadge
+                                                linkedToType="kpi"
+                                                linkedToId={kpi.id}
+                                                orgId={orgId}
+                                                currentUserId={currentUserId}
+                                            />
                                             <button onClick={() => onEdit(kpi)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 hover:text-blue-600">
                                                 <Settings className="w-4 h-4" />
                                             </button>
