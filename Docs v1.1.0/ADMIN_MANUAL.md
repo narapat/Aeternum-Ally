@@ -12,8 +12,9 @@ Welcome to the Aeternum Ally Admin Portal. This portal is a secure, platform-wid
 2. [Platform Overview (Dashboard)](#2-platform-overview-dashboard)
 3. [Company Management](#3-company-management)
 4. [Pending Users](#4-pending-users)
-5. [AI Usage Tracking](#5-ai-usage-tracking)
-6. [Admin Users Management](#6-admin-users-management)
+5. [Emission Factors](#5-emission-factors)
+6. [AI Usage Tracking](#6-ai-usage-tracking)
+7. [Admin Users Management](#7-admin-users-management)
 
 ---
 
@@ -72,7 +73,19 @@ Located under the "Pending Users" tab in the Company Management section, this to
 
 ---
 
-## 5. AI Usage Tracking
+## 5. Emission Factors
+
+This module allows administrators to view, add, edit, and delete global emission factors. These factors are critical for calculating CO2e (Carbon Dioxide Equivalent) emissions across all tenant organizations.
+
+### Managing Emission Factors
+- **View Factors:** The data table displays all registered emission factors including their Fuel Type, Scope (1, 2, or 3), Unit, kgCO2e per Unit, Source (e.g., IPCC 2021, DEFRA 2024), Year, and Region.
+- **Create Factor:** Click the **Add Factor** button to open a modal form. Provide the necessary details to register a new global emission factor.
+- **Edit Factor:** Use the pencil icon next to any factor to update its values (such as updating an outdated factor to a newer year's metric).
+- **Delete Factor:** Use the trash can icon to remove an emission factor. **Note:** Deleting a factor may affect existing historical emission entries for tenants if they reference this factor.
+
+---
+
+## 6. AI Usage Tracking
 
 AI generation represents the primary variable cost for Aeternum Ally. This panel provides granular financial and operational oversight of the platform's AI consumption.
 
@@ -87,7 +100,7 @@ AI generation represents the primary variable cost for Aeternum Ally. This panel
 
 ---
 
-## 6. Admin Users Management
+## 7. Admin Users Management
 
 This section controls who has access to this Admin Portal.
 

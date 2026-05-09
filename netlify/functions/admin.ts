@@ -1106,6 +1106,82 @@ async function sendAdminMagicLinkEmail(toEmail: string, magicLink: string): Prom
 }
 
 // ---------------------------------------------------------------------------
+// Post-auth: list_emission_factors
+// ---------------------------------------------------------------------------
+async function handleListEmissionFactors(): Promise<object> {
+  const sb = getAdminClient();
+  const { data, error } = await sb
+    .from('emission_factors')
+    .select('*')
+    .order('fuel_type', { ascending: true })
+    .order('year', { ascending: false });
+  if (error) throw Object.assign(new Error(error.message), { status: 500 });
+  return { factors: data ?? [] };
+}
+
+// ---------------------------------------------------------------------------
+// Post-auth: create_emission_factor
+// ---------------------------------------------------------------------------
+async function handleCreateEmissionFactor(body: any): Promise<object> {
+  const fuel_type = (body.fuel_type ?? '').trim();
+  const scope = (body.scope ?? '').trim();
+  const unit = (body.unit ?? '').trim();
+  const kgco2e_per_unit = Number(body.kgco2e_per_unit);
+  const source = (body.source ?? '').trim();
+  const year = Number(body.year);
+  const region = (body.region ?? '').trim() || null;
+
+  if (!fuel_type || !scope || !unit || isNaN(kgco2e_per_unit) || !source || isNaN(year)) {
+    throw Object.assign(new Error('Missing required fields'), { status: 400 });
+  }
+
+  const sb = getAdminClient();
+  const { data, error } = await sb.from('emission_factors').insert({
+    fuel_type, scope, unit, kgco2e_per_unit, source, year, region
+  }).select().single();
+
+  if (error) throw Object.assign(new Error(error.message), { status: 500 });
+  return { factor: data };
+}
+
+// ---------------------------------------------------------------------------
+// Post-auth: update_emission_factor
+// ---------------------------------------------------------------------------
+async function handleUpdateEmissionFactor(body: any): Promise<object> {
+  const id = (body.id ?? '').trim();
+  if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
+
+  const updates: any = {};
+  if (body.fuel_type !== undefined) updates.fuel_type = body.fuel_type.trim();
+  if (body.scope !== undefined) updates.scope = body.scope.trim();
+  if (body.unit !== undefined) updates.unit = body.unit.trim();
+  if (body.kgco2e_per_unit !== undefined) updates.kgco2e_per_unit = Number(body.kgco2e_per_unit);
+  if (body.source !== undefined) updates.source = body.source.trim();
+  if (body.year !== undefined) updates.year = Number(body.year);
+  if (body.region !== undefined) updates.region = body.region?.trim() || null;
+
+  const sb = getAdminClient();
+  const { data, error } = await sb.from('emission_factors').update(updates).eq('id', id).select().single();
+
+  if (error) throw Object.assign(new Error(error.message), { status: 500 });
+  return { factor: data };
+}
+
+// ---------------------------------------------------------------------------
+// Post-auth: delete_emission_factor
+// ---------------------------------------------------------------------------
+async function handleDeleteEmissionFactor(body: any): Promise<object> {
+  const id = (body.id ?? '').trim();
+  if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
+
+  const sb = getAdminClient();
+  const { error } = await sb.from('emission_factors').delete().eq('id', id);
+
+  if (error) throw Object.assign(new Error(error.message), { status: 500 });
+  return { deleted: true, id };
+}
+
+// ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
 export const handler: Handler = async (event) => {
@@ -1160,6 +1236,10 @@ export const handler: Handler = async (event) => {
         case 'list_admins':        result = await handleListAdmins();                            break;
         case 'add_admin':         result = await handleAddAdmin(body, actorEmail);              break;
         case 'deactivate_admin':  result = await handleDeactivateAdmin(body, actorEmail);       break;
+        case 'list_emission_factors':   result = await handleListEmissionFactors();             break;
+        case 'create_emission_factor':  result = await handleCreateEmissionFactor(body);        break;
+        case 'update_emission_factor':  result = await handleUpdateEmissionFactor(body);        break;
+        case 'delete_emission_factor':  result = await handleDeleteEmissionFactor(body);        break;
         default:
           return { statusCode: 400, headers: cors, body: JSON.stringify({ error: `Unknown action: ${action}` }) };
       }
