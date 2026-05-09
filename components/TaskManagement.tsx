@@ -34,6 +34,7 @@ interface Props {
   // topicCode e.g. "E1" — opens that specific assessment in the form
   onNavigateToDMARecord?: (topicCode: string | null) => void;
   onNavigateToKPI?: () => void;
+  targetTaskId?: string | null;
 }
 
 type Tab = 'generator' | 'manager';
@@ -134,7 +135,7 @@ interface GeneratorProps {
   onTasksCreated: () => void;
   onNavigateToInsightHub?: () => void;
   onNavigateToDMARecord?: (topicCode: string | null) => void;
-  onNavigateToKPI?: () => void;
+  onNavigateToKPI?: (kpiIdOrName: string | null) => void;
 }
 
 const GeneratorTab: React.FC<GeneratorProps> = ({
@@ -399,6 +400,7 @@ const GeneratorTab: React.FC<GeneratorProps> = ({
                                     onNavigateToDMARecord={onNavigateToDMARecord}
                                     onNavigateToInsightHub={onNavigateToInsightHub}
                                     onNavigateToKPI={onNavigateToKPI}
+                                    kpis={kpis}
                                   />
                                 </div>
                               )}
@@ -464,25 +466,31 @@ interface SourceLinkProps {
   esrsRef: string | null;
   onNavigateToDMARecord?: (topicCode: string | null) => void;
   onNavigateToInsightHub?: () => void;
-  onNavigateToKPI?: () => void;
+  onNavigateToKPI?: (kpiIdOrName: string | null) => void;
+  kpis?: KPI[];
 }
 
 const SourceLink: React.FC<SourceLinkProps> = ({
-  sourceType, sourceId, esrsRef, onNavigateToDMARecord, onNavigateToInsightHub, onNavigateToKPI,
+  sourceType, sourceId, esrsRef, onNavigateToDMARecord, onNavigateToInsightHub, onNavigateToKPI, kpis = [],
 }) => {
   const meta = SOURCE_TYPE_META[sourceType];
   if (!meta) return null;
 
   // Show human-readable topic code (not raw UUIDs)
   const isUUID = sourceId ? /^[0-9a-f-]{36}$/i.test(sourceId) : true;
-  const topicLabel = !isUUID ? sourceId : null;
+  let topicLabel = !isUUID ? sourceId : null;
+
+  if (sourceType === 'kpi' && isUUID && kpis.length > 0) {
+    const kpi = kpis.find(k => k.id === sourceId);
+    if (kpi) topicLabel = kpi.name;
+  }
 
   const label = [meta.label, topicLabel, esrsRef].filter(Boolean).join(' · ');
 
   const navigate =
     sourceType === 'insight_hub' ? onNavigateToInsightHub :
     sourceType === 'dma' ? () => onNavigateToDMARecord?.(topicLabel) :
-    sourceType === 'kpi' ? onNavigateToKPI : undefined;
+    sourceType === 'kpi' ? () => onNavigateToKPI?.(sourceId) : undefined;
 
   return (
     <button
@@ -506,12 +514,14 @@ interface ManagerProps {
   onGoToGenerator: () => void;
   onNavigateToDMARecord?: (topicCode: string | null) => void;
   onNavigateToInsightHub?: () => void;
-  onNavigateToKPI?: () => void;
+  onNavigateToKPI?: (kpiIdOrName: string | null) => void;
+  targetTaskId?: string | null;
+  kpis: KPI[];
 }
 
 const ManagerTab: React.FC<ManagerProps> = ({
   orgId, members, currentUserId, refreshTrigger, onGoToGenerator,
-  onNavigateToDMARecord, onNavigateToInsightHub, onNavigateToKPI,
+  onNavigateToDMARecord, onNavigateToInsightHub, onNavigateToKPI, targetTaskId, kpis,
 }) => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -541,6 +551,21 @@ const ManagerTab: React.FC<ManagerProps> = ({
   }, [orgId]);
 
   useEffect(() => { load(); }, [load, refreshTrigger]);
+
+  useEffect(() => {
+    if (targetTaskId && tasks.length > 0) {
+      setFilterStatus('all');
+      setFilterType('all');
+      setTimeout(() => {
+        const el = document.getElementById(`task-${targetTaskId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-2', 'ring-esg-500', 'ring-offset-2', 'dark:ring-offset-slate-900', 'transition-all', 'duration-1000');
+          setTimeout(() => el.classList.remove('ring-2', 'ring-esg-500', 'ring-offset-2', 'dark:ring-offset-slate-900', 'transition-all', 'duration-1000'), 2000);
+        }
+      }, 100);
+    }
+  }, [targetTaskId, tasks.length]);
 
   // ── Export ──────────────────────────────────────────────────────────────────
 
@@ -826,6 +851,7 @@ const ManagerTab: React.FC<ManagerProps> = ({
             return (
               <div
                 key={task.id}
+                id={`task-${task.id}`}
                 className={`bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 transition-opacity ${task.status === 'done' ? 'opacity-60' : ''}`}
               >
                 {/* Main row */}
@@ -914,6 +940,7 @@ const ManagerTab: React.FC<ManagerProps> = ({
                           onNavigateToDMARecord={onNavigateToDMARecord}
                           onNavigateToInsightHub={onNavigateToInsightHub}
                           onNavigateToKPI={onNavigateToKPI}
+                          kpis={kpis}
                         />
                       )}
                     </div>
@@ -1381,7 +1408,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ orgId, members, onClose, on
 
 const TaskManagement: React.FC<Props> = ({
   orgId, assessments, kpis, swotData, profile, cachedInsight,
-  members, currentUserId, isSidebarCollapsed,
+  members, currentUserId, isSidebarCollapsed, targetTaskId,
   onNavigateToInsightHub, onNavigateToDMARecord, onNavigateToKPI,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('manager');
@@ -1440,6 +1467,8 @@ const TaskManagement: React.FC<Props> = ({
           onNavigateToDMARecord={onNavigateToDMARecord}
           onNavigateToInsightHub={onNavigateToInsightHub}
           onNavigateToKPI={onNavigateToKPI}
+          targetTaskId={targetTaskId}
+          kpis={kpis}
         />
       )}
     </div>

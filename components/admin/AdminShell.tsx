@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import {
   ShieldCheck, LayoutDashboard, Building2, Zap, Users,
-  LogOut, ChevronRight, Menu, X,
+  LogOut, ChevronRight, Menu, X, Factory
 } from 'lucide-react';
 import AdminDashboard from './AdminDashboard';
 import AdminUsersPanel from './AdminUsersPanel';
 import CompanyListPanel from './CompanyListPanel';
 import AdminAIUsagePanel from './AdminAIUsagePanel';
+import AdminEmissionFactorsPanel from './AdminEmissionFactorsPanel';
 
-type AdminView = 'dashboard' | 'companies' | 'ai_usage' | 'admins';
+type AdminView = 'dashboard' | 'companies' | 'emission_factors' | 'ai_usage' | 'admins';
 
 interface Props {
   adminToken: string;
@@ -23,6 +24,7 @@ const AdminShell: React.FC<Props> = ({ adminToken, adminEmail, onSignOut }) => {
   const NAV: { id: AdminView; label: string; icon: React.ReactNode; badge?: string }[] = [
     { id: 'dashboard',  label: 'Dashboard',       icon: <LayoutDashboard className="w-5 h-5" /> },
     { id: 'companies',  label: 'Companies',        icon: <Building2 className="w-5 h-5" /> },
+    { id: 'emission_factors', label: 'Emission Factors', icon: <Factory className="w-5 h-5" /> },
     { id: 'ai_usage',   label: 'AI Usage',         icon: <Zap className="w-5 h-5" /> },
     { id: 'admins',     label: 'Admin Users',      icon: <Users className="w-5 h-5" /> },
   ];
@@ -30,6 +32,7 @@ const AdminShell: React.FC<Props> = ({ adminToken, adminEmail, onSignOut }) => {
   const VIEW_LABELS: Record<AdminView, string> = {
     dashboard: 'Platform Overview',
     companies: 'Company Management',
+    emission_factors: 'Emission Factors',
     ai_usage:  'AI Usage',
     admins:    'Admin Users',
   };
@@ -43,7 +46,10 @@ const AdminShell: React.FC<Props> = ({ adminToken, adminEmail, onSignOut }) => {
             <ShieldCheck className="w-4 h-4 text-white" />
           </div>
           <div>
-            <p className="text-white font-bold text-sm leading-tight">Aeternum Ally</p>
+            <div className="flex items-baseline gap-1.5">
+              <p className="text-white font-bold text-sm leading-tight">Aeternum Ally</p>
+              <span className="text-slate-400 text-[10px] font-semibold">v 1.1.0</span>
+            </div>
             <p className="text-slate-500 text-xs leading-tight">Admin Portal</p>
           </div>
         </div>
@@ -146,6 +152,7 @@ const AdminShell: React.FC<Props> = ({ adminToken, adminEmail, onSignOut }) => {
         <div className="flex-1 p-4 md:p-8 overflow-auto">
           {view === 'dashboard' && <AdminDashboard adminToken={adminToken} />}
           {view === 'companies' && <CompanyListPanel adminToken={adminToken} />}
+          {view === 'emission_factors' && <AdminEmissionFactorsPanel adminToken={adminToken} />}
           {view === 'admins'    && <AdminUsersPanel adminToken={adminToken} adminEmail={adminEmail} />}
           {view === 'ai_usage'  && <AdminAIUsagePanel adminToken={adminToken} />}
         </div>

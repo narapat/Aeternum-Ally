@@ -1412,7 +1412,7 @@ async function generateTasks(
   // KPI data for improve tasks
   const kpiContext = (kpis ?? [])
     .slice(0, 8)
-    .map((k: any) => `${k.name} (${k.perspective}): current=${k.currentValue}${k.unit}, target=${k.targetValue}${k.unit}`)
+    .map((k: any) => `${k.name} (ID: ${k.id}) (${k.perspective}): current=${k.currentValue}${k.unit}, target=${k.targetValue}${k.unit}`)
     .join("; ");
 
   // SWOT for improve tasks
@@ -1460,7 +1460,7 @@ Each task MUST have ALL fields:
 - priority: "high" | "medium" | "low"
 - esrs_ref: relevant standard code (e.g. "ESRS E1-6", "ESRS S1-1") or "" if none
 - source_type: "insight_hub" for fix, "dma" for comply, "kpi" for improve
-- source_id: ESRS topic code (e.g. "E1") or KPI name
+- source_id: ESRS topic code (e.g. "E1") or KPI ID (provided as ID: ...)
 - estimated_time: realistic time (e.g. "2 hours", "3 days", "1 week")
 
 Return ONLY a valid JSON array of task objects. No markdown, no backticks, no explanation.
