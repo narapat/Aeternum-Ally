@@ -12,6 +12,7 @@
 
 import { supabase } from '../lib/supabaseClient';
 import { EmissionFactor, EmissionSource, EmissionEntry, EmissionScope } from '../types';
+import { deleteEvidenceByEntity } from './evidenceService';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Region → country membership (lightweight client-side mapping)
@@ -131,6 +132,8 @@ const fromDbSource = (row: any): EmissionSource => ({
   active: row.active ?? true,
   created_at: row.created_at,
   updated_at: row.updated_at,
+  identification_number: row.identification_number ?? null,
+  asset_number: row.asset_number ?? null,
 });
 
 export async function fetchEmissionSources(orgId: string): Promise<EmissionSource[]> {
@@ -159,6 +162,8 @@ export async function upsertEmissionSource(
     emission_factor_source: source.emission_factor_source ?? null,
     active: source.active ?? true,
     updated_at: new Date().toISOString(),
+    identification_number: source.identification_number ?? null,
+    asset_number: source.asset_number ?? null,
   };
   if (source.id) payload.id = source.id;
 
@@ -235,7 +240,14 @@ export async function upsertEmissionEntry(
   return fromDbEntry(data);
 }
 
-export async function deleteEmissionEntry(id: string): Promise<void> {
+export async function deleteEmissionEntry(id: string, orgId?: string): Promise<void> {
+  if (orgId) {
+    try {
+      await deleteEvidenceByEntity(orgId, 'emission_entry', id);
+    } catch (e) {
+      console.warn('Failed to delete evidence for emission entry:', e);
+    }
+  }
   const { error } = await supabase.from('emission_entries').delete().eq('id', id);
   if (error) throw error;
 }

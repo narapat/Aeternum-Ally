@@ -14,7 +14,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Plus, RefreshCw, Loader2, X, History, Trash2, Upload,
+  Plus, RefreshCw, Loader2, X, History, Trash2, Upload, Pencil,
   Download, ChevronDown, ChevronUp, TrendingDown, TrendingUp,
   Leaf, Zap, Sparkles, AlertCircle, Info,
 } from 'lucide-react';
@@ -27,10 +27,13 @@ import { EmissionSource, EmissionEntry } from '../types';
 import {
   fetchEmissionSources,
   fetchEmissionEntries,
+  upsertEmissionSource,
   upsertEmissionEntry,
   deleteEmissionEntry,
   calculateEmissions,
+  deleteEmissionSource,
 } from '../services/emissionFactorService';
+import EvidenceBadge from './EvidenceBadge';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -124,6 +127,7 @@ const CarbonDashboard: React.FC<Props> = ({ orgId, currentUserId, onRunWizard })
   const [loading, setLoading] = useState(true);
   const [addSource, setAddSource] = useState<EmissionSource | null>(null);
   const [historySource, setHistorySource] = useState<EmissionSource | null>(null);
+  const [editSource, setEditSource] = useState<EmissionSource | null>(null);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
 
   const load = useCallback(async () => {
@@ -141,6 +145,22 @@ const CarbonDashboard: React.FC<Props> = ({ orgId, currentUserId, onRunWizard })
       setLoading(false);
     }
   }, [orgId]);
+
+  const handleDeleteSource = async (source: EmissionSource) => {
+    const entriesCount = entries.filter(e => e.source_id === source.id).length;
+    let msg = `Are you sure you want to delete "${source.source_name}"?`;
+    if (entriesCount > 0) {
+      msg += `\nThis will also delete ${entriesCount} history entries tied to it!`;
+    }
+    if (!window.confirm(msg)) return;
+
+    try {
+      await deleteEmissionSource(source.id);
+      load();
+    } catch (e) {
+      console.error('Failed to delete source:', e);
+    }
+  };
 
   useEffect(() => { load(); }, [load]);
 
@@ -300,7 +320,19 @@ const CarbonDashboard: React.FC<Props> = ({ orgId, currentUserId, onRunWizard })
                     Scope {src.scope}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-slate-800 dark:text-white text-sm">{src.source_name}</div>
+                    <div className="font-medium text-slate-800 dark:text-white text-sm flex items-center gap-2 flex-wrap">
+                      {src.source_name}
+                      {src.identification_number && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-mono">
+                          ID: {src.identification_number}
+                        </span>
+                      )}
+                      {src.asset_number && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-mono">
+                          Asset: {src.asset_number}
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                       {src.fuel_type && <span>{src.fuel_type} · </span>}
                       {src.emission_factor_value
@@ -320,6 +352,12 @@ const CarbonDashboard: React.FC<Props> = ({ orgId, currentUserId, onRunWizard })
                     >
                       <Plus className="w-3 h-3" /> Add Entry
                     </button>
+                    <button
+                      onClick={() => setEditSource(src)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 text-xs font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      <Pencil className="w-3 h-3" /> Edit
+                    </button>
                     {srcEntries.length > 0 && (
                       <button
                         onClick={() => setHistorySource(src)}
@@ -328,6 +366,13 @@ const CarbonDashboard: React.FC<Props> = ({ orgId, currentUserId, onRunWizard })
                         <History className="w-3 h-3" /> History ({srcEntries.length})
                       </button>
                     )}
+                    <button
+                      onClick={() => handleDeleteSource(src)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 dark:border-red-800 text-red-500 dark:text-red-400 text-xs font-medium rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                      title="Delete emission source and all its history entries"
+                    >
+                      <Trash2 className="w-3 h-3" /> Delete
+                    </button>
                   </div>
                 </div>
               );
@@ -346,12 +391,23 @@ const CarbonDashboard: React.FC<Props> = ({ orgId, currentUserId, onRunWizard })
           onSaved={() => { setAddSource(null); load(); }}
         />, document.body)}
 
+      {editSource && createPortal(
+        <EditSourceModal
+          source={editSource}
+          orgId={orgId}
+          onClose={() => setEditSource(null)}
+          onSaved={() => { setEditSource(null); load(); }}
+        />, document.body)}
+
       {historySource && createPortal(
         <HistoryModal
           source={historySource}
           entries={entries.filter(e => e.source_id === historySource.id)}
+          orgId={orgId}
+          currentUserId={currentUserId}
           onClose={() => setHistorySource(null)}
           onDeleted={() => { setHistorySource(null); load(); }}
+          onUpdated={() => { load(); }}
         />, document.body)}
 
       {showBulkUpload && createPortal(
@@ -379,6 +435,91 @@ const ScopeCard: React.FC<{ label: string; value: number; color: string; bg: str
     <p className="text-xs text-slate-400 dark:text-slate-500">tCO₂e</p>
   </div>
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Edit source modal
+// ─────────────────────────────────────────────────────────────────────────────
+
+const EditSourceModal: React.FC<{
+  source: EmissionSource;
+  orgId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}> = ({ source, orgId, onClose, onSaved }) => {
+  const [idNumber, setIdNumber] = useState(source.identification_number || '');
+  const [assetNumber, setAssetNumber] = useState(source.asset_number || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSave = async () => {
+    setSaving(true); setError('');
+    try {
+      await upsertEmissionSource(orgId, {
+        ...source,
+        identification_number: idNumber.trim() || null,
+        asset_number: assetNumber.trim() || null,
+      });
+      onSaved();
+    } catch (e: any) {
+      setError(e.message ?? 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+          <div>
+            <h3 className="font-bold text-slate-900 dark:text-white">Edit Source — {source.source_name}</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Scope {source.scope}</p>
+          </div>
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              Identification No.
+            </label>
+            <input
+              type="text"
+              value={idNumber}
+              onChange={e => { setIdNumber(e.target.value); setError(''); }}
+              placeholder="e.g. Car Reg or S/N"
+              className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              Asset No. (Optional)
+            </label>
+            <input
+              type="text"
+              value={assetNumber}
+              onChange={e => { setAssetNumber(e.target.value); setError(''); }}
+              placeholder="e.g. ASSET-001"
+              className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+
+          <div className="flex gap-3 pt-1">
+            <button onClick={onClose} className="flex-1 py-2 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">Cancel</button>
+            <button onClick={handleSave} disabled={saving} className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-lg text-sm font-bold transition-colors">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              {saving ? 'Saving…' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Quick-add modal
@@ -500,15 +641,33 @@ const QuickAddModal: React.FC<{
 const HistoryModal: React.FC<{
   source: EmissionSource;
   entries: EmissionEntry[];
+  orgId: string;
+  currentUserId: string;
   onClose: () => void;
   onDeleted: () => void;
-}> = ({ source, entries, onClose, onDeleted }) => {
+  onUpdated?: () => void;
+}> = ({ source, entries, orgId, currentUserId, onClose, onDeleted, onUpdated }) => {
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editedNote, setEditedNote] = useState('');
   const sorted = [...entries].sort((a, b) => new Date(b.period_start).getTime() - new Date(a.period_start).getTime());
+
+  const handleSaveNote = async (entry: EmissionEntry) => {
+    try {
+      await upsertEmissionEntry(orgId, {
+        ...entry,
+        notes: editedNote.trim() || null,
+      }, currentUserId);
+      setEditingNoteId(null);
+      if (onUpdated) onUpdated(); else onDeleted();
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     setDeleting(id);
-    try { await deleteEmissionEntry(id); onDeleted(); }
+    try { await deleteEmissionEntry(id, orgId); onDeleted(); }
     catch (e) { console.error(e); setDeleting(null); }
   };
 
@@ -539,16 +698,60 @@ const HistoryModal: React.FC<{
                   <td className="px-4 py-3">{periodLabel(entry.period_start)}</td>
                   <td className="px-4 py-3 text-right font-mono">{entry.activity_data.toLocaleString()} {source.unit}</td>
                   <td className="px-4 py-3 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmtTco2e(entry.calculated_emissions_kgco2e)}</td>
-                  <td className="px-4 py-3 text-slate-500 text-xs">{entry.notes ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-500 text-xs">
+                    {editingNoteId === entry.id ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={editedNote}
+                          onChange={e => setEditedNote(e.target.value)}
+                          className="flex-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => handleSaveNote(entry)}
+                          className="p-1 text-emerald-600 hover:text-emerald-700 dark:hover:text-emerald-400"
+                          title="Save note"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setEditingNoteId(null)}
+                          className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                          title="Cancel"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between group">
+                        <span>{entry.notes ?? '—'}</span>
+                        <button
+                          onClick={() => { setEditingNoteId(entry.id); setEditedNote(entry.notes || ''); }}
+                          className="p-1 text-slate-400 hover:text-indigo-500 transition-colors"
+                          title="Edit note"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => handleDelete(entry.id)}
-                      disabled={deleting === entry.id}
-                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors disabled:opacity-40"
-                      title="Delete entry"
-                    >
-                      {deleting === entry.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <EvidenceBadge
+                        linkedToType="emission_entry"
+                        linkedToId={entry.id}
+                        orgId={orgId}
+                        currentUserId={currentUserId}
+                      />
+                      <button
+                        onClick={() => handleDelete(entry.id)}
+                        disabled={deleting === entry.id}
+                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors disabled:opacity-40"
+                        title="Delete entry"
+                      >
+                        {deleting === entry.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
