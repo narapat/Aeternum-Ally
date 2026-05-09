@@ -131,6 +131,8 @@ const fromDbSource = (row: any): EmissionSource => ({
   active: row.active ?? true,
   created_at: row.created_at,
   updated_at: row.updated_at,
+  identification_number: row.identification_number ?? null,
+  asset_number: row.asset_number ?? null,
 });
 
 export async function fetchEmissionSources(orgId: string): Promise<EmissionSource[]> {
@@ -159,6 +161,8 @@ export async function upsertEmissionSource(
     emission_factor_source: source.emission_factor_source ?? null,
     active: source.active ?? true,
     updated_at: new Date().toISOString(),
+    identification_number: source.identification_number ?? null,
+    asset_number: source.asset_number ?? null,
   };
   if (source.id) payload.id = source.id;
 

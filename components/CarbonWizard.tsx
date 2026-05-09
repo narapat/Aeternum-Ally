@@ -562,6 +562,8 @@ const Scope1SourceForm: React.FC<{
   const [amount, setAmount] = useState('');
   const [unit, setUnit] = useState(source.unit);
   const [period, setPeriod] = useState<'monthly' | 'annual'>('annual');
+  const [idNumber, setIdNumber] = useState('');
+  const [assetNumber, setAssetNumber] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -584,6 +586,8 @@ const Scope1SourceForm: React.FC<{
         unit,
         emission_factor_value: efValue,
         emission_factor_source: factor ? `${factor.source} (${factor.region})` : 'Estimated',
+        identification_number: idNumber || null,
+        asset_number: assetNumber || null,
       });
       const periodStart = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10);
       const periodEnd   = new Date(new Date().getFullYear(), 11, 31).toISOString().slice(0, 10);
@@ -622,6 +626,29 @@ const Scope1SourceForm: React.FC<{
       </div>
 
       <div className="bg-white/5 rounded-2xl p-6 border border-white/10 space-y-5">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">Identification No.</label>
+            <input
+              type="text"
+              value={idNumber}
+              onChange={e => setIdNumber(e.target.value)}
+              placeholder="e.g. Car Reg or S/N"
+              className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">Asset No. (Optional)</label>
+            <input
+              type="text"
+              value={assetNumber}
+              onChange={e => setAssetNumber(e.target.value)}
+              placeholder="e.g. ASSET-001"
+              className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+            />
+          </div>
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-slate-300 mb-2">Fuel type</label>
           <select

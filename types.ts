@@ -236,6 +236,8 @@ export interface EmissionSource {
   active: boolean;
   created_at: string;
   updated_at: string;
+  identification_number?: string | null;
+  asset_number?: string | null;
 }
 
 export interface EmissionEntry {

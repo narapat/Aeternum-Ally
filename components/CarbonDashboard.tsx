@@ -300,7 +300,19 @@ const CarbonDashboard: React.FC<Props> = ({ orgId, currentUserId, onRunWizard })
                     Scope {src.scope}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-slate-800 dark:text-white text-sm">{src.source_name}</div>
+                    <div className="font-medium text-slate-800 dark:text-white text-sm flex items-center gap-2 flex-wrap">
+                      {src.source_name}
+                      {src.identification_number && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-mono">
+                          ID: {src.identification_number}
+                        </span>
+                      )}
+                      {src.asset_number && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-mono">
+                          Asset: {src.asset_number}
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                       {src.fuel_type && <span>{src.fuel_type} · </span>}
                       {src.emission_factor_value
