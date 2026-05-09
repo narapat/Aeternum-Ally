@@ -32,6 +32,7 @@ import {
   deleteEmissionEntry,
   calculateEmissions,
 } from '../services/emissionFactorService';
+import EvidenceBadge from './EvidenceBadge';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -378,6 +379,8 @@ const CarbonDashboard: React.FC<Props> = ({ orgId, currentUserId, onRunWizard })
         <HistoryModal
           source={historySource}
           entries={entries.filter(e => e.source_id === historySource.id)}
+          orgId={orgId}
+          currentUserId={currentUserId}
           onClose={() => setHistorySource(null)}
           onDeleted={() => { setHistorySource(null); load(); }}
         />, document.body)}
@@ -613,11 +616,28 @@ const QuickAddModal: React.FC<{
 const HistoryModal: React.FC<{
   source: EmissionSource;
   entries: EmissionEntry[];
+  orgId: string;
+  currentUserId: string;
   onClose: () => void;
   onDeleted: () => void;
-}> = ({ source, entries, onClose, onDeleted }) => {
+}> = ({ source, entries, orgId, currentUserId, onClose, onDeleted }) => {
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editedNote, setEditedNote] = useState('');
   const sorted = [...entries].sort((a, b) => new Date(b.period_start).getTime() - new Date(a.period_start).getTime());
+
+  const handleSaveNote = async (entry: EmissionEntry) => {
+    try {
+      await upsertEmissionEntry(orgId, {
+        ...entry,
+        notes: editedNote.trim() || null,
+      }, currentUserId);
+      setEditingNoteId(null);
+      onDeleted(); // Triggers reload in parent
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     setDeleting(id);
@@ -652,16 +672,60 @@ const HistoryModal: React.FC<{
                   <td className="px-4 py-3">{periodLabel(entry.period_start)}</td>
                   <td className="px-4 py-3 text-right font-mono">{entry.activity_data.toLocaleString()} {source.unit}</td>
                   <td className="px-4 py-3 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmtTco2e(entry.calculated_emissions_kgco2e)}</td>
-                  <td className="px-4 py-3 text-slate-500 text-xs">{entry.notes ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-500 text-xs">
+                    {editingNoteId === entry.id ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={editedNote}
+                          onChange={e => setEditedNote(e.target.value)}
+                          className="flex-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => handleSaveNote(entry)}
+                          className="p-1 text-emerald-600 hover:text-emerald-700 dark:hover:text-emerald-400"
+                          title="Save note"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setEditingNoteId(null)}
+                          className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                          title="Cancel"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between group">
+                        <span>{entry.notes ?? '—'}</span>
+                        <button
+                          onClick={() => { setEditingNoteId(entry.id); setEditedNote(entry.notes || ''); }}
+                          className="p-1 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-indigo-500 transition-opacity"
+                          title="Edit note"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => handleDelete(entry.id)}
-                      disabled={deleting === entry.id}
-                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors disabled:opacity-40"
-                      title="Delete entry"
-                    >
-                      {deleting === entry.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <EvidenceBadge
+                        linkedToType="emission_entry"
+                        linkedToId={entry.id}
+                        orgId={orgId}
+                        currentUserId={currentUserId}
+                      />
+                      <button
+                        onClick={() => handleDelete(entry.id)}
+                        disabled={deleting === entry.id}
+                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors disabled:opacity-40"
+                        title="Delete entry"
+                      >
+                        {deleting === entry.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
