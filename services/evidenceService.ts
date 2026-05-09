@@ -240,3 +240,27 @@ export async function deleteEvidence(
     .eq('id', id);
   if (error) throw error;
 }
+
+/** Delete all evidence attached to a specific entity. */
+export async function deleteEvidenceByEntity(
+  orgId: string,
+  linkedToType: EvidenceLinkedToType,
+  linkedToId: string,
+): Promise<void> {
+  const { data: items, error } = await supabase
+    .from('evidence_attachments')
+    .select('id, storage_type')
+    .eq('organization_id', orgId)
+    .eq('linked_to_type', linkedToType)
+    .eq('linked_to_id', linkedToId);
+  if (error) throw error;
+
+  if (!items || items.length === 0) return;
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+
+  for (const item of items) {
+    await deleteEvidence(item.id, orgId, item.storage_type as StorageType, token);
+  }
+}

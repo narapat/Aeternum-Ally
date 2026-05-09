@@ -12,6 +12,7 @@
 
 import { supabase } from '../lib/supabaseClient';
 import { EmissionFactor, EmissionSource, EmissionEntry, EmissionScope } from '../types';
+import { deleteEvidenceByEntity } from './evidenceService';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Region → country membership (lightweight client-side mapping)
@@ -239,7 +240,14 @@ export async function upsertEmissionEntry(
   return fromDbEntry(data);
 }
 
-export async function deleteEmissionEntry(id: string): Promise<void> {
+export async function deleteEmissionEntry(id: string, orgId?: string): Promise<void> {
+  if (orgId) {
+    try {
+      await deleteEvidenceByEntity(orgId, 'emission_entry', id);
+    } catch (e) {
+      console.warn('Failed to delete evidence for emission entry:', e);
+    }
+  }
   const { error } = await supabase.from('emission_entries').delete().eq('id', id);
   if (error) throw error;
 }

@@ -667,7 +667,7 @@ const HistoryModal: React.FC<{
 
   const handleDelete = async (id: string) => {
     setDeleting(id);
-    try { await deleteEmissionEntry(id); onDeleted(); }
+    try { await deleteEmissionEntry(id, orgId); onDeleted(); }
     catch (e) { console.error(e); setDeleting(null); }
   };
 

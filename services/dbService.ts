@@ -19,6 +19,7 @@ import type {
   SuggestedTask,
   TaskStatus,
 } from "../types";
+import { deleteEvidenceByEntity } from './evidenceService';
 
 // =================================================================
 // GENERIC SINGLETON  (one row per org — used by useOrgData hook)
@@ -440,7 +441,14 @@ export async function upsertAssessment(orgId: string, assessment: AssessmentData
   return fromDbAssessment(data);
 }
 
-export async function deleteAssessment(id: string): Promise<void> {
+export async function deleteAssessment(id: string, orgId?: string): Promise<void> {
+  if (orgId) {
+    try {
+      await deleteEvidenceByEntity(orgId, 'assessment', id);
+    } catch (e) {
+      console.warn('Failed to delete evidence for assessment:', e);
+    }
+  }
   const { error } = await supabase.from("assessments").delete().eq("id", id);
   if (error) throw error;
 }
@@ -608,7 +616,14 @@ export async function upsertKpi(orgId: string, kpi: KPI): Promise<KPI> {
   return fromDbKpi(data);
 }
 
-export async function deleteKpi(id: string): Promise<void> {
+export async function deleteKpi(id: string, orgId?: string): Promise<void> {
+  if (orgId) {
+    try {
+      await deleteEvidenceByEntity(orgId, 'kpi', id);
+    } catch (e) {
+      console.warn('Failed to delete evidence for KPI:', e);
+    }
+  }
   const { error } = await supabase.from("kpis").delete().eq("id", id);
   if (error) throw error;
 }
@@ -681,7 +696,14 @@ export async function upsertTask(orgId: string, task: Partial<Task> & Pick<Task,
   return fromDbTask(data);
 }
 
-export async function deleteTask(id: string): Promise<void> {
+export async function deleteTask(id: string, orgId?: string): Promise<void> {
+  if (orgId) {
+    try {
+      await deleteEvidenceByEntity(orgId, 'task', id);
+    } catch (e) {
+      console.warn('Failed to delete evidence for task:', e);
+    }
+  }
   const { error } = await supabase.from("tasks").delete().eq("id", id);
   if (error) throw error;
 }

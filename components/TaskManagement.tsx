@@ -644,7 +644,7 @@ const ManagerTab: React.FC<ManagerProps> = ({
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this task?')) return;
-    await deleteTask(id);
+    await deleteTask(id, orgId);
     setTasks(prev => prev.filter(t => t.id !== id));
   };
 
