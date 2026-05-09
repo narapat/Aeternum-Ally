@@ -415,7 +415,7 @@ const GeneratorTab: React.FC<GeneratorProps> = ({
                                   >
                                     <option value="">Unassigned</option>
                                     {members.map(m => (
-                                      <option key={m.id} value={m.id}>{m.email ?? m.user_id}</option>
+                                      <option key={m.user_id} value={m.user_id}>{m.email ?? m.user_id}</option>
                                     ))}
                                   </select>
                                 </div>
@@ -577,7 +577,7 @@ const ManagerTab: React.FC<ManagerProps> = ({
       'Type': t.type,
       'Status': t.status,
       'Priority': t.priority,
-      'Assignee Email': members.find(m => m.id === t.assignee_id)?.email ?? '',
+      'Assignee Email': members.find(m => m.user_id === t.assignee_id)?.email ?? '',
       'Due Date': t.due_date ?? '',
       'ESRS Reference': t.esrs_ref ?? '',
       'Source': t.source_type,
@@ -666,21 +666,21 @@ const ManagerTab: React.FC<ManagerProps> = ({
     setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
   };
 
-  const handleAssign = async (task: Task, memberId: string | null) => {
+  const handleAssign = async (task: Task, userId: string | null) => {
     const now = new Date().toISOString();
     const updated = await upsertTask(orgId, {
       ...task,
-      assignee_id: memberId,              // organization_members.id
-      assigned_by: memberId ? currentUserId : null, // auth.users.id
-      assigned_at: memberId ? now : null,
+      assignee_id: userId,              // user_id
+      assigned_by: userId ? currentUserId : null, // auth.users.id
+      assigned_at: userId ? now : null,
     });
     setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
   };
 
-  // Pick up = assign to self using this user's member row id
+  // Pick up = assign to self
   const handlePickUp = (task: Task) => {
-    if (!currentMemberId) return;
-    handleAssign(task, currentMemberId);
+    if (!currentUserId) return;
+    handleAssign(task, currentUserId);
   };
 
   const filtered = sortTasks(
@@ -846,7 +846,7 @@ const ManagerTab: React.FC<ManagerProps> = ({
             const noteDraft = noteDrafts[task.id] ?? task.notes ?? '';
             const taskAssigneeName = assigneeName(task.assignee_id);
             const taskAssignedByName = assignedByName(task.assigned_by);
-            const isSelfAssigned = currentMemberId != null && task.assignee_id === currentMemberId;
+            const isSelfAssigned = currentUserId != null && task.assignee_id === currentUserId;
 
             return (
               <div
@@ -907,7 +907,7 @@ const ManagerTab: React.FC<ManagerProps> = ({
                           ))}
                         </select>
                         {/* "Pick up" shortcut for unassigned tasks */}
-                        {!task.assignee_id && currentMemberId && (
+                        {!task.assignee_id && currentUserId && (
                           <button
                             onClick={() => handlePickUp(task)}
                             className="ml-1 flex items-center gap-0.5 text-xs text-esg-500 hover:text-esg-700 dark:text-esg-400 transition-colors font-medium"
