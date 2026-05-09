@@ -383,6 +383,7 @@ const CarbonDashboard: React.FC<Props> = ({ orgId, currentUserId, onRunWizard })
           currentUserId={currentUserId}
           onClose={() => setHistorySource(null)}
           onDeleted={() => { setHistorySource(null); load(); }}
+          onUpdated={() => { load(); }}
         />, document.body)}
 
       {showBulkUpload && createPortal(
@@ -620,7 +621,8 @@ const HistoryModal: React.FC<{
   currentUserId: string;
   onClose: () => void;
   onDeleted: () => void;
-}> = ({ source, entries, orgId, currentUserId, onClose, onDeleted }) => {
+  onUpdated?: () => void;
+}> = ({ source, entries, orgId, currentUserId, onClose, onDeleted, onUpdated }) => {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editedNote, setEditedNote] = useState('');
@@ -633,7 +635,7 @@ const HistoryModal: React.FC<{
         notes: editedNote.trim() || null,
       }, currentUserId);
       setEditingNoteId(null);
-      onDeleted(); // Triggers reload in parent
+      if (onUpdated) onUpdated(); else onDeleted();
     } catch (e) {
       console.error(e);
     }
@@ -701,7 +703,7 @@ const HistoryModal: React.FC<{
                         <span>{entry.notes ?? '—'}</span>
                         <button
                           onClick={() => { setEditingNoteId(entry.id); setEditedNote(entry.notes || ''); }}
-                          className="p-1 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-indigo-500 transition-opacity"
+                          className="p-1 text-slate-400 hover:text-indigo-500 transition-colors"
                           title="Edit note"
                         >
                           <Pencil className="w-3 h-3" />
