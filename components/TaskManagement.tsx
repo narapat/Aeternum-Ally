@@ -526,6 +526,7 @@ const ManagerTab: React.FC<ManagerProps> = ({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<TaskStatus | 'all'>('all');
+  const [onlyMyTasks, setOnlyMyTasks] = useState(false);
   const [filterType, setFilterType] = useState<TaskType | 'all'>('all');
   const [sortBy, setSortBy] = useState<ManagerSort>('created');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -686,7 +687,8 @@ const ManagerTab: React.FC<ManagerProps> = ({
   const filtered = sortTasks(
     tasks.filter(t =>
       (filterStatus === 'all' || t.status === filterStatus) &&
-      (filterType === 'all' || t.type === filterType),
+      (filterType === 'all' || t.type === filterType) &&
+      (!onlyMyTasks || t.assignee_id === currentMemberId),
     ),
     sortBy,
   );
@@ -742,6 +744,14 @@ const ManagerTab: React.FC<ManagerProps> = ({
       {/* Filters + sort + add */}
       <div className="flex flex-wrap items-center gap-3">
         <Filter className="w-4 h-4 text-slate-400 flex-shrink-0" />
+        <select
+          className="text-sm border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 outline-none"
+          value={onlyMyTasks ? 'mine' : 'all'}
+          onChange={e => setOnlyMyTasks(e.target.value === 'mine')}
+        >
+          <option value="all">All tasks</option>
+          <option value="mine">Only my tasks</option>
+        </select>
         <select
           className="text-sm border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 outline-none"
           value={filterStatus}

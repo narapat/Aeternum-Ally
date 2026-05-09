@@ -1,30 +1,42 @@
 
 import React from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
-import { SustainabilityBusinessModel, SwotAnalysis, AssessmentData } from '../types';
-import { CheckCircle, Circle, AlertCircle, ArrowRight, Layout, Target, FileText } from 'lucide-react';
+import { SustainabilityBusinessModel, SwotAnalysis, AssessmentData, Task } from '../types';
+import { CheckCircle, Circle, AlertCircle, ArrowRight, Layout, Target, FileText, ListChecks } from 'lucide-react';
 
 interface Props {
   bmcData: SustainabilityBusinessModel;
   swotData: SwotAnalysis;
   assessments: AssessmentData[];
   onNavigate: (view: any) => void;
+  tasks: Task[];
+  currentMemberId?: string | null;
 }
 
-const DataCompletenessDashboard: React.FC<Props> = ({ bmcData, swotData, assessments, onNavigate }) => {
+const DataCompletenessDashboard: React.FC<Props> = ({ bmcData, swotData, assessments, onNavigate, tasks, currentMemberId }) => {
   
   // --- Calculation Logic ---
 
   // 1. BMC Completeness (11 Fields)
-  const bmcKeys = Object.keys(bmcData) as (keyof SustainabilityBusinessModel)[];
-  const filledBmc = bmcKeys.filter(k => bmcData[k] && bmcData[k].length > 10).length;
-  const totalBmc = bmcKeys.length;
+  const bmcBlockKeys: (keyof SustainabilityBusinessModel)[] = [
+    'keyPartners', 'keyActivities', 'keyResources', 'valueProposition',
+    'customerRelationships', 'channels', 'customerSegments', 'costStructure',
+    'revenueStreams', 'ecoSocialCosts', 'ecoSocialBenefits'
+  ];
+  const filledBmc = bmcBlockKeys.filter(k => {
+    const val = bmcData[k];
+    return Array.isArray(val) ? val.length > 0 : (val && String(val).trim().length > 0);
+  }).length;
+  const totalBmc = bmcBlockKeys.length;
   const bmcPercent = Math.round((filledBmc / totalBmc) * 100);
 
   // 2. SWOT Completeness (4 Fields)
-  const swotKeys = ['strengths', 'weaknesses', 'opportunities', 'threats'] as (keyof SwotAnalysis)[];
-  const filledSwot = swotKeys.filter(k => swotData[k] && swotData[k].length > 10).length;
-  const totalSwot = 4;
+  const swotBlockKeys: (keyof SwotAnalysis)[] = ['strengths', 'weaknesses', 'opportunities', 'threats'];
+  const filledSwot = swotBlockKeys.filter(k => {
+    const val = swotData[k];
+    return Array.isArray(val) ? val.length > 0 : (val && String(val).trim().length > 0);
+  }).length;
+  const totalSwot = swotBlockKeys.length;
   const swotPercent = Math.round((filledSwot / totalSwot) * 100);
 
   // 3. Assessments (Target: At least 5 assessments analyzed)
@@ -143,51 +155,81 @@ const DataCompletenessDashboard: React.FC<Props> = ({ bmcData, swotData, assessm
         </div>
       </div>
 
-      {/* Action List */}
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-        <div className="p-6 border-b border-slate-200 dark:border-slate-700">
-            <h3 className="font-bold text-slate-800 dark:text-white">Recommended Actions</h3>
-        </div>
-        <div className="divide-y divide-slate-100 dark:divide-slate-700">
-            {bmcPercent < 100 && (
-                <ActionItem 
-                    title="Complete Business Model Canvas"
-                    desc="Define your key partners and eco-social costs to improve AI accuracy."
-                    onClick={() => onNavigate('canvas')}
-                />
-            )}
-            {swotPercent < 100 && (
-                <ActionItem 
-                    title="Finalize SWOT Analysis"
-                    desc="Identify external opportunities and threats using the AI search tool."
-                    onClick={() => onNavigate('swot')}
-                />
-            )}
-            {assessmentCount < 3 && (
-                <ActionItem 
-                    title="Conduct More Materiality Assessments"
-                    desc="We recommend analyzing at least 3-5 topics to build a robust report."
-                    onClick={() => onNavigate('assess')}
-                />
-            )}
-            {overallScore >= 80 && (
-                <div className="p-4 flex items-center gap-4 bg-emerald-50 dark:bg-emerald-900/10">
-                    <div className="text-emerald-600 dark:text-emerald-400"><CheckCircle className="w-6 h-6" /></div>
-                    <div>
-                        <p className="font-bold text-slate-800 dark:text-white">You are ready to report!</p>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Generate your Sustainability Statement now.</p>
-                    </div>
-                     <button 
-                        onClick={() => onNavigate('report')}
-                        className="ml-auto text-sm font-bold text-emerald-700 dark:text-emerald-400 hover:underline"
-                    >
-                        View Report
-                    </button>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Company Task Status */}
+        <div className="lg:col-span-1 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col justify-between">
+          <div>
+            <div className="p-6 border-b border-slate-200 dark:border-slate-700">
+                <h3 className="font-bold text-slate-800 dark:text-white">Company Task Status</h3>
+            </div>
+            <div className="p-6 grid grid-cols-1 gap-4">
+                <div className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-xl text-center">
+                    <p className="text-2xl font-bold text-slate-800 dark:text-white">{tasks.filter(t => t.status === 'todo').length}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-semibold mt-1">To Do</p>
                 </div>
-            )}
-             {overallScore === 100 && assessmentCount >= 5 && (
-                <div className="p-6 text-center text-slate-400 italic">All recommended actions completed. Great job!</div>
-            )}
+                <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl text-center">
+                    <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{tasks.filter(t => t.status === 'in_progress').length}</p>
+                    <p className="text-xs text-indigo-500 dark:text-indigo-300 uppercase font-semibold mt-1">In Progress</p>
+                </div>
+                <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-xl text-center">
+                    <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{tasks.filter(t => t.status === 'done').length}</p>
+                    <p className="text-xs text-emerald-500 dark:text-emerald-300 uppercase font-semibold mt-1">Done</p>
+                </div>
+            </div>
+          </div>
+          <div className="p-4 border-t border-slate-100 dark:border-slate-700 flex justify-end">
+              <button onClick={() => onNavigate('tasks')} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 font-medium flex items-center gap-1">
+                  Go to Task Manager <ArrowRight className="w-4 h-4" />
+              </button>
+          </div>
+        </div>
+
+        {/* Action List */}
+        <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div className="p-6 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="font-bold text-slate-800 dark:text-white">Recommended Actions</h3>
+          </div>
+          <div className="divide-y divide-slate-100 dark:divide-slate-700">
+              {bmcPercent < 100 && (
+                  <ActionItem 
+                      title="Complete Business Model Canvas"
+                      desc="Define your key partners and eco-social costs to improve AI accuracy."
+                      onClick={() => onNavigate('canvas')}
+                  />
+              )}
+              {swotPercent < 100 && (
+                  <ActionItem 
+                      title="Finalize SWOT Analysis"
+                      desc="Identify external opportunities and threats using the AI search tool."
+                      onClick={() => onNavigate('swot')}
+                  />
+              )}
+              {assessmentCount < 3 && (
+                  <ActionItem 
+                      title="Conduct More Materiality Assessments"
+                      desc="We recommend analyzing at least 3-5 topics to build a report."
+                      onClick={() => onNavigate('assess')}
+                  />
+              )}
+              {overallScore >= 80 && (
+                  <div className="p-4 flex items-center gap-4 bg-emerald-50 dark:bg-emerald-900/10">
+                      <div className="text-emerald-600 dark:text-emerald-400"><CheckCircle className="w-6 h-6" /></div>
+                      <div>
+                          <p className="font-bold text-slate-800 dark:text-white">You are ready to report!</p>
+                          <p className="text-sm text-slate-500 dark:text-slate-400">Generate your Sustainability Statement now.</p>
+                      </div>
+                       <button 
+                          onClick={() => onNavigate('report')}
+                          className="ml-auto text-sm font-bold text-emerald-700 dark:text-emerald-400 hover:underline"
+                      >
+                          View Report
+                      </button>
+                  </div>
+              )}
+               {overallScore === 100 && assessmentCount >= 5 && (
+                  <div className="p-6 text-center text-slate-400 italic">All recommended actions completed. Great job!</div>
+              )}
+          </div>
         </div>
       </div>
     </div>
