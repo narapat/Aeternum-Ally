@@ -322,9 +322,14 @@ const App: React.FC = () => {
 
           </nav>
 
+          {/* Version */}
+          <div className="p-2 text-xs text-slate-600 dark:text-slate-500 text-center border-t border-slate-800 dark:border-slate-900 flex-shrink-0">
+            {isSidebarCollapsed ? 'v1.1.0' : 'Version 1.1.0'}
+          </div>
+
           {/* Expand button — only shown when sidebar is collapsed */}
           {isSidebarCollapsed && (
-            <div className="border-t border-slate-800 dark:border-slate-900 p-2 flex-shrink-0">
+            <div className="p-2 flex-shrink-0">
               <button onClick={toggleSidebarCollapse} className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-white transition-colors">
                 <ChevronsRight className="w-4 h-4" />
               </button>
