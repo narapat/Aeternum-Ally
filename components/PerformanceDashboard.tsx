@@ -108,7 +108,7 @@ const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, p
             }}
             profile={profile}
             allKpis={kpis}
-            tasks={tasks.filter(t => t.source_id === editingKpi?.id || t.source_id === editingKpi?.name)}
+            tasks={tasks.filter(t => t.source_id === editingKpi?.id)}
             onNavigateToTask={onNavigateToTask}
         />
       )}
@@ -179,8 +179,8 @@ const StrategyMap: React.FC<{
                                                 kpi={kpi}
                                                 allKpis={kpis}
                                                 onClick={() => onEdit(kpi)}
-                                                suggestedTasks={orgId ? suggestedTasks.filter(t => t.source_id === kpi.id || t.source_id === kpi.name) : []}
-                                                tasks={tasks.filter(t => t.source_id === kpi.id || t.source_id === kpi.name)}
+                                                suggestedTasks={orgId ? suggestedTasks.filter(t => t.source_id === kpi.id) : []}
+                                                tasks={tasks.filter(t => t.source_id === kpi.id)}
                                                 orgId={orgId}
                                                 currentUserId={currentUserId}
                                                 onSuggestionsChanged={onSuggestionsChanged}
