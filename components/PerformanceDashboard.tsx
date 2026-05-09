@@ -18,6 +18,7 @@ interface Props {
   profile: CompanyProfile;
   orgId?: string;
   currentUserId?: string;
+  openKpiId?: string | null;
 }
 
 const PERSPECTIVE_CONFIG = {
@@ -27,7 +28,7 @@ const PERSPECTIVE_CONFIG = {
   [BSCPerspective.LEARNING]: { color: 'bg-purple-100 text-purple-800', border: 'border-purple-200', icon: <BookOpen className="w-5 h-5" /> },
 };
 
-const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, profile, orgId, currentUserId }) => {
+const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, profile, orgId, currentUserId, openKpiId }) => {
   const [viewMode, setViewMode] = useState<'map' | 'tracking'>('map');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
@@ -46,6 +47,19 @@ const PerformanceDashboard: React.FC<Props> = ({ kpis, onSaveKpi, onDeleteKpi, p
   const handleDelete = async (id: string) => {
     await onDeleteKpi(id);
   };
+
+  const handledKpiId = React.useRef<string | null>(null);
+
+  useEffect(() => {
+    if (openKpiId && kpis.length > 0 && handledKpiId.current !== openKpiId) {
+      const target = kpis.find(k => k.id === openKpiId || k.name === openKpiId);
+      if (target) {
+        setEditingKpi(target);
+        setIsFormOpen(true);
+        handledKpiId.current = openKpiId;
+      }
+    }
+  }, [openKpiId, kpis]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">

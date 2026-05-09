@@ -97,6 +97,7 @@ const App: React.FC = () => {
   // Quality check context for the topic being edited from the hub — passed to AssessmentForm
   // so AI auto-fill knows which issues to address
   const [hubQualityCheck, setHubQualityCheck] = useState<QualityCheck | null>(null);
+  const [targetKpiId, setTargetKpiId] = useState<string | null>(null);
 
   // Sidebar nav group open/close state — persisted per-device in localStorage
   const [myBusinessOpen, setMyBusinessOpen] = useState(() => {
@@ -483,6 +484,7 @@ const App: React.FC = () => {
                     profile={profile.data}
                     orgId={organization?.id}
                     currentUserId={user?.id}
+                    openKpiId={targetKpiId}
                   />
                 )}
 
@@ -642,7 +644,10 @@ const App: React.FC = () => {
                       setIsFormOpen(!!match);
                       setView('assess');
                     }}
-                    onNavigateToKPI={() => setView('kpi')}
+                    onNavigateToKPI={(kpiIdOrName) => {
+                      setTargetKpiId(kpiIdOrName);
+                      setView('kpi');
+                    }}
                   />
                 )}
 

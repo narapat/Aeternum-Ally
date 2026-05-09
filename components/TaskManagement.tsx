@@ -134,7 +134,7 @@ interface GeneratorProps {
   onTasksCreated: () => void;
   onNavigateToInsightHub?: () => void;
   onNavigateToDMARecord?: (topicCode: string | null) => void;
-  onNavigateToKPI?: () => void;
+  onNavigateToKPI?: (kpiIdOrName: string | null) => void;
 }
 
 const GeneratorTab: React.FC<GeneratorProps> = ({
@@ -464,7 +464,7 @@ interface SourceLinkProps {
   esrsRef: string | null;
   onNavigateToDMARecord?: (topicCode: string | null) => void;
   onNavigateToInsightHub?: () => void;
-  onNavigateToKPI?: () => void;
+  onNavigateToKPI?: (kpiIdOrName: string | null) => void;
 }
 
 const SourceLink: React.FC<SourceLinkProps> = ({
@@ -482,7 +482,7 @@ const SourceLink: React.FC<SourceLinkProps> = ({
   const navigate =
     sourceType === 'insight_hub' ? onNavigateToInsightHub :
     sourceType === 'dma' ? () => onNavigateToDMARecord?.(topicLabel) :
-    sourceType === 'kpi' ? onNavigateToKPI : undefined;
+    sourceType === 'kpi' ? () => onNavigateToKPI?.(sourceId) : undefined;
 
   return (
     <button
@@ -506,7 +506,7 @@ interface ManagerProps {
   onGoToGenerator: () => void;
   onNavigateToDMARecord?: (topicCode: string | null) => void;
   onNavigateToInsightHub?: () => void;
-  onNavigateToKPI?: () => void;
+  onNavigateToKPI?: (kpiIdOrName: string | null) => void;
 }
 
 const ManagerTab: React.FC<ManagerProps> = ({
