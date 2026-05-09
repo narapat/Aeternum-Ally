@@ -466,17 +466,23 @@ interface SourceLinkProps {
   onNavigateToDMARecord?: (topicCode: string | null) => void;
   onNavigateToInsightHub?: () => void;
   onNavigateToKPI?: (kpiIdOrName: string | null) => void;
+  kpis?: KPI[];
 }
 
 const SourceLink: React.FC<SourceLinkProps> = ({
-  sourceType, sourceId, esrsRef, onNavigateToDMARecord, onNavigateToInsightHub, onNavigateToKPI,
+  sourceType, sourceId, esrsRef, onNavigateToDMARecord, onNavigateToInsightHub, onNavigateToKPI, kpis = [],
 }) => {
   const meta = SOURCE_TYPE_META[sourceType];
   if (!meta) return null;
 
   // Show human-readable topic code (not raw UUIDs)
   const isUUID = sourceId ? /^[0-9a-f-]{36}$/i.test(sourceId) : true;
-  const topicLabel = !isUUID ? sourceId : null;
+  let topicLabel = !isUUID ? sourceId : null;
+
+  if (sourceType === 'kpi' && isUUID && kpis.length > 0) {
+    const kpi = kpis.find(k => k.id === sourceId);
+    if (kpi) topicLabel = kpi.name;
+  }
 
   const label = [meta.label, topicLabel, esrsRef].filter(Boolean).join(' · ');
 
@@ -509,11 +515,12 @@ interface ManagerProps {
   onNavigateToInsightHub?: () => void;
   onNavigateToKPI?: (kpiIdOrName: string | null) => void;
   targetTaskId?: string | null;
+  kpis: KPI[];
 }
 
 const ManagerTab: React.FC<ManagerProps> = ({
   orgId, members, currentUserId, refreshTrigger, onGoToGenerator,
-  onNavigateToDMARecord, onNavigateToInsightHub, onNavigateToKPI, targetTaskId,
+  onNavigateToDMARecord, onNavigateToInsightHub, onNavigateToKPI, targetTaskId, kpis,
 }) => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -932,6 +939,7 @@ const ManagerTab: React.FC<ManagerProps> = ({
                           onNavigateToDMARecord={onNavigateToDMARecord}
                           onNavigateToInsightHub={onNavigateToInsightHub}
                           onNavigateToKPI={onNavigateToKPI}
+                          kpis={kpis}
                         />
                       )}
                     </div>
@@ -1459,6 +1467,8 @@ const TaskManagement: React.FC<Props> = ({
           onNavigateToInsightHub={onNavigateToInsightHub}
           onNavigateToKPI={onNavigateToKPI}
           targetTaskId={targetTaskId}
+          kpis={kpis}
+        />
         />
       )}
     </div>
