@@ -249,7 +249,7 @@ const DMAInsightHub: React.FC<Props> = ({
         <button
           onClick={runAnalysis}
           disabled={isAnalysing || synthesisState.phase === "loading" || polling || isInitializing}
-          className="flex items-center gap-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-2 transition-colors flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm disabled:text-slate-500 disabled:bg-white disabled:border-slate-300 dark:disabled:text-slate-400 dark:disabled:bg-slate-800 dark:disabled:border-slate-600"
+          className="flex items-center gap-2 text-sm font-medium text-white bg-esg-600 hover:bg-esg-700 border border-transparent rounded-lg px-4 py-2 transition-colors flex-shrink-0 disabled:cursor-not-allowed shadow-sm disabled:bg-esg-300 dark:disabled:bg-slate-700 disabled:text-white/80"
         >
           <RotateCcw className={`w-4 h-4 ${(polling || isAnalysing) ? 'animate-spin' : ''}`} />
           Re-analyse
