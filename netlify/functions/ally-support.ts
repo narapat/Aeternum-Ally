@@ -12,127 +12,127 @@ export const handler = async (event: any) => {
   }
 
   try {
-    const { action, question, context, errors } = JSON.parse(event.body);
+    const { messages, context, errors } = JSON.parse(event.body);
 
-    if (!action) {
-      return { statusCode: 400, body: "Missing action" };
+    if (!messages || !Array.isArray(messages)) {
+      return { statusCode: 400, body: "Missing or invalid messages array" };
     }
 
-    if (action === "chat") {
-      if (!apiKey) {
-        return { statusCode: 500, body: "GEMINI_API_KEY is not configured" };
-      }
+    if (!apiKey) {
+      return { statusCode: 500, body: "GEMINI_API_KEY is not configured" };
+    }
 
-      const ai = new GoogleGenAI({ apiKey: apiKey });
-      
-      // Attempt to load documentation
-      let docsContent = "";
-      try {
-        // Netlify bundles included_files relative to the function or project root
-        // We try a few paths to be safe
-        const possiblePaths = [
-          path.join(process.cwd(), "Docs v1.1.0", "USER_MANUAL.md"),
-          path.join(__dirname, "Docs v1.1.0", "USER_MANUAL.md"),
-          path.join(__dirname, "..", "Docs v1.1.0", "USER_MANUAL.md"),
-        ];
-
-        for (const p of possiblePaths) {
-          if (fs.existsSync(p)) {
-            docsContent = fs.readFileSync(p, 'utf-8');
-            console.log(`[ally-support] Loaded docs from ${p}`);
-            break;
-          }
-        }
-        
-        if (!docsContent) {
-          console.warn("[ally-support] Could not find USER_MANUAL.md in any expected path");
-        }
-      } catch (err) {
-        console.error("[ally-support] Error reading docs:", err);
-      }
-
-      const prompt = `
-        You are "Ally", an AI Assistant for the Aeternum Ally sustainability platform.
-        Your goal is to help users navigate the app, understand sustainability concepts (ESRS/CSRD), and solve problems.
-
-        User Context:
-        - Current Page/Module: ${context || "Unknown"}
-        - Recent Errors: ${errors || "None detected"}
-
-        Here is the relevant application documentation to help you answer:
-        ---
-        ${docsContent.slice(0, 20000)} // Truncate if too large, but should fit
-        ---
-
-        User Question:
-        ${question}
-
-        Provide a helpful, concise, and friendly answer. If you don't know based on the documentation, say so and suggest they check the [User Manual](https://github.com/narapat/Aeternum-Ally/blob/main/Docs%20v1.1.0/USER_MANUAL.md) or use the "Report an issue" option to contact support.
-      `;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-lite",
-        contents: prompt,
-        config: {
-          maxOutputTokens: 1000,
-        }
-      });
-
-      const text = typeof response.text === "function" ? response.text() : response.text;
-
-      return {
-        statusCode: 200,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ response: text }),
-      };
-    } 
+    const ai = new GoogleGenAI({ apiKey: apiKey });
     
-    if (action === "email") {
-      if (!resendKey) {
-        return { statusCode: 500, body: "RESEND_API_KEY is not configured" };
-      }
+    // Attempt to load documentation
+    let docsContent = "";
+    try {
+      const possiblePaths = [
+        path.join(process.cwd(), "Docs v1.1.0", "USER_MANUAL.md"),
+        path.join(__dirname, "Docs v1.1.0", "USER_MANUAL.md"),
+        path.join(__dirname, "..", "Docs v1.1.0", "USER_MANUAL.md"),
+      ];
 
+      for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+          docsContent = fs.readFileSync(p, 'utf-8');
+          break;
+        }
+      }
+    } catch (err) {
+      console.error("[ally-support] Error reading docs:", err);
+    }
+
+    const systemInstruction = `
+      You are "Ally", an AI Assistant for the Aeternum Ally sustainability platform.
+      Your goal is to help users navigate the app, understand sustainability concepts (ESRS/CSRD), and solve problems.
+
+      User Context:
+      - Current Page/Module: ${context || "Unknown"}
+      - Recent Errors: ${errors || "None detected"}
+
+      Here is the relevant application documentation to help you answer:
+      ---
+      ${docsContent.slice(0, 15000)}
+      ---
+
+      Guidelines:
+      1. Provide helpful, concise, and friendly answers.
+      2. If you don't know based on the documentation, suggest checking the [User Manual](https://github.com/narapat/Aeternum-Ally/blob/main/Docs%20v1.1.0/USER_MANUAL.md).
+      3. If the user wants to report an issue or give feedback, DO NOT just say "I'll send it". Ask them for details (what happened, how they feel, what they expect) if they haven't provided them yet.
+      4. Once you have collected enough information about the issue or feedback and are ready to send it to support, end your message with the exact tag: [SEND_EMAIL].
+         Example: "Got it! I have collected your feedback and sent it to support. [SEND_EMAIL]"
+         Do NOT include this tag unless you have the actual feedback to send.
+    `;
+
+    // Map conversation history to Gemini format
+    const contents = messages.map((m: any) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.text }]
+    }));
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-lite",
+      contents: contents,
+      config: {
+        systemInstruction: systemInstruction,
+        maxOutputTokens: 1000,
+      }
+    });
+
+    let text = typeof response.text === "function" ? response.text() : response.text;
+
+    // Check for email trigger
+    if (text.includes("[SEND_EMAIL]") && resendKey) {
+      console.log("[ally-support] Trigger detected. Sending email via Resend...");
+      
+      // Extract the last few messages for context
+      const lastUserMessage = messages.filter((m: any) => m.role === 'user').pop()?.text || "N/A";
+      
       const emailBody = {
         from: `Ally Assistant <${fromEmail}>`,
         to: ["Support@aeternumally.com"],
-        subject: `Support Request from Ally Assistant`,
+        subject: `Support Request / Feedback from Ally Assistant`,
         html: `
-          <h3>New Support Request</h3>
-          <p><strong>User Question/Feedback:</strong> ${question}</p>
+          <h3>Support Request / Feedback</h3>
+          <p><strong>Latest User Input:</strong> ${lastUserMessage}</p>
           <p><strong>Context:</strong> ${context || "N/A"}</p>
           <p><strong>Captured Errors:</strong> ${errors || "None"}</p>
+          <hr/>
+          <h4>Full Conversation History:</h4>
+          <ul>
+            ${messages.map((m: any) => `<li><strong>${m.role}:</strong> ${m.text}</li>`).join('')}
+          </ul>
         `,
       };
 
-      console.log("[ally-support] Sending email via Resend...");
-      
-      const resendResponse = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${resendKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(emailBody),
-      });
+      try {
+        const resendResponse = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${resendKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(emailBody),
+        });
 
-      const resendData = await resendResponse.json();
-
-      if (!resendResponse.ok) {
-        console.error("[ally-support] Resend error:", resendData);
-        return { 
-          statusCode: resendResponse.status, 
-          body: JSON.stringify({ error: "Failed to send email", details: resendData }) 
-        };
+        if (!resendResponse.ok) {
+          const errData = await resendResponse.json();
+          console.error("[ally-support] Resend error:", errData);
+        }
+      } catch (e) {
+        console.error("[ally-support] Failed to send email:", e);
       }
 
-      return {
-        statusCode: 200,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ success: true, data: resendData }),
-      };
+      // Remove the tag from the text displayed to the user
+      text = text.replace("[SEND_EMAIL]", "").trim();
     }
 
-    return { statusCode: 400, body: "Invalid action" };
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ response: text }),
+    };
 
   } catch (error: any) {
     console.error("[ally-support] Error:", error);

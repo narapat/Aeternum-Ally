@@ -13,7 +13,6 @@ export const AllyAssistant: React.FC = () => {
   ]);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [isWaitingForFeedback, setIsWaitingForFeedback] = useState(false);
 
   // Initialize position to bottom right
   useEffect(() => {
@@ -75,13 +74,11 @@ export const AllyAssistant: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const action = isWaitingForFeedback ? 'email' : 'chat';
       const response = await fetch('/.netlify/functions/ally-support', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: action,
-          question: textToSend,
+          messages: [...messages, { role: 'user', text: textToSend }],
           context: window.location.pathname,
           errors: ''
         })
@@ -89,12 +86,7 @@ export const AllyAssistant: React.FC = () => {
 
       const data = await response.json();
       if (response.ok) {
-        if (isWaitingForFeedback) {
-          setMessages(prev => [...prev, { role: 'assistant', text: "Thank you! I've sent your feedback to Support@aeternumally.com." }]);
-          setIsWaitingForFeedback(false);
-        } else {
-          setMessages(prev => [...prev, { role: 'assistant', text: data.response }]);
-        }
+        setMessages(prev => [...prev, { role: 'assistant', text: data.response }]);
       } else {
         const errorMsg = data.details?.message || data.error || "Sorry, I encountered an error. Please try again.";
         setMessages(prev => [...prev, { role: 'assistant', text: `Error: ${errorMsg}` }]);
@@ -107,8 +99,7 @@ export const AllyAssistant: React.FC = () => {
   };
 
   const handleReportIssue = () => {
-    setMessages(prev => [...prev, { role: 'assistant', text: "Please describe the issue you are facing or provide your feedback here in the chat. I will send it to support." }]);
-    setIsWaitingForFeedback(true);
+    handleSendMessage("I want to report an issue or give feedback.");
   };
 
   const renderMessageText = (text: string, isUser: boolean) => {
