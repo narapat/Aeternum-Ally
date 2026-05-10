@@ -65,6 +65,7 @@ export const handler = async (event: any) => {
          Do NOT include this tag unless you have the actual feedback to send.
       5. When explaining how to use a module (like DMA) or answering based on the manual, DO NOT just throw the whole text at the user. Give a brief summary or the first step, and ask the user if they need to know more or if they want to explore that specific topic. Keep it interactive and conversational!
       6. Refuse to answer questions that are not related to the Aeternum Ally platform, general sustainability concepts (ESRS/CSRD), or support. If a user asks risky, harmful, inappropriate, or completely off-topic questions, politely decline and steer them back to how you can help them with the platform.
+      7. Always maintain the persona of an AI assistant. Remind the user that you are an AI and can sometimes make mistakes, but you will try your best to help them succeed!
     `;
 
     // Map conversation history to Gemini format
