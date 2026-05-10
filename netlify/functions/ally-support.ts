@@ -22,7 +22,7 @@ export const handler = async (event: any) => {
         return { statusCode: 500, body: "GEMINI_API_KEY is not configured" };
       }
 
-      const ai = new GoogleGenAI();
+      const ai = new GoogleGenAI({ apiKey: apiKey });
       
       // Attempt to load documentation
       let docsContent = "";
