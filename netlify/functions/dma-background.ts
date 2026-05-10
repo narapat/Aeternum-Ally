@@ -157,30 +157,37 @@ const handler = async (event: any) => {
             strategicInsight: {
               type: Type.OBJECT,
               properties: {
-                title: { type: Type.STRING },
                 summary: { type: Type.STRING },
-                content: { type: Type.STRING },
-                priorityTopics: { type: Type.ARRAY, items: { type: Type.STRING } },
+                keyRisks: { type: Type.ARRAY, items: { type: Type.STRING } },
+                opportunities: { type: Type.ARRAY, items: { type: Type.STRING } },
+                bottomLine: { type: Type.STRING },
               },
+              required: ["summary", "keyRisks", "opportunities", "bottomLine"],
             },
             recommendedActions: {
               type: Type.ARRAY,
               items: {
                 type: Type.OBJECT,
                 properties: {
+                  type: { type: Type.STRING, enum: ["fix", "comply", "improve"] },
                   title: { type: Type.STRING },
                   description: { type: Type.STRING },
-                  timeframe: { type: Type.STRING },
-                  impact_area: { type: Type.STRING },
+                  priority: { type: Type.STRING, enum: ["high", "medium", "low"] },
+                  esrs_ref: { type: Type.STRING },
                 },
+                required: ["type", "title", "description", "priority"],
               },
             },
           },
+          required: ["strategicInsight", "recommendedActions"],
         },
       },
     });
 
-    const insight_result = parseAIJson(synthesisResponse.text, { strategicInsight: {}, recommendedActions: [] });
+    const insight_result = parseAIJson(synthesisResponse.text, { 
+      strategicInsight: { summary: "", keyRisks: [], opportunities: [], bottomLine: "" }, 
+      recommendedActions: [] 
+    });
 
     // 3. Update status to completed
     const { error } = await admin
