@@ -121,6 +121,11 @@ Once your descriptions are filled out, the **Get Suggestions** button becomes av
 ### DMA Insight Hub
 The Insight Hub is a key differentiator of Aeternum Ally, moving you beyond mere compliance tracking into active strategic management. It acts as an automated sustainability consultant, performing a deep, two-pass AI analysis of all your assessments.
 
+**Key Features & Behavior:**
+- **Automatic Loading:** When you open the page, it automatically fetches completed analyses from the database. If none exist or a previous one failed, it automatically triggers a new analysis.
+- **Visual Loading States:** Skeletons for Strategic Insight and Recommended Actions appear immediately when an analysis starts (or is found processing on load), alongside the Quality Check cards.
+- **Re-analyse Button:** This prominent filled button allows you to manually trigger a fresh analysis. If the process appears stuck in an infinite spin, you can click it again to force a restart (a browser prompt will ask for confirmation).
+
 **Phase 1: Quality Check (Topic Level)**
 The AI evaluates every completed assessment individually against strict ESRS requirements.
 - **Score Banner:** Provides a real-time summary of your reporting readiness, tracking how many topics are covered, how many are material, and your overall quality status.
