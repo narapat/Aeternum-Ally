@@ -851,7 +851,7 @@ async function triggerReportGeneration(event: any, { organization_id, profile, m
   };
 }
 
-async function triggerDMAAnalysis(event: any, { organization_id, profile, materialAssessments, bmcItems, swotItems, user_id, user_email }: any) {
+async function triggerDMAAnalysis(event: any, { organization_id, profile, assessments, bmcData, swotData, user_id, user_email }: any) {
   const host = event.headers.host || event.headers.Host;
   const protocol = host.startsWith('localhost') ? 'http' : 'https';
   const url = `${protocol}://${host}/.netlify/functions/dma-background`;
@@ -867,7 +867,7 @@ async function triggerDMAAnalysis(event: any, { organization_id, profile, materi
     fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ organization_id, profile, materialAssessments, bmcItems, swotItems, user_id, user_email }),
+      body: JSON.stringify({ organization_id, profile, assessments, bmcData, swotData, user_id, user_email }),
     }).then(resp => console.log(`[api] Background function trigger status: ${resp.status}`))
       .catch(e => console.error("[api] Failed to trigger background function:", e));
   } catch (e) {
