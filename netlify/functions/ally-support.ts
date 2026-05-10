@@ -29,6 +29,20 @@ export const handler = async (event: any) => {
   const start = Date.now();
   try {
     const { messages, context, errors, userInfo } = JSON.parse(event.body);
+    const organization_id = userInfo?.orgId;
+
+    let activeModel = "gemini-2.5-flash"; // Default fallback
+    if (organization_id) {
+      const { data: settings } = await admin
+        .from("organization_ai_settings")
+        .select("model")
+        .eq("organization_id", organization_id)
+        .maybeSingle();
+      
+      if (settings?.model) {
+        activeModel = settings.model;
+      }
+    }
 
     if (!messages || !Array.isArray(messages)) {
       return { statusCode: 400, body: "Missing or invalid messages array" };
@@ -92,7 +106,7 @@ export const handler = async (event: any) => {
     }));
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
+      model: activeModel,
       contents: contents,
       config: {
         systemInstruction: systemInstruction,
@@ -113,7 +127,7 @@ export const handler = async (event: any) => {
         user_email: userInfo?.email || null,
         action: "ally_assistant",
         provider: "gemini",
-        model: "gemini-2.5-flash-lite",
+        model: activeModel,
         input_tokens: inputTokens,
         output_tokens: outputTokens,
         duration_ms: Date.now() - start,
