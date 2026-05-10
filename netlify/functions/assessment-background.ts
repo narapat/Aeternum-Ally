@@ -74,8 +74,7 @@ const handler = async (event: any) => {
     impactDescription,
     financialDescription,
     user_id,
-    user_email,
-    model = DEFAULT_MODEL
+    user_email
   } = JSON.parse(event.body);
 
   if (!organization_id || !assessment_id || !action || !topic) {
@@ -86,6 +85,20 @@ const handler = async (event: any) => {
   console.log(`[assessment-background] Starting ${action} for org=${organization_id}, assessment=${assessment_id}`);
 
   const admin = createClient(supabaseUrl!, serviceKey!);
+
+  // Look up the org's chosen model + BYOK settings
+  const { data: settings } = await admin
+    .from("organization_ai_settings")
+    .select("model, use_byok, byok_provider, byok_api_key")
+    .eq("organization_id", organization_id)
+    .maybeSingle();
+
+  const activeModel = settings?.model ?? DEFAULT_MODEL;
+  const useBYOK = settings?.use_byok === true && !!settings?.byok_api_key;
+  const resolvedApiKey = useBYOK ? settings!.byok_api_key! : apiKey!;
+  const quotaType = useBYOK ? "byok" : "platform_free";
+
+  console.log(`[assessment-background] Using model=${activeModel}, quotaType=${quotaType}`);
 
   function noThinkingConfig(m: string): object {
     const entry = MODEL_REGISTRY[m];
@@ -118,8 +131,14 @@ const handler = async (event: any) => {
   const joinField = (v: string | string[]): string =>
     Array.isArray(v) ? v.join(", ") : (v ?? "");
 
+  function estimateCost(m: string, inputTokens: number, outputTokens: number): number {
+    const p = MODEL_REGISTRY[m];
+    if (!p) return 0;
+    return (inputTokens * p.input + outputTokens * p.output) / 1_000_000;
+  }
+
   try {
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = new GoogleGenAI({ apiKey: resolvedApiKey });
 
     // Update status to processing
     const updateData: any = { updated_at: new Date().toISOString() };
@@ -204,8 +223,8 @@ ${(qualityCheckContext.issues as any[]).map((i: any) =>
 
       console.log(`[assessment-background] Calling Gemini for autofill (impact & financial in parallel)...`);
       const [impactResp, financialResp] = await Promise.all([
-        ai.models.generateContent({ model, contents: impactPrompt, config: noThinkingConfig(model) }),
-        ai.models.generateContent({ model, contents: financialPrompt, config: noThinkingConfig(model) }),
+        ai.models.generateContent({ model: activeModel, contents: impactPrompt, config: noThinkingConfig(activeModel) }),
+        ai.models.generateContent({ model: activeModel, contents: financialPrompt, config: noThinkingConfig(activeModel) }),
       ]);
 
       totalInputTokens += Number(impactResp.usageMetadata?.promptTokenCount ?? 0);
@@ -292,10 +311,10 @@ Return ONLY valid JSON, no markdown:
 
       console.log(`[assessment-background] Calling Gemini for scoring...`);
       const response = await ai.models.generateContent({
-        model,
+        model: activeModel,
         contents: prompt,
         config: {
-          ...noThinkingConfig(model),
+          ...noThinkingConfig(activeModel),
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
@@ -392,10 +411,13 @@ Return ONLY valid JSON, no markdown:
       user_email: user_email || null,
       action: `assessment_${action}_job`,
       provider: "gemini",
-      model,
+      model: activeModel,
       input_tokens: totalInputTokens,
       output_tokens: totalOutputTokens,
       duration_ms: Date.now() - start,
+      estimated_cost_usd: Number(estimateCost(activeModel, totalInputTokens, totalOutputTokens).toFixed(6)),
+      quota_type: quotaType,
+      success: true
     });
 
   } catch (error: any) {
