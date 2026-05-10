@@ -49,8 +49,9 @@ const handler = async (event: any) => {
     try {
       const cleaned = text.replace(/^```json\s*/, "").replace(/\s*```$/, "");
       return JSON.parse(cleaned);
-    } catch (e) {
-      console.warn("[report-background] Failed to parse AI JSON:", e);
+    } catch (e: any) {
+      console.warn("[report-background] Failed to parse AI JSON. Length:", text.length, "Error:", e.message);
+      console.warn("[report-background] Snippet of end:", text.slice(-100));
       return fallback;
     }
   }
@@ -150,7 +151,7 @@ const handler = async (event: any) => {
         Write a structured narrative disclosure for this single topic as JSON with:
         - topicId: the short code only — "${topicCode}"
         - topicName: the full string — "${a.topic}"
-        - disclosureContent: 200-300 word narrative following the structure below.
+        - disclosureContent: A concise narrative (approx 200-300 words total) following the structure below. Keep each section brief.
 
         You MUST follow these safety rules:
         - Do not invent policies, actions, targets, or historical data.
