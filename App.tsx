@@ -715,7 +715,11 @@ const App: React.FC = () => {
           </div>
         </main>
       </div>
-      <AllyAssistant />
+      <AllyAssistant 
+        userEmail={user?.email} 
+        companyName={profile.data.name} 
+        userRole={currentUserRole || undefined} 
+      />
     </div>
   );
 };

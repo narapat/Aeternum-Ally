@@ -1,7 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, Send, Bot, HelpCircle, AlertTriangle, Sparkles, Loader2 } from 'lucide-react';
 
-export const AllyAssistant: React.FC = () => {
+interface AllyAssistantProps {
+  userEmail?: string;
+  companyName?: string;
+  userRole?: string;
+}
+
+export const AllyAssistant: React.FC<AllyAssistantProps> = ({ userEmail, companyName, userRole }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -80,7 +86,12 @@ export const AllyAssistant: React.FC = () => {
         body: JSON.stringify({
           messages: [...messages, { role: 'user', text: textToSend }],
           context: window.location.pathname,
-          errors: ''
+          errors: '',
+          userInfo: {
+            email: userEmail,
+            company: companyName,
+            role: userRole
+          }
         })
       });
 

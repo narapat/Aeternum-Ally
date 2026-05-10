@@ -12,7 +12,7 @@ export const handler = async (event: any) => {
   }
 
   try {
-    const { messages, context, errors } = JSON.parse(event.body);
+    const { messages, context, errors, userInfo } = JSON.parse(event.body);
 
     if (!messages || !Array.isArray(messages)) {
       return { statusCode: 400, body: "Missing or invalid messages array" };
@@ -95,6 +95,9 @@ export const handler = async (event: any) => {
         subject: `Support Request / Feedback from Ally Assistant`,
         html: `
           <h3>Support Request / Feedback</h3>
+          <p><strong>User Email:</strong> ${userInfo?.email || "N/A"}</p>
+          <p><strong>Company:</strong> ${userInfo?.company || "N/A"}</p>
+          <p><strong>Role:</strong> ${userInfo?.role || "N/A"}</p>
           <p><strong>Latest User Input:</strong> ${lastUserMessage}</p>
           <p><strong>Context:</strong> ${context || "N/A"}</p>
           <p><strong>Captured Errors:</strong> ${errors || "None"}</p>
