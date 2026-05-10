@@ -826,12 +826,12 @@ async function triggerReportGeneration(event: any, { organization_id, profile, m
   console.log(`[api] Triggering background report at ${url}`);
   
   try {
-    const resp = await fetch(url, {
+    fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ organization_id, profile, materialAssessments }),
-    });
-    console.log(`[api] Background function trigger status: ${resp.status}`);
+    }).then(resp => console.log(`[api] Background function trigger status: ${resp.status}`))
+      .catch(e => console.error("[api] Failed to trigger background function:", e));
   } catch (e) {
     console.error("[api] Failed to trigger background function:", e);
   }
@@ -851,12 +851,12 @@ async function triggerDMAAnalysis(event: any, { organization_id, profile, materi
   console.log(`[api] Triggering background DMA analysis at ${url}`);
   
   try {
-    const resp = await fetch(url, {
+    fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ organization_id, profile, materialAssessments, bmcItems, swotItems }),
-    });
-    console.log(`[api] Background function trigger status: ${resp.status}`);
+    }).then(resp => console.log(`[api] Background function trigger status: ${resp.status}`))
+      .catch(e => console.error("[api] Failed to trigger background function:", e));
   } catch (e) {
     console.error("[api] Failed to trigger background function:", e);
   }
