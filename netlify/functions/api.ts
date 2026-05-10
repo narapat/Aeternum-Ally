@@ -285,6 +285,8 @@ async function runAction(
       return generateKPISuggestions(ai, model, params);
     case "triggerReportGeneration":
       return triggerReportGeneration(event, { organization_id, ...params });
+    case "triggerDMAAnalysis":
+      return triggerDMAAnalysis(event, { organization_id, ...params });
     case "analyzeTopicQuality":
       return analyzeTopicQuality(ai, model, params);
     case "analyzeDMASynthesis":
@@ -841,7 +843,30 @@ async function triggerReportGeneration(event: any, { organization_id, profile, m
   };
 }
 
-// ── Shared helpers for DMA analysis ──────────────────────────────────────────
+async function triggerDMAAnalysis(event: any, { organization_id, profile, materialAssessments, bmcItems, swotItems }: any) {
+  const host = event.headers.host || event.headers.Host;
+  const protocol = host.startsWith('localhost') ? 'http' : 'https';
+  const url = `${protocol}://${host}/.netlify/functions/dma-background`;
+  
+  console.log(`[api] Triggering background DMA analysis at ${url}`);
+  
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id, profile, materialAssessments, bmcItems, swotItems }),
+    });
+    console.log(`[api] Background function trigger status: ${resp.status}`);
+  } catch (e) {
+    console.error("[api] Failed to trigger background function:", e);
+  }
+
+  return {
+    result: { message: "DMA analysis started" },
+    inputTokens: 0,
+    outputTokens: 0,
+  };
+}
 
 function buildDMACompanySection(profile: any, bmcItems: any, swotItems: any): string {
   const companyCtx = profile ? buildCompanyContext(profile) : "";
