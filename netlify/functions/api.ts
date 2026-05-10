@@ -857,6 +857,11 @@ async function triggerDMAAnalysis(event: any, { organization_id, profile, materi
   const url = `${protocol}://${host}/.netlify/functions/dma-background`;
   
   console.log(`[api] Triggering background DMA analysis at ${url}`);
+
+  const admin = createClient(supabaseUrl!, serviceKey!);
+  await admin
+    .from("dma_analysis_jobs")
+    .upsert({ organization_id, status: "processing", quality_result: [], updated_at: new Date().toISOString() }, { onConflict: "organization_id" });
   
   try {
     fetch(url, {
@@ -882,6 +887,11 @@ async function triggerAssessmentAutofill(event: any, { organization_id, assessme
   const url = `${protocol}://${host}/.netlify/functions/assessment-background`;
   
   console.log(`[api] Triggering background assessment autofill at ${url}`);
+
+  const admin = createClient(supabaseUrl!, serviceKey!);
+  await admin
+    .from("assessment_ai_jobs")
+    .upsert({ organization_id, assessment_id, topic, autofill_status: "processing", updated_at: new Date().toISOString() }, { onConflict: "organization_id,assessment_id" });
   
   try {
     fetch(url, {
@@ -907,6 +917,11 @@ async function triggerAssessmentScoring(event: any, { organization_id, assessmen
   const url = `${protocol}://${host}/.netlify/functions/assessment-background`;
   
   console.log(`[api] Triggering background assessment scoring at ${url}`);
+
+  const admin = createClient(supabaseUrl!, serviceKey!);
+  await admin
+    .from("assessment_ai_jobs")
+    .upsert({ organization_id, assessment_id, topic, scoring_status: "processing", updated_at: new Date().toISOString() }, { onConflict: "organization_id,assessment_id" });
   
   try {
     fetch(url, {
