@@ -8,9 +8,9 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DEFAULT_MODEL = "gemini-2.5-flash";
 
 const MODEL_REGISTRY: Record<string, { input: number; output: number; canDisableThinking: boolean }> = {
-  "gemini-2.5-flash-lite": { input: 0.10, output: 0.40,  canDisableThinking: true  },
+  "gemini-2.5-flash-lite": { input: 0.10, output: 0.40,  canDisableThinking: false },
   "gemini-2.5-flash":      { input: 0.30, output: 2.50,  canDisableThinking: true  },
-  "gemini-2.5-pro":        { input: 1.25, output: 10.00, canDisableThinking: false },
+  "gemini-2.5-pro":        { input: 1.25, output: 10.00, canDisableThinking: true  },
 };
 
 const handler = async (event: any) => {
@@ -133,6 +133,7 @@ const handler = async (event: any) => {
         config: {
           ...noThinkingConfig(activeModel),
           responseMimeType: "application/json",
+          maxOutputTokens: 1000,
           responseSchema: {
             type: Type.OBJECT,
             properties: {
@@ -140,6 +141,7 @@ const handler = async (event: any) => {
               summary: { type: Type.STRING },
               issues: {
                 type: Type.ARRAY,
+                maxItems: 5,
                 items: {
                   type: Type.OBJECT,
                   properties: {
@@ -201,6 +203,7 @@ const handler = async (event: any) => {
       config: {
         ...noThinkingConfig(activeModel),
         responseMimeType: "application/json",
+        maxOutputTokens: 1000,
         responseSchema: {
           type: Type.OBJECT,
           properties: {
