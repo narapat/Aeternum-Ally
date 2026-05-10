@@ -480,6 +480,12 @@ const statusConfig = {
     border: "border-l-emerald-500",
     bg: "bg-emerald-50 dark:bg-emerald-950/30",
   },
+  fail: {
+    icon: <XCircle className="w-4 h-4 text-slate-500" />,
+    label: "Failed",
+    border: "border-l-slate-500",
+    bg: "bg-slate-50 dark:bg-slate-900/30",
+  },
 };
 
 const QualityCheckSection: React.FC<{
