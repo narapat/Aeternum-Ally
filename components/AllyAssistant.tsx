@@ -9,7 +9,7 @@ export const AllyAssistant: React.FC = () => {
   const bubbleRef = useRef<HTMLDivElement>(null);
 
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant', text: string }>>([
-    { role: 'assistant', text: "Hi! I'm **Ally**. How can I help you today?" }
+    { role: 'assistant', text: "Hi! I'm **Ally**. How can I help you today?\n\nYou can also refer to the [User Manual](https://github.com/narapat/Aeternum-Ally/blob/main/Docs%20v1.1.0/USER_MANUAL.md) for guidance!" }
   ]);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);

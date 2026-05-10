@@ -66,7 +66,7 @@ export const handler = async (event: any) => {
         User Question:
         ${question}
 
-        Provide a helpful, concise, and friendly answer. If you don't know based on the documentation, say so and suggest they use the "Report an issue" option to contact support.
+        Provide a helpful, concise, and friendly answer. If you don't know based on the documentation, say so and suggest they check the [User Manual](https://github.com/narapat/Aeternum-Ally/blob/main/Docs%20v1.1.0/USER_MANUAL.md) or use the "Report an issue" option to contact support.
       `;
 
       const response = await ai.models.generateContent({
