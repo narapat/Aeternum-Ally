@@ -850,7 +850,7 @@ async function triggerReportGeneration(event: any, { organization_id, profile, m
   }
 
   return {
-    result: { message: "Report generation started" },
+    result: { message: "Report generation started", triggeredUrl: url },
     inputTokens: 0,
     outputTokens: 0,
   };
