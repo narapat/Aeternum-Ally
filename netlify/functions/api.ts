@@ -168,7 +168,7 @@ const handler = async (event: any) => {
 
   try {
     const outcome = await Promise.race([
-      runAction(ai, model, action, params),
+      runAction(ai, model, action, params, event),
       fencePromise,
     ]);
     clearTimeout(fenceId!);
@@ -266,7 +266,8 @@ async function runAction(
   ai: GoogleGenAI,
   model: string,
   action: string,
-  params: any
+  params: any,
+  event: any
 ): Promise<{ result: any; inputTokens: number; outputTokens: number }> {
   switch (action) {
     case "generateAssessmentSuggestions":
