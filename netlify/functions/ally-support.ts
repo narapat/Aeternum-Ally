@@ -6,6 +6,16 @@ const apiKey = process.env.GEMINI_API_KEY;
 const resendKey = process.env.RESEND_API_KEY;
 const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'noreply@aeternumally.com';
 
+function redactSecrets(text: string): string {
+  if (!text) return text;
+  let redacted = text;
+  // Redact potential passwords/keys in "label: value" format
+  redacted = redacted.replace(/(password|secret|key|cred|credential|token)["']?\s*[:=]\s*["']?([^\s"']+)["']?/gi, '$1: ***');
+  // Redact potential credit card numbers
+  redacted = redacted.replace(/\b(?:\d[ -]*?){13,16}\b/g, '***');
+  return redacted;
+}
+
 export const handler = async (event: any) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
@@ -65,7 +75,8 @@ export const handler = async (event: any) => {
          Do NOT include this tag unless you have the actual feedback to send.
       5. When explaining how to use a module (like DMA) or answering based on the manual, DO NOT just throw the whole text at the user. Give a brief summary or the first step, and ask the user if they need to know more or if they want to explore that specific topic. Keep it interactive and conversational!
       6. Refuse to answer questions that are not related to the Aeternum Ally platform, general sustainability concepts (ESRS/CSRD), or support. If a user asks risky, harmful, inappropriate, or completely off-topic questions, politely decline and steer them back to how you can help them with the platform.
-      7. Always maintain the persona of an AI assistant. Remind the user that you are an AI and can sometimes make mistakes, but you will try your best to help them succeed!
+      7. Always maintain the persona of an AI assistant. Remind the user that you are an AI and can sometimes make mistakes, but you will try her best to help them succeed!
+      8. DO NOT ask the user for any secrets, credentials, passwords, or highly confidential PII (Personally Identifiable Information). If the user shares any such information, remind them not to do so.
     `;
 
     // Map conversation history to Gemini format
@@ -101,13 +112,13 @@ export const handler = async (event: any) => {
           <p><strong>User Email:</strong> ${userInfo?.email || "N/A"}</p>
           <p><strong>Company:</strong> ${userInfo?.company || "N/A"}</p>
           <p><strong>Role:</strong> ${userInfo?.role || "N/A"}</p>
-          <p><strong>Latest User Input:</strong> ${lastUserMessage}</p>
+          <p><strong>Latest User Input:</strong> ${redactSecrets(lastUserMessage)}</p>
           <p><strong>Context:</strong> ${context || "N/A"}</p>
           <p><strong>Captured Errors:</strong> ${errors || "None"}</p>
           <hr/>
           <h4>Full Conversation History:</h4>
           <ul>
-            ${messages.map((m: any) => `<li><strong>${m.role}:</strong> ${m.text}</li>`).join('')}
+             ${messages.map((m: any) => `<li><strong>${m.role}:</strong> ${redactSecrets(m.text)}</li>`).join('')}
           </ul>
         `,
       };
