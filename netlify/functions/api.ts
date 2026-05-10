@@ -282,7 +282,7 @@ async function runAction(
     case "generateKPISuggestions":
       return generateKPISuggestions(ai, model, params);
     case "triggerReportGeneration":
-      return triggerReportGeneration(params);
+      return triggerReportGeneration(event, params);
     case "analyzeTopicQuality":
       return analyzeTopicQuality(ai, model, params);
     case "analyzeDMASynthesis":
@@ -814,17 +814,22 @@ Return ONLY valid JSON, no markdown:
   }
 }
 
-async function triggerReportGeneration({ organization_id, profile, materialAssessments }: any) {
-  const url = `${process.env.URL}/.netlify/functions/report-background`;
+async function triggerReportGeneration(event: any, { organization_id, profile, materialAssessments }: any) {
+  const host = event.headers.host || event.headers.Host;
+  const protocol = host.startsWith('localhost') ? 'http' : 'https';
+  const url = `${protocol}://${host}/.netlify/functions/report-background`;
+  
+  console.log(`[api] Triggering background report at ${url}`);
   
   try {
-    await fetch(url, {
+    const resp = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ organization_id, profile, materialAssessments }),
     });
+    console.log(`[api] Background function trigger status: ${resp.status}`);
   } catch (e) {
-    console.error("Failed to trigger background function:", e);
+    console.error("[api] Failed to trigger background function:", e);
   }
 
   return {
