@@ -338,79 +338,10 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
                 </div>
             </section>
 
-            {/* Section 3: Strategic Insight & Recommended Actions */}
-            {generatedContent?.dmaInsight && (
-                <section className="mt-8 break-before-page">
-                    <div className="flex items-center gap-3 mb-6 border-b border-slate-200 pb-2">
-                        <div className="w-8 h-8 bg-slate-900 text-white flex items-center justify-center font-bold text-sm rounded">3</div>
-                        <h2 className="text-xl font-bold uppercase tracking-wide">Strategic Insight & Recommended Actions</h2>
-                    </div>
-
-                    <div className="space-y-6">
-                        {generatedContent?.dmaInsight?.strategicInsight && (
-                            <div className="prose max-w-none text-sm md:text-base text-justify text-slate-700">
-                                <h4 className="font-bold text-slate-900 mb-2">Strategic Summary</h4>
-                                <p className="whitespace-pre-wrap">{generatedContent.dmaInsight.strategicInsight.summary}</p>
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                                    <div>
-                                        <h4 className="font-bold text-slate-900 mb-2">Key Risks</h4>
-                                        <ul className="list-disc pl-5 space-y-1">
-                                            {generatedContent.dmaInsight.strategicInsight.keyRisks?.map((risk: string, i: number) => (
-                                                <li key={i}>{risk}</li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                    <div>
-                                        <h4 className="font-bold text-slate-900 mb-2">Opportunities</h4>
-                                        <ul className="list-disc pl-5 space-y-1">
-                                            {generatedContent.dmaInsight.strategicInsight.opportunities?.map((opp: string, i: number) => (
-                                                <li key={i}>{opp}</li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                </div>
-
-                                <h4 className="font-bold text-slate-900 mt-4 mb-2">Bottom Line</h4>
-                                <p className="font-medium text-slate-900 bg-slate-50 p-3 rounded-lg border-l-4 border-slate-900">{generatedContent.dmaInsight.strategicInsight.bottomLine}</p>
-                            </div>
-                        )}
-
-                        {generatedContent?.dmaInsight?.recommendedActions?.length > 0 && (
-                            <div className="prose max-w-none text-sm md:text-base text-justify text-slate-700 mt-6">
-                                <h4 className="font-bold text-slate-900 mb-2">Recommended Actions</h4>
-                                <div className="space-y-4">
-                                    {generatedContent.dmaInsight.recommendedActions.map((action: any, i: number) => (
-                                        <div key={i} className="bg-slate-50 p-4 rounded-lg border border-slate-200 break-inside-avoid">
-                                            <div className="flex justify-between items-start">
-                                                <h5 className="font-bold text-slate-900">{action.title}</h5>
-                                                <span className={`text-xs px-2 py-1 rounded font-bold uppercase ${
-                                                    action.priority === 'high' ? 'bg-red-100 text-red-800' :
-                                                    action.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                                    'bg-green-100 text-green-800'
-                                                }`}>
-                                                    {action.priority}
-                                                </span>
-                                            </div>
-                                            <p className="text-sm text-slate-700 mt-1">{action.description}</p>
-                                            <div className="flex gap-4 mt-2 text-xs text-slate-500">
-                                                <span><strong>Type:</strong> {action.type}</span>
-                                                <span><strong>Ref:</strong> {action.esrs_ref}</span>
-                                                <span><strong>Time:</strong> {action.estimated_time}</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </section>
-            )}
-
-            {/* Section 4: Topical Disclosures */}
+            {/* Section 3: Topical Disclosures */}
             <section>
                  <div className="flex items-center gap-3 mb-6 border-b border-slate-200 pb-2">
-                    <div className="w-8 h-8 bg-slate-900 text-white flex items-center justify-center font-bold text-sm rounded">4</div>
+                    <div className="w-8 h-8 bg-slate-900 text-white flex items-center justify-center font-bold text-sm rounded">3</div>
                     <h2 className="text-xl font-bold uppercase tracking-wide">Topical Disclosures (Policies & Actions)</h2>
                 </div>
 
@@ -437,15 +368,15 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
                                     )}
                                 </div>
                             </div>
-                         );
+                         )
                     })}
                 </div>
             </section>
 
-             {/* Section 5: GRI Interoperability Index */}
+             {/* Section 4: GRI Interoperability Index */}
              <section className="break-inside-avoid">
                  <div className="flex items-center gap-3 mb-6 border-b border-slate-200 pb-2">
-                    <div className="w-8 h-8 bg-esg-700 text-white flex items-center justify-center font-bold text-sm rounded">5</div>
+                    <div className="w-8 h-8 bg-esg-700 text-white flex items-center justify-center font-bold text-sm rounded">4</div>
                     <h2 className="text-xl font-bold uppercase tracking-wide text-esg-800">GRI Content Index</h2>
                 </div>
                 

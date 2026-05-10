@@ -74,13 +74,6 @@ const handler = async (event: any) => {
       .from("sustainability_reports")
       .upsert({ organization_id, status: "processing", updated_at: new Date().toISOString() }, { onConflict: "organization_id" });
 
-    // Fetch DMA Insights if available
-    const { data: dmaInsight } = await admin
-      .from("dma_insights")
-      .select("strategic_insight, recommended_actions")
-      .eq("organization_id", organization_id)
-      .maybeSingle();
-
     const ai = new GoogleGenAI({ apiKey: resolvedApiKey });
     const companyContext = `
       Company: ${profile.name}
@@ -139,10 +132,6 @@ const handler = async (event: any) => {
       generalDisclosure: header.generalDisclosure ?? "",
       strategyDisclosure: header.strategyDisclosure ?? "",
       topics: [] as any[],
-      dmaInsight: dmaInsight ? {
-        strategicInsight: dmaInsight.strategic_insight,
-        recommendedActions: dmaInsight.recommended_actions,
-      } : null,
     };
 
     // Save initial structure
