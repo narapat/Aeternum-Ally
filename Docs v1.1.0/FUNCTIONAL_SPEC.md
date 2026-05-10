@@ -182,6 +182,11 @@ A filtered list displaying only topics flagged as material, used as the basis fo
 
 A module that synthesizes the results of all materiality assessments alongside the Business Model Canvas and SWOT analysis. It leverages the AI API to evaluate data consistency, identify systemic risks, and provide actionable strategic insight summaries to help transition from reporting to action.
 
+**Key Functional Behaviors:**
+- **Automated Loading:** Fetches completed analyses on load or triggers a new one if none exist.
+- **Progressive UI:** Shows loading skeletons for Strategic Insight and Recommended Actions immediately while checks run.
+- **Manual Override:** Allows users to force a re-analysis even while a job is processing, with a confirmation prompt.
+
 ---
 
 ## 7. SWOT Analysis Wizard
