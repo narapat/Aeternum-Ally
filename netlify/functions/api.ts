@@ -833,19 +833,24 @@ async function triggerReportGeneration(event: any, { organization_id, profile, m
   
   console.log(`[api] Triggering background report at ${url}`);
   
+  const admin = createClient(supabaseUrl!, serviceKey!);
+  await admin
+    .from("sustainability_reports")
+    .upsert({ organization_id, status: "processing", updated_at: new Date().toISOString() }, { onConflict: "organization_id" });
+
   try {
-    fetch(url, {
+    const resp = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ organization_id, profile, materialAssessments, user_id, user_email }),
-    }).then(resp => console.log(`[api] Background function trigger status: ${resp.status}`))
-      .catch(e => console.error("[api] Failed to trigger background function:", e));
+    });
+    console.log(`[api] Background function trigger status: ${resp.status}`);
   } catch (e) {
     console.error("[api] Failed to trigger background function:", e);
   }
 
   return {
-    result: { message: "Report generation started" },
+    result: { message: "Report generation started", triggeredUrl: url },
     inputTokens: 0,
     outputTokens: 0,
   };
@@ -864,12 +869,12 @@ async function triggerDMAAnalysis(event: any, { organization_id, profile, assess
     .upsert({ organization_id, status: "processing", quality_result: [], updated_at: new Date().toISOString() }, { onConflict: "organization_id" });
   
   try {
-    fetch(url, {
+    const resp = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ organization_id, profile, assessments, bmcData, swotData, user_id, user_email }),
-    }).then(resp => console.log(`[api] Background function trigger status: ${resp.status}`))
-      .catch(e => console.error("[api] Failed to trigger background function:", e));
+    });
+    console.log(`[api] Background function trigger status: ${resp.status}`);
   } catch (e) {
     console.error("[api] Failed to trigger background function:", e);
   }
