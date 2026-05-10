@@ -19,6 +19,11 @@ export const AllyAssistant: React.FC<AllyAssistantProps> = ({ userEmail, company
   ]);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isLoading]);
 
   // Initialize position to bottom right
   useEffect(() => {
@@ -235,6 +240,8 @@ export const AllyAssistant: React.FC<AllyAssistantProps> = ({ userEmail, company
                 </div>
               </div>
             )}
+            
+            <div ref={messagesEndRef} />
 
             {/* Quick Actions (only show if few messages) */}
             {messages.length <= 1 && (
