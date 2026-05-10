@@ -119,7 +119,11 @@ const handler = async (event: any) => {
         - "review": minor concern worth addressing, not blocking
         - "ok": meets minimum ESRS requirements for this topic
 
-        Provide a critical review of this topic assessment.
+        Provide a critical, yet concise review of this topic assessment. 
+        - Keep the 'summary' to 1-2 sentences maximum.
+        - Ensure 'issues' are specific and descriptions are brief (1-2 sentences) and actionable.
+        - Keep the 'recommendation' to a single actionable sentence.
+        Avoid generic auditor speak; be direct and specific to the data provided.
         Return JSON matching the schema.
       `;
 
