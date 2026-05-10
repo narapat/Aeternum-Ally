@@ -120,9 +120,9 @@ const handler = async (event: any) => {
         - "ok": meets minimum ESRS requirements for this topic
 
         Provide a critical, yet concise review of this topic assessment. 
-        - Keep the 'summary' to 1-2 sentences maximum.
-        - Ensure 'issues' are specific, limited to a maximum of 3 items, and descriptions are brief (1-2 sentences) and actionable.
-        - Keep the 'recommendation' to a single actionable sentence.
+        - Keep the 'summary' to 1-2 sentences maximum (max 30 words).
+        - Ensure 'issues' are specific, limited to a maximum of 3 items, and descriptions are brief (1-2 sentences) and actionable (max 30 words per issue).
+        - Keep the 'recommendation' to a single actionable sentence (max 20 words).
         Avoid generic auditor speak; be direct and specific to the data provided.
         The entire JSON response MUST NOT exceed 2000 characters.
         Return JSON matching the schema.
