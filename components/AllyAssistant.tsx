@@ -22,7 +22,7 @@ export const AllyAssistant: React.FC<AllyAssistantProps> = ({ userEmail, company
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [messages, isLoading]);
 
   // Initialize position to bottom right
@@ -210,7 +210,11 @@ export const AllyAssistant: React.FC<AllyAssistantProps> = ({ userEmail, company
           {/* Messages Area */}
           <div className="flex-1 p-4 overflow-y-auto bg-slate-50 dark:bg-slate-900 space-y-4">
             {messages.map((msg, idx) => (
-              <div key={idx} className={`flex gap-2 items-start ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+              <div 
+                key={idx} 
+                ref={idx === messages.length - 1 ? messagesEndRef : null}
+                className={`flex gap-2 items-start ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
+              >
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
                   msg.role === 'user' ? 'bg-slate-300 dark:bg-slate-600' : 'bg-emerald-100 dark:bg-emerald-900'
                 }`}>
@@ -240,8 +244,6 @@ export const AllyAssistant: React.FC<AllyAssistantProps> = ({ userEmail, company
                 </div>
               </div>
             )}
-            
-            <div ref={messagesEndRef} />
 
             {/* Quick Actions (only show if few messages) */}
             {messages.length <= 1 && (
