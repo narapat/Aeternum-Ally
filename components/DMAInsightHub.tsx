@@ -125,6 +125,9 @@ const DMAInsightHub: React.FC<Props> = ({
   const [isInitializing, setIsInitializing] = useState(true);
 
   const runAnalysis = React.useCallback(async () => {
+    if (polling && !window.confirm("An analysis is already in progress. Do you want to stop waiting and start a new one?")) {
+      return;
+    }
     setTopicStates(new Map(assessments.map((a) => [String(a.topic).split(" ")[0], { phase: "loading" } as TopicPhase])));
     setSynthesisState({ phase: "loading" });
     setPolling(true);
@@ -248,7 +251,7 @@ const DMAInsightHub: React.FC<Props> = ({
         </div>
         <button
           onClick={runAnalysis}
-          disabled={isAnalysing || synthesisState.phase === "loading" || polling || isInitializing}
+          disabled={isInitializing}
           className="flex items-center gap-2 text-sm font-medium text-white bg-esg-600 hover:bg-esg-700 border border-transparent rounded-lg px-4 py-2 transition-colors flex-shrink-0 disabled:cursor-not-allowed shadow-sm disabled:bg-esg-300 dark:disabled:bg-slate-700 disabled:text-white/80"
         >
           <RotateCcw className={`w-4 h-4 ${(polling || isAnalysing) ? 'animate-spin' : ''}`} />
