@@ -345,7 +345,6 @@ const SynthesisSection: React.FC<{
       <div className="flex items-center gap-3 py-6 text-sm text-red-600 dark:text-red-400">
         <XCircle className="w-4 h-4 flex-shrink-0" />
         <span>{state.message}</span>
-        <button onClick={onRetry} className="ml-2 underline hover:no-underline flex-shrink-0">Retry</button>
       </div>
     );
   }
