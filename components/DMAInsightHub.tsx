@@ -125,7 +125,7 @@ const DMAInsightHub: React.FC<Props> = ({
   const [isInitializing, setIsInitializing] = useState(true);
 
   const runAnalysis = React.useCallback(async () => {
-    if (polling && !window.confirm("An analysis is already in progress. Do you want to stop waiting and start a new one?")) {
+    if ((polling || isAnalysing) && !window.confirm("An analysis is already in progress. Do you want to stop waiting and start a new one?")) {
       return;
     }
     setTopicStates(new Map(assessments.map((a) => [String(a.topic).split(" ")[0], { phase: "loading" } as TopicPhase])));
@@ -138,7 +138,7 @@ const DMAInsightHub: React.FC<Props> = ({
       setSynthesisState({ phase: "error", message: err instanceof Error ? err.message : "Failed to start analysis." });
       setPolling(false);
     }
-  }, [assessments, profile, bmcData, swotData]);
+  }, [assessments, profile, bmcData, swotData, polling, isAnalysing]);
 
   useEffect(() => {
     const init = async () => {
