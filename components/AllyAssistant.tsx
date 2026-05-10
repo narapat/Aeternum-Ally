@@ -13,6 +13,7 @@ export const AllyAssistant: React.FC = () => {
   ]);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isWaitingForFeedback, setIsWaitingForFeedback] = useState(false);
 
   // Initialize position to bottom right
   useEffect(() => {
@@ -74,20 +75,26 @@ export const AllyAssistant: React.FC = () => {
     setIsLoading(true);
 
     try {
+      const action = isWaitingForFeedback ? 'email' : 'chat';
       const response = await fetch('/.netlify/functions/ally-support', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'chat',
+          action: action,
           question: textToSend,
           context: window.location.pathname,
-          errors: '' // Can be extended to capture real errors
+          errors: ''
         })
       });
 
       const data = await response.json();
       if (response.ok) {
-        setMessages(prev => [...prev, { role: 'assistant', text: data.response }]);
+        if (isWaitingForFeedback) {
+          setMessages(prev => [...prev, { role: 'assistant', text: "Thank you! I've sent your feedback to Support@aeternumally.com." }]);
+          setIsWaitingForFeedback(false);
+        } else {
+          setMessages(prev => [...prev, { role: 'assistant', text: data.response }]);
+        }
       } else {
         setMessages(prev => [...prev, { role: 'assistant', text: "Sorry, I encountered an error. Please try again." }]);
       }
@@ -98,33 +105,9 @@ export const AllyAssistant: React.FC = () => {
     }
   };
 
-  const handleReportIssue = async () => {
-    const text = prompt("Please describe the issue you are facing:");
-    if (!text) return;
-
-    setIsLoading(true);
-    try {
-      const response = await fetch('/.netlify/functions/ally-support', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'email',
-          question: text,
-          context: window.location.pathname,
-          errors: ''
-        })
-      });
-
-      if (response.ok) {
-        setMessages(prev => [...prev, { role: 'assistant', text: "Thank you. Your report has been sent to Support@aeternumally.com." }]);
-      } else {
-        setMessages(prev => [...prev, { role: 'assistant', text: "Failed to send report. Please try again later." }]);
-      }
-    } catch (error) {
-      setMessages(prev => [...prev, { role: 'assistant', text: "Failed to connect to the support service." }]);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleReportIssue = () => {
+    setMessages(prev => [...prev, { role: 'assistant', text: "Please describe the issue you are facing or provide your feedback here in the chat. I will send it to support." }]);
+    setIsWaitingForFeedback(true);
   };
 
   return (
