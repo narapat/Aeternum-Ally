@@ -339,7 +339,7 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
             </section>
 
             {/* Section 3: Strategic Insight & Recommended Actions */}
-            {generatedContent.dmaInsight && (
+            {generatedContent?.dmaInsight && (
                 <section className="mt-8 break-before-page">
                     <div className="flex items-center gap-3 mb-6 border-b border-slate-200 pb-2">
                         <div className="w-8 h-8 bg-slate-900 text-white flex items-center justify-center font-bold text-sm rounded">3</div>
@@ -347,7 +347,7 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
                     </div>
 
                     <div className="space-y-6">
-                        {generatedContent.dmaInsight.strategicInsight && (
+                        {generatedContent?.dmaInsight?.strategicInsight && (
                             <div className="prose max-w-none text-sm md:text-base text-justify text-slate-700">
                                 <h4 className="font-bold text-slate-900 mb-2">Strategic Summary</h4>
                                 <p className="whitespace-pre-wrap">{generatedContent.dmaInsight.strategicInsight.summary}</p>
@@ -376,7 +376,7 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
                             </div>
                         )}
 
-                        {generatedContent.dmaInsight.recommendedActions?.length > 0 && (
+                        {generatedContent?.dmaInsight?.recommendedActions?.length > 0 && (
                             <div className="prose max-w-none text-sm md:text-base text-justify text-slate-700 mt-6">
                                 <h4 className="font-bold text-slate-900 mb-2">Recommended Actions</h4>
                                 <div className="space-y-4">
