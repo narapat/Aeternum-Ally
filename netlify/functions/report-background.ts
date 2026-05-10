@@ -8,7 +8,6 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DEFAULT_MODEL = "gemini-2.5-flash";
 
 const handler = async (event: any) => {
-  // Netlify background functions are triggered by POST
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
@@ -16,21 +15,21 @@ const handler = async (event: any) => {
   const { organization_id, profile, materialAssessments, model = DEFAULT_MODEL } = JSON.parse(event.body);
 
   if (!organization_id || !profile || !materialAssessments) {
-    console.error("Missing required fields in background function");
+    console.error("[report-background] Missing required fields");
     return { statusCode: 400, body: "Missing required fields" };
   }
 
+  console.log(`[report-background] Starting generation for org=${organization_id}, topics=${materialAssessments.length}`);
+
   const admin = createClient(supabaseUrl!, serviceKey!);
 
-  // Helper to parse JSON from AI
   function parseAIJson<T>(text: string | undefined, fallback: T): T {
     if (!text) return fallback;
     try {
-      // Remove markdown code blocks if present
       const cleaned = text.replace(/^```json\s*/, "").replace(/\s*```$/, "");
       return JSON.parse(cleaned);
     } catch (e) {
-      console.warn("Failed to parse AI JSON:", e);
+      console.warn("[report-background] Failed to parse AI JSON:", e);
       return fallback;
     }
   }
@@ -68,6 +67,7 @@ const handler = async (event: any) => {
       2. strategyDisclosure: "Strategy & Business Model" (ESRS 2 SBM-3). Summarise how the company's business model interacts with the material impacts. ~150 words.
     `;
 
+    console.log("[report-background] Requesting header sections...");
     const headerRespPromise = ai.models.generateContent({
       model,
       contents: headerPrompt,
@@ -115,10 +115,14 @@ const handler = async (event: any) => {
       return ai.models.generateContent({ model, contents: prompt, config: topicConfig });
     });
 
+    console.log(`[report-background] Requesting ${topicCalls.length} topical disclosures in parallel...`);
+
     const [headerResp, ...topicResps] = await Promise.all([
       headerRespPromise,
       ...topicCalls
     ]);
+
+    console.log("[report-background] All AI responses received. Parsing...");
 
     const header = parseAIJson(headerResp.text, { generalDisclosure: "", strategyDisclosure: "" });
     const topics = topicResps.map((r: any) => parseAIJson(r.text, { topicId: "", topicName: "", disclosureContent: "" }));
@@ -137,9 +141,10 @@ const handler = async (event: any) => {
 
     if (error) throw error;
 
+    console.log(`[report-background] Successfully completed and saved to DB for org=${organization_id}`);
+
   } catch (error: any) {
-    console.error("Background Report Generation Failed:", error);
-    // Update status to failed
+    console.error("[report-background] Failed:", error);
     await admin
       .from("sustainability_reports")
       .update({ status: "failed", error: error.message || String(error), updated_at: new Date().toISOString() })
