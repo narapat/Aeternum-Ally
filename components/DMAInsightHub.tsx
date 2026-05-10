@@ -14,7 +14,7 @@ import {
   XCircle,
   Zap,
 } from "lucide-react";
-import { analyzeTopicQuality, analyzeDMASynthesis } from "../services/geminiService";
+import { triggerDMAAnalysis, getDMAAnalysisStatus } from "../services/geminiService";
 import type {
   AssessmentData,
   CompanyProfile,
@@ -121,63 +121,102 @@ const DMAInsightHub: React.FC<Props> = ({
       : { phase: "idle" }
   );
 
-  // Incremented on each Re-analyse so stale async callbacks self-cancel
-  const runIdRef = useRef(0);
+  const [polling, setPolling] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
 
-  const runAnalysis = React.useCallback(() => {
-    const runId = ++runIdRef.current;
-
+  const runAnalysis = React.useCallback(async () => {
+    const isCurrentlyAnalysing = [...topicStates.values()].some((s) => s.phase === "loading");
+    if ((polling || isCurrentlyAnalysing) && !window.confirm("An analysis is already in progress. Do you want to stop waiting and start a new one?")) {
+      return;
+    }
     setTopicStates(new Map(assessments.map((a) => [String(a.topic).split(" ")[0], { phase: "loading" } as TopicPhase])));
-    setSynthesisState({ phase: "idle" });
+    setSynthesisState({ phase: "loading" });
+    setPolling(true);
 
-    const doneChecks: QualityCheck[] = [];
-    let settledCount = 0;
-
-    const onTopicSettle = async () => {
-      settledCount++;
-      if (settledCount < assessments.length) return;
-      if (runId !== runIdRef.current) return;
-
-      if (doneChecks.length === 0) {
-        setSynthesisState({ phase: "error", message: "All topic checks failed — unable to synthesise." });
-        return;
-      }
-
-      setSynthesisState({ phase: "loading" });
-      try {
-        const synth = await analyzeDMASynthesis(doneChecks, assessments, profile, bmcData, swotData);
-        if (runId !== runIdRef.current) return;
-        setSynthesisState({ phase: "done", insight: synth.strategicInsight, actions: synth.recommendedActions });
-        onInsightReady?.({ qualityChecks: doneChecks, strategicInsight: synth.strategicInsight, recommendedActions: synth.recommendedActions });
-      } catch (err) {
-        if (runId !== runIdRef.current) return;
-        setSynthesisState({ phase: "error", message: err instanceof Error ? err.message : "Strategic analysis failed." });
-      }
-    };
-
-    assessments.forEach(async (assessment) => {
-      const topicCode = String(assessment.topic).split(" ")[0];
-      try {
-        const check = await analyzeTopicQuality(assessment, profile, bmcData, swotData);
-        if (runId !== runIdRef.current) return;
-        doneChecks.push(check);
-        setTopicStates((prev) => new Map(prev).set(topicCode, { phase: "done", check }));
-        onQualityCheckReady?.(assessment.id, check);
-      } catch (err) {
-        if (runId !== runIdRef.current) return;
-        setTopicStates((prev) =>
-          new Map(prev).set(topicCode, { phase: "error", message: err instanceof Error ? err.message : "Check failed" })
-        );
-      }
-      await onTopicSettle();
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assessments, profile, bmcData, swotData]);
+    try {
+      await triggerDMAAnalysis(profile, assessments, bmcData, swotData);
+    } catch (err) {
+      setSynthesisState({ phase: "error", message: err instanceof Error ? err.message : "Failed to start analysis." });
+      setPolling(false);
+    }
+  }, [assessments, profile, bmcData, swotData, polling, topicStates]);
 
   useEffect(() => {
-    if (!cachedInsight) runAnalysis();
+    const init = async () => {
+      if (cachedInsight) {
+        setIsInitializing(false);
+        return;
+      }
+      
+      const data = await getDMAAnalysisStatus();
+      if (data) {
+        if (data.status === 'completed' && data.insight_result) {
+          const map = new Map(topicStates);
+          (data.quality_result || []).forEach((c: any) => {
+            map.set(c.topicCode, { phase: "done", check: c });
+          });
+          setTopicStates(map);
+          setSynthesisState({ phase: "done", insight: data.insight_result.strategicInsight, actions: data.insight_result.recommendedActions });
+          setIsInitializing(false);
+          return;
+        } else if (data.status === 'processing') {
+          const map = new Map(topicStates);
+          (data.quality_result || []).forEach((c: any) => {
+            map.set(c.topicCode, { phase: "done", check: c });
+          });
+          assessments.forEach((a) => {
+            const code = String(a.topic).split(" ")[0];
+            if (!map.has(code)) {
+              map.set(code, { phase: "loading" });
+            }
+          });
+          setTopicStates(map);
+          setSynthesisState({ phase: "loading" });
+          setPolling(true);
+          setIsInitializing(false);
+          return;
+        }
+      }
+      // If no data or failed, run analysis
+      runAnalysis();
+      setIsInitializing(false);
+    };
+    init();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [cachedInsight]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (polling) {
+      interval = setInterval(async () => {
+        const data = await getDMAAnalysisStatus();
+        if (data) {
+          // Update topics progressively
+          const map = new Map(topicStates);
+          let updated = false;
+          (data.quality_result || []).forEach((c: any) => {
+            const current = map.get(c.topicCode);
+            if (!current || current.phase !== 'done') {
+              map.set(c.topicCode, { phase: "done", check: c });
+              updated = true;
+            }
+          });
+          if (updated) {
+            setTopicStates(map);
+          }
+
+          if (data.status === 'completed') {
+            setSynthesisState({ phase: "done", insight: data.insight_result.strategicInsight, actions: data.insight_result.recommendedActions });
+            setPolling(false);
+          } else if (data.status === 'failed') {
+            setSynthesisState({ phase: "error", message: data.error || "Analysis failed" });
+            setPolling(false);
+          }
+        }
+      }, 3000); // Poll every 3 seconds
+    }
+    return () => clearInterval(interval);
+  }, [polling, topicStates]);
 
   // Derived
   const completedChecks = assessments
@@ -213,10 +252,10 @@ const DMAInsightHub: React.FC<Props> = ({
         </div>
         <button
           onClick={runAnalysis}
-          disabled={isAnalysing || synthesisState.phase === "loading"}
-          className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-esg-600 dark:hover:text-esg-400 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-1.5 transition-colors flex-shrink-0 disabled:opacity-40"
+          disabled={isInitializing}
+          className="flex items-center gap-2 text-sm font-medium text-white bg-esg-600 hover:bg-esg-700 border border-transparent rounded-lg px-4 py-2 transition-colors flex-shrink-0 disabled:cursor-not-allowed shadow-sm disabled:bg-esg-300 dark:disabled:bg-slate-700 disabled:text-white/80"
         >
-          <RotateCcw className="w-3 h-3" />
+          <RotateCcw className={`w-4 h-4 ${(polling || isAnalysing) ? 'animate-spin' : ''}`} />
           Re-analyse
         </button>
       </div>
@@ -291,9 +330,55 @@ const SynthesisSection: React.FC<{
 
   if (state.phase === "loading") {
     return (
-      <div className="flex items-center gap-3 py-8 text-slate-500 dark:text-slate-400 text-sm">
-        <Loader2 className="w-4 h-4 animate-spin flex-shrink-0 text-esg-500" />
-        Analysing strategic context across all topics…
+      <div className="space-y-8">
+        <section>
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+            <Lightbulb className="w-5 h-5 text-amber-500" />
+            Strategic Insight
+          </h2>
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 space-y-5">
+            <div className="animate-pulse space-y-3">
+              <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
+              <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
+              
+              <div className="grid sm:grid-cols-2 gap-4 pt-2">
+                <div className="space-y-2">
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/4"></div>
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
+                </div>
+                <div className="space-y-2">
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/4"></div>
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3 pt-4 text-slate-500 dark:text-slate-400 text-sm border-t border-slate-100 dark:border-slate-700">
+              <Loader2 className="w-4 h-4 animate-spin flex-shrink-0 text-esg-500" />
+              Synthesizing strategic context across all topics…
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+            <Zap className="w-5 h-5 text-esg-500" />
+            Recommended Actions
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 space-y-3">
+                <div className="animate-pulse space-y-2">
+                  <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/4"></div>
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     );
   }
@@ -303,7 +388,6 @@ const SynthesisSection: React.FC<{
       <div className="flex items-center gap-3 py-6 text-sm text-red-600 dark:text-red-400">
         <XCircle className="w-4 h-4 flex-shrink-0" />
         <span>{state.message}</span>
-        <button onClick={onRetry} className="ml-2 underline hover:no-underline flex-shrink-0">Retry</button>
       </div>
     );
   }

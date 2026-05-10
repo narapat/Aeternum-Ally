@@ -84,6 +84,46 @@ export const generateAssessmentScoring = async (
   }
 };
 
+export const triggerAssessmentAutofill = async (
+  profile: CompanyProfile,
+  topic: ESRSTopic,
+  assessmentId: string,
+  qualityCheckContext?: QualityCheck,
+): Promise<{ message: string }> => {
+  return await callApi("triggerAssessmentAutofill", { profile, topic, assessment_id: assessmentId, qualityCheckContext });
+};
+
+export const triggerAssessmentScoring = async (
+  topic: ESRSTopic,
+  profile: CompanyProfile,
+  bmcData: SustainabilityBusinessModel,
+  swotData: SwotAnalysis,
+  impactDescription: string,
+  financialDescription: string,
+  assessmentId: string,
+): Promise<{ message: string }> => {
+  return await callApi("triggerAssessmentScoring", {
+    topic, topicTitle: String(topic).replace(/^[A-Z0-9]+ /, ""), profile, bmcData, swotData,
+    impactDescription, financialDescription, assessment_id: assessmentId
+  });
+};
+
+export const getAssessmentJobStatus = async (assessmentId: string): Promise<any> => {
+  if (!currentOrgId) return null;
+  const { data, error } = await supabase
+    .from("assessment_ai_jobs")
+    .select("*")
+    .eq("organization_id", currentOrgId)
+    .eq("assessment_id", assessmentId)
+    .maybeSingle();
+    
+  if (error) {
+    console.warn("getAssessmentJobStatus failed:", error.message);
+    return null;
+  }
+  return data;
+};
+
 export const generateCanvasSuggestion = async (
   profile: CompanyProfile,
   fieldLabel: string
@@ -151,6 +191,30 @@ export const getReportStatus = async (): Promise<{ status: string; result?: any;
     
   if (error) {
     console.warn("getReportStatus failed:", error.message);
+    return null;
+  }
+  return data;
+};
+
+export const triggerDMAAnalysis = async (
+  profile: CompanyProfile,
+  assessments: AssessmentData[],
+  bmcData: any,
+  swotData: any
+): Promise<{ message: string }> => {
+  return await callApi("triggerDMAAnalysis", { profile, assessments, bmcData, swotData });
+};
+
+export const getDMAAnalysisStatus = async (): Promise<{ status: string; quality_result?: any[]; insight_result?: any; error?: string } | null> => {
+  if (!currentOrgId) return null;
+  const { data, error } = await supabase
+    .from("dma_analysis_jobs")
+    .select("status, quality_result, insight_result, error")
+    .eq("organization_id", currentOrgId)
+    .maybeSingle();
+    
+  if (error) {
+    console.warn("getDMAAnalysisStatus failed:", error.message);
     return null;
   }
   return data;

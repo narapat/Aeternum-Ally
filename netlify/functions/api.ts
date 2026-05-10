@@ -168,7 +168,7 @@ const handler = async (event: any) => {
 
   try {
     const outcome = await Promise.race([
-      runAction(ai, model, action, params, event, organization_id),
+      runAction(ai, model, action, params, event, organization_id, user),
       fencePromise,
     ]);
     clearTimeout(fenceId!);
@@ -203,22 +203,25 @@ const handler = async (event: any) => {
   // 6. Log the call (best-effort; never fail the response if logging fails)
   // ------------------------------------------------------------------
   try {
-    await admin.from("ai_usage_log").insert({
-      organization_id,
-      user_id: user.id,
-      user_email: user.email ?? null,
-      action,
-      provider: "gemini",
-      model,
-      input_tokens: inputTokens || null,
-      output_tokens: outputTokens || null,
-      duration_ms: durationMs,
-      success,
-      error_message: success ? null : errorMessage,
-      http_status: success ? null : upstreamStatus,
-      estimated_cost_usd: success ? Number(estimateCost(model, inputTokens, outputTokens).toFixed(6)) : 0,
-      quota_type: quotaType,
-    });
+    const skipLogging = action.startsWith("trigger") || action === "getAssessmentJobStatus";
+    if (!skipLogging) {
+      await admin.from("ai_usage_log").insert({
+        organization_id,
+        user_id: user.id,
+        user_email: user.email ?? null,
+        action,
+        provider: "gemini",
+        model,
+        input_tokens: inputTokens || null,
+        output_tokens: outputTokens || null,
+        duration_ms: durationMs,
+        success,
+        error_message: success ? null : errorMessage,
+        http_status: success ? null : upstreamStatus,
+        estimated_cost_usd: success ? Number(estimateCost(model, inputTokens, outputTokens).toFixed(6)) : 0,
+        quota_type: quotaType,
+      });
+    }
   } catch (logErr) {
     console.warn("Failed to log AI usage:", logErr);
   }
@@ -268,7 +271,8 @@ async function runAction(
   action: string,
   params: any,
   event: any,
-  organization_id: string
+  organization_id: string,
+  user: { id: string; email?: string | null }
 ): Promise<{ result: any; inputTokens: number; outputTokens: number }> {
   switch (action) {
     case "generateAssessmentSuggestions":
@@ -284,7 +288,13 @@ async function runAction(
     case "generateKPISuggestions":
       return generateKPISuggestions(ai, model, params);
     case "triggerReportGeneration":
-      return triggerReportGeneration(event, { organization_id, ...params });
+      return triggerReportGeneration(event, { organization_id, user_id: user.id, user_email: user.email ?? null, ...params });
+    case "triggerDMAAnalysis":
+      return triggerDMAAnalysis(event, { organization_id, user_id: user.id, user_email: user.email ?? null, ...params });
+    case "triggerAssessmentAutofill":
+      return triggerAssessmentAutofill(event, { organization_id, user_id: user.id, user_email: user.email ?? null, ...params });
+    case "triggerAssessmentScoring":
+      return triggerAssessmentScoring(event, { organization_id, user_id: user.id, user_email: user.email ?? null, ...params });
     case "analyzeTopicQuality":
       return analyzeTopicQuality(ai, model, params);
     case "analyzeDMASynthesis":
@@ -816,7 +826,7 @@ Return ONLY valid JSON, no markdown:
   }
 }
 
-async function triggerReportGeneration(event: any, { organization_id, profile, materialAssessments }: any) {
+async function triggerReportGeneration(event: any, { organization_id, profile, materialAssessments, user_id, user_email }: any) {
   const host = event.headers.host || event.headers.Host;
   const protocol = host.startsWith('localhost') ? 'http' : 'https';
   const url = `${protocol}://${host}/.netlify/functions/report-background`;
@@ -824,12 +834,12 @@ async function triggerReportGeneration(event: any, { organization_id, profile, m
   console.log(`[api] Triggering background report at ${url}`);
   
   try {
-    const resp = await fetch(url, {
+    fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ organization_id, profile, materialAssessments }),
-    });
-    console.log(`[api] Background function trigger status: ${resp.status}`);
+      body: JSON.stringify({ organization_id, profile, materialAssessments, user_id, user_email }),
+    }).then(resp => console.log(`[api] Background function trigger status: ${resp.status}`))
+      .catch(e => console.error("[api] Failed to trigger background function:", e));
   } catch (e) {
     console.error("[api] Failed to trigger background function:", e);
   }
@@ -841,7 +851,95 @@ async function triggerReportGeneration(event: any, { organization_id, profile, m
   };
 }
 
-// ── Shared helpers for DMA analysis ──────────────────────────────────────────
+async function triggerDMAAnalysis(event: any, { organization_id, profile, assessments, bmcData, swotData, user_id, user_email }: any) {
+  const host = event.headers.host || event.headers.Host;
+  const protocol = host.startsWith('localhost') ? 'http' : 'https';
+  const url = `${protocol}://${host}/.netlify/functions/dma-background`;
+  
+  console.log(`[api] Triggering background DMA analysis at ${url}`);
+
+  const admin = createClient(supabaseUrl!, serviceKey!);
+  await admin
+    .from("dma_analysis_jobs")
+    .upsert({ organization_id, status: "processing", quality_result: [], updated_at: new Date().toISOString() }, { onConflict: "organization_id" });
+  
+  try {
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id, profile, assessments, bmcData, swotData, user_id, user_email }),
+    }).then(resp => console.log(`[api] Background function trigger status: ${resp.status}`))
+      .catch(e => console.error("[api] Failed to trigger background function:", e));
+  } catch (e) {
+    console.error("[api] Failed to trigger background function:", e);
+  }
+
+  return {
+    result: { message: "DMA analysis started" },
+    inputTokens: 0,
+    outputTokens: 0,
+  };
+}
+
+async function triggerAssessmentAutofill(event: any, { organization_id, assessment_id, topic, profile, qualityCheckContext, user_id, user_email }: any) {
+  const host = event.headers.host || event.headers.Host;
+  const protocol = host.startsWith('localhost') ? 'http' : 'https';
+  const url = `${protocol}://${host}/.netlify/functions/assessment-background`;
+  
+  console.log(`[api] Triggering background assessment autofill at ${url}`);
+
+  const admin = createClient(supabaseUrl!, serviceKey!);
+  await admin
+    .from("assessment_ai_jobs")
+    .upsert({ organization_id, assessment_id, topic, autofill_status: "processing", updated_at: new Date().toISOString() }, { onConflict: "organization_id,assessment_id" });
+  
+  try {
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id, assessment_id, action: 'autofill', topic, profile, qualityCheckContext, user_id, user_email }),
+    }).then(resp => console.log(`[api] Background function trigger status: ${resp.status}`))
+      .catch(e => console.error("[api] Failed to trigger background function:", e));
+  } catch (e) {
+    console.error("[api] Failed to trigger background function:", e);
+  }
+
+  return {
+    result: { message: "Assessment autofill started" },
+    inputTokens: 0,
+    outputTokens: 0,
+  };
+}
+
+async function triggerAssessmentScoring(event: any, { organization_id, assessment_id, topic, profile, bmcData, swotData, impactDescription, financialDescription, user_id, user_email }: any) {
+  const host = event.headers.host || event.headers.Host;
+  const protocol = host.startsWith('localhost') ? 'http' : 'https';
+  const url = `${protocol}://${host}/.netlify/functions/assessment-background`;
+  
+  console.log(`[api] Triggering background assessment scoring at ${url}`);
+
+  const admin = createClient(supabaseUrl!, serviceKey!);
+  await admin
+    .from("assessment_ai_jobs")
+    .upsert({ organization_id, assessment_id, topic, scoring_status: "processing", updated_at: new Date().toISOString() }, { onConflict: "organization_id,assessment_id" });
+  
+  try {
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id, assessment_id, action: 'scoring', topic, profile, bmcData, swotData, impactDescription, financialDescription, user_id, user_email }),
+    }).then(resp => console.log(`[api] Background function trigger status: ${resp.status}`))
+      .catch(e => console.error("[api] Failed to trigger background function:", e));
+  } catch (e) {
+    console.error("[api] Failed to trigger background function:", e);
+  }
+
+  return {
+    result: { message: "Assessment scoring started" },
+    inputTokens: 0,
+    outputTokens: 0,
+  };
+}
 
 function buildDMACompanySection(profile: any, bmcItems: any, swotItems: any): string {
   const companyCtx = profile ? buildCompanyContext(profile) : "";

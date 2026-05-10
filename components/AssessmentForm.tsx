@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AssessmentData, ESRSTopic, ImpactScore, FinancialScore, CompanyProfile, SustainabilityBusinessModel, SwotAnalysis, AssessmentScoring, QualityCheck } from '../types';
 import { SCALE_OPTIONS, LIKELIHOOD_OPTIONS, calculateImpactMateriality, calculateFinancialMateriality, TOPICS } from '../constants';
-import { generateAssessmentSuggestions, generateAssessmentScoring } from '../services/geminiService';
+import { triggerAssessmentAutofill, triggerAssessmentScoring, getAssessmentJobStatus } from '../services/geminiService';
 import { AlertCircle, TrendingUp, Cpu, Loader2, Save, X, Sparkles, RotateCcw, AlertTriangle } from 'lucide-react';
 
 interface Props {
@@ -27,6 +27,7 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
   const [scoringError, setScoringError] = useState(false);
   const [aiScoring, setAiScoring] = useState<AssessmentScoring | null>(null);
   const [overrides, setOverrides] = useState<Set<OverrideKey>>(new Set());
+  const [assessmentId, setAssessmentId] = useState<string>(() => initialData?.id || Math.random().toString(36).substr(2, 9));
 
   const [impactScore, setImpactScore] = useState<ImpactScore>({
     scale: 1, scope: 1, irremediability: 1, likelihood: 1,
@@ -46,8 +47,8 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
       setFinancialDesc(initialData.financialDescription);
       setImpactScore(initialData.impactScore);
       setFinancialScore(initialData.financialScore);
-      // Restore persisted AI suggestion so ? badges and reasoning are visible on re-open
       setAiScoring(initialData.aiScoringSuggestion ?? null);
+      setAssessmentId(initialData.id);
     } else {
       setTopic(ESRSTopic.E1);
       setImpactDesc('');
@@ -55,66 +56,111 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
       setImpactScore({ scale: 1, scope: 1, irremediability: 1, likelihood: 1 });
       setFinancialScore({ magnitude: 1, likelihood: 1 });
       setAiScoring(null);
+      setAssessmentId(Math.random().toString(36).substr(2, 9));
     }
     setScoringError(false);
     setOverrides(new Set());
   }, [initialData]);
 
+  // Polling for Autofill
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (loadingAI) {
+      interval = setInterval(async () => {
+        try {
+          const job = await getAssessmentJobStatus(assessmentId);
+          if (job && job.autofill_status === 'completed') {
+            setImpactDesc(job.autofill_result.impactSuggestion);
+            setFinancialDesc(job.autofill_result.financialSuggestion);
+            setAiScoring(null);
+            setScoringError(false);
+            setOverrides(new Set());
+            setLoadingAI(false);
+          } else if (job && job.autofill_status === 'failed') {
+            setAutoFillError(job.error || "AI auto-fill failed. Please try again.");
+            setLoadingAI(false);
+          }
+        } catch (err) {
+          console.error("Polling error:", err);
+        }
+      }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [loadingAI, assessmentId]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    const startTime = Date.now();
+    const TIMEOUT_MS = 60000; // 60 seconds
+
+    if (loadingScoring) {
+      interval = setInterval(async () => {
+        try {
+          if (Date.now() - startTime > TIMEOUT_MS) {
+            console.warn("Scoring polling timed out after 60s");
+            setScoringError(true);
+            setLoadingScoring(false);
+            clearInterval(interval);
+            return;
+          }
+
+          const job = await getAssessmentJobStatus(assessmentId);
+          if (job && job.scoring_status === 'completed') {
+            const result = job.scoring_result;
+            setAiScoring(result);
+            // Only pre-populate when creating new
+            if (!initialData) {
+              setImpactScore({
+                scale: result.impact.scale.score,
+                scope: result.impact.scope.score,
+                irremediability: result.impact.irremediability.score,
+                likelihood: result.impact.likelihood.score,
+              });
+              setFinancialScore({
+                magnitude: result.financial.magnitude.score,
+                likelihood: result.financial.likelihood.score,
+              });
+            }
+            setLoadingScoring(false);
+          } else if (job && job.scoring_status === 'failed') {
+            setScoringError(true);
+            setLoadingScoring(false);
+          }
+        } catch (err) {
+          console.error("Polling error:", err);
+        }
+      }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [loadingScoring, assessmentId, initialData]);
+
   const runAIScoring = async (impactD: string, financialD: string, t: ESRSTopic) => {
-    const { profile: p, bmcData: b, swotData: s } = latestRef.current;
     setLoadingScoring(true);
     setAiScoring(null);
     setScoringError(false);
     setOverrides(new Set());
 
-    const result = await generateAssessmentScoring(t, p, b, s, impactD, financialD);
-
-    if (result) {
-      setAiScoring(result);
-      // Only pre-populate when creating new (editing keeps user's existing scores)
-      if (!initialData) {
-        setImpactScore({
-          scale: result.impact.scale.score,
-          scope: result.impact.scope.score,
-          irremediability: result.impact.irremediability.score,
-          likelihood: result.impact.likelihood.score,
-        });
-        setFinancialScore({
-          magnitude: result.financial.magnitude.score,
-          likelihood: result.financial.likelihood.score,
-        });
-      }
-    } else {
+    try {
+      await triggerAssessmentScoring(t, profile, bmcData, swotData, impactD, financialD, assessmentId);
+    } catch {
       setScoringError(true);
+      setLoadingScoring(false);
     }
-
-    setLoadingScoring(false);
   };
 
   const [autoFillError, setAutoFillError] = useState<string | null>(null);
 
-  // AI Auto-Fill: populate description fields and keep the form open for review.
-  // Scoring is NOT triggered — the "Get Suggestions" button becomes available once
-  // descriptions are present; user can click it manually after reviewing.
   const handleAutoFill = async () => {
     setLoadingAI(true);
     setAutoFillError(null);
     try {
-      const suggestions = await generateAssessmentSuggestions(profile, topic, qualityCheckContext ?? undefined);
-      setImpactDesc(suggestions.impactSuggestion);
-      setFinancialDesc(suggestions.financialSuggestion);
-      // Reset any prior scoring so "Get Suggestions" button reappears
-      setAiScoring(null);
-      setScoringError(false);
-      setOverrides(new Set());
+      await triggerAssessmentAutofill(profile, topic, assessmentId, qualityCheckContext ?? undefined);
     } catch (err: any) {
-      setAutoFillError(err?.message ?? "AI auto-fill failed. Please try again.");
-    } finally {
+      setAutoFillError(err?.message ?? "AI auto-fill failed to start. Please try again.");
       setLoadingAI(false);
     }
   };
 
-  // Manual trigger: user typed their own descriptions and wants AI score suggestions
   const handleGetAIScores = () => {
     runAIScoring(impactDesc, financialDesc, topic);
   };
@@ -149,7 +195,7 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
     const imValue = calculateImpactMateriality(impactScore);
     const fmValue = calculateFinancialMateriality(financialScore);
     const data: AssessmentData = {
-      id: initialData?.id || Math.random().toString(36).substr(2, 9),
+      id: assessmentId,
       topic,
       impactDescription: impactDesc,
       financialDescription: financialDesc,
@@ -158,7 +204,6 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
       impactMaterialityValue: imValue,
       financialMaterialityValue: fmValue,
       isMaterial: imValue > 40 || fmValue > 40,
-      // Preserve existing suggestion if user didn't request new AI scoring this session
       aiScoringSuggestion: aiScoring
         ? { ...aiScoring, suggestedAt: new Date().toISOString() }
         : (initialData?.aiScoringSuggestion ?? null),

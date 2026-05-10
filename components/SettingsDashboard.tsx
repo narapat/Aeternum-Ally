@@ -114,22 +114,27 @@ const SettingsDashboard: React.FC<Props> = ({
   const [monthlyCount, setMonthlyCount] = useState(0);
   const [aiLoading, setAiLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadAIData = useCallback(async () => {
     setAiLoading(true);
-    Promise.all([
-      fetchAiSettings(organizationId),
-      fetchAiUsageLog(organizationId, 500),
-      fetchMonthlyCallCount(organizationId),
-    ]).then(([settings, log, count]) => {
-      if (cancelled) return;
+    try {
+      const [settings, log, count] = await Promise.all([
+        fetchAiSettings(organizationId),
+        fetchAiUsageLog(organizationId, 500),
+        fetchMonthlyCallCount(organizationId),
+      ]);
       setAiSettings(settings);
       setUsage(log);
       setMonthlyCount(count);
+    } catch (e) {
+      console.error("Failed to load AI data:", e);
+    } finally {
       setAiLoading(false);
-    }).catch(() => { if (!cancelled) setAiLoading(false); });
-    return () => { cancelled = true; };
+    }
   }, [organizationId]);
+
+  useEffect(() => {
+    loadAIData();
+  }, [loadAIData]);
 
   const TAB_DEFS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     { id: 'team',     label: 'Team',          icon: <Users className="w-4 h-4 flex-shrink-0" /> },
@@ -194,7 +199,7 @@ const SettingsDashboard: React.FC<Props> = ({
             />
           )}
           {activeTab === 'activity' && (
-            <ActivitySection usage={usage} isLoading={aiLoading} />
+            <ActivitySection usage={usage} isLoading={aiLoading} onRefresh={loadAIData} />
           )}
         </div>
       </div>
@@ -933,18 +938,28 @@ const UsageSection: React.FC<UsageSectionProps> = ({
 interface ActivitySectionProps {
   usage: AiUsageRow[];
   isLoading: boolean;
+  onRefresh: () => void;
 }
 
-const ActivitySection: React.FC<ActivitySectionProps> = ({ usage, isLoading }) => {
+const ActivitySection: React.FC<ActivitySectionProps> = ({ usage, isLoading, onRefresh }) => {
   if (isLoading) return <LoadingSpinner label="Loading activity…" />;
 
   return (
     <div className="space-y-4">
-      <header className="mb-2">
-        <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
-          <Clock className="w-4 h-4 text-esg-600" /> Recent activity
-        </h3>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Last 50 AI calls in your workspace.</p>
+      <header className="flex items-center justify-between mb-2">
+        <div>
+          <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+            <Clock className="w-4 h-4 text-esg-600" /> Recent activity
+          </h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Last 50 AI calls in your workspace.</p>
+        </div>
+        <button
+          onClick={onRefresh}
+          className="flex items-center gap-1.5 text-sm px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Refresh
+        </button>
       </header>
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
         <div className="overflow-x-auto">
