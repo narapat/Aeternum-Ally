@@ -7,6 +7,18 @@ This project does not yet use semantic versioning. Entries are dated.
 
 ---
 
+## [Unreleased] — 2026-05-10
+
+### Added
+- **DMA Insight Hub Polling & Background Job** — Implemented a polling pattern to prevent Netlify function timeouts during large Gemini Pro tasks.
+- **Progressive UI** — Added skeletons for Strategic Insight and Recommended Actions that appear immediately while checks run.
+- **Manual Override** — Allowed users to click "Re-analyse" during polling to force a restart (with confirmation).
+
+### Fixed
+- **Race Condition** — Fixed a race condition where the frontend polled before the background job could update the status to "processing".
+- **Parameter Mismatch** — Fixed data flow between Frontend, API, and Background Function by aligning parameter names (`assessments`, `bmcData`, `swotData`).
+- **React ReferenceError** — Fixed a crash in `DMAInsightHub.tsx` caused by accessing a variable before initialization.
+
 ## [Unreleased] — 2026-05-02 / 2026-05-03
 
 ### Added
