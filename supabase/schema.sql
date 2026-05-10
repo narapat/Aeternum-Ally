@@ -1,5 +1,6 @@
 -- ============================================================
 -- AETERNUM ALLY — DATABASE SCHEMA
+-- Version: 1.1.0
 -- Run this in the Supabase SQL editor (Dashboard → SQL Editor)
 -- ============================================================
 
