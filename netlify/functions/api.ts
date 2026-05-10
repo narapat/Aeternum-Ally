@@ -288,6 +288,12 @@ async function runAction(
       return triggerReportGeneration(event, { organization_id, user_id: user.id, user_email: user.email ?? null, ...params });
     case "triggerDMAAnalysis":
       return triggerDMAAnalysis(event, { organization_id, user_id: user.id, user_email: user.email ?? null, ...params });
+    case "triggerAssessmentAutofill":
+      return triggerAssessmentAutofill(event, { organization_id, user_id: user.id, user_email: user.email ?? null, ...params });
+    case "triggerAssessmentScoring":
+      return triggerAssessmentScoring(event, { organization_id, user_id: user.id, user_email: user.email ?? null, ...params });
+    case "getAssessmentJobStatus":
+      return getAssessmentJobStatus(organization_id, params.assessment_id);
     case "analyzeTopicQuality":
       return analyzeTopicQuality(ai, model, params);
     case "analyzeDMASynthesis":
@@ -867,6 +873,69 @@ async function triggerDMAAnalysis(event: any, { organization_id, profile, materi
     inputTokens: 0,
     outputTokens: 0,
   };
+}
+
+async function triggerAssessmentAutofill(event: any, { organization_id, assessment_id, topic, profile, qualityCheckContext, user_id, user_email }: any) {
+  const host = event.headers.host || event.headers.Host;
+  const protocol = host.startsWith('localhost') ? 'http' : 'https';
+  const url = `${protocol}://${host}/.netlify/functions/assessment-background`;
+  
+  console.log(`[api] Triggering background assessment autofill at ${url}`);
+  
+  try {
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id, assessment_id, action: 'autofill', topic, profile, qualityCheckContext, user_id, user_email }),
+    }).then(resp => console.log(`[api] Background function trigger status: ${resp.status}`))
+      .catch(e => console.error("[api] Failed to trigger background function:", e));
+  } catch (e) {
+    console.error("[api] Failed to trigger background function:", e);
+  }
+
+  return {
+    result: { message: "Assessment autofill started" },
+    inputTokens: 0,
+    outputTokens: 0,
+  };
+}
+
+async function triggerAssessmentScoring(event: any, { organization_id, assessment_id, topic, profile, bmcData, swotData, impactDescription, financialDescription, user_id, user_email }: any) {
+  const host = event.headers.host || event.headers.Host;
+  const protocol = host.startsWith('localhost') ? 'http' : 'https';
+  const url = `${protocol}://${host}/.netlify/functions/assessment-background`;
+  
+  console.log(`[api] Triggering background assessment scoring at ${url}`);
+  
+  try {
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id, assessment_id, action: 'scoring', topic, profile, bmcData, swotData, impactDescription, financialDescription, user_id, user_email }),
+    }).then(resp => console.log(`[api] Background function trigger status: ${resp.status}`))
+      .catch(e => console.error("[api] Failed to trigger background function:", e));
+  } catch (e) {
+    console.error("[api] Failed to trigger background function:", e);
+  }
+
+  return {
+    result: { message: "Assessment scoring started" },
+    inputTokens: 0,
+    outputTokens: 0,
+  };
+}
+
+async function getAssessmentJobStatus(organization_id: string, assessment_id: string) {
+  const admin = createClient(supabaseUrl!, serviceKey!);
+  const { data, error } = await admin
+    .from("assessment_ai_jobs")
+    .select("*")
+    .eq("organization_id", organization_id)
+    .eq("assessment_id", assessment_id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return { result: data, inputTokens: 0, outputTokens: 0 };
 }
 
 function buildDMACompanySection(profile: any, bmcItems: any, swotItems: any): string {

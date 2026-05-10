@@ -84,6 +84,35 @@ export const generateAssessmentScoring = async (
   }
 };
 
+export const triggerAssessmentAutofill = async (
+  profile: CompanyProfile,
+  topic: ESRSTopic,
+  assessmentId: string,
+  qualityCheckContext?: QualityCheck,
+): Promise<{ message: string }> => {
+  return await callApi("triggerAssessmentAutofill", { profile, topic, assessment_id: assessmentId, qualityCheckContext });
+};
+
+export const triggerAssessmentScoring = async (
+  topic: ESRSTopic,
+  profile: CompanyProfile,
+  bmcData: SustainabilityBusinessModel,
+  swotData: SwotAnalysis,
+  impactDescription: string,
+  financialDescription: string,
+  assessmentId: string,
+): Promise<{ message: string }> => {
+  return await callApi("triggerAssessmentScoring", {
+    topic, topicTitle: String(topic).replace(/^[A-Z0-9]+ /, ""), profile, bmcData, swotData,
+    impactDescription, financialDescription, assessment_id: assessmentId
+  });
+};
+
+export const getAssessmentJobStatus = async (assessmentId: string): Promise<any> => {
+  const resp = await callApi("getAssessmentJobStatus", { assessment_id: assessmentId });
+  return resp.result;
+};
+
 export const generateCanvasSuggestion = async (
   profile: CompanyProfile,
   fieldLabel: string
