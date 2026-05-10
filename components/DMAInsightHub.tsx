@@ -230,9 +230,9 @@ const DMAInsightHub: React.FC<Props> = ({
         <button
           onClick={runAnalysis}
           disabled={isAnalysing || synthesisState.phase === "loading"}
-          className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-esg-600 dark:hover:text-esg-400 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-1.5 transition-colors flex-shrink-0 disabled:opacity-40"
+          className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg px-4 py-2 transition-colors flex-shrink-0 disabled:opacity-40 shadow-sm"
         >
-          <RotateCcw className="w-3 h-3" />
+          <RotateCcw className="w-4 h-4" />
           Re-analyse
         </button>
       </div>
