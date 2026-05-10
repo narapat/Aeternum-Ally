@@ -124,6 +124,7 @@ const handler = async (event: any) => {
         - Ensure 'issues' are specific and descriptions are brief (1-2 sentences) and actionable.
         - Keep the 'recommendation' to a single actionable sentence.
         Avoid generic auditor speak; be direct and specific to the data provided.
+        The entire JSON response MUST NOT exceed 2000 characters.
         Return JSON matching the schema.
       `;
 
@@ -195,6 +196,7 @@ const handler = async (event: any) => {
 
       Generate a strategic insight report as JSON matching the requested schema.
       Ensure you populate all fields: summary, keyRisks, opportunities, bottomLine, and recommendedActions.
+      The entire JSON response MUST NOT exceed 2000 characters.
     `;
 
     const synthesisResponse = await ai.models.generateContent({
