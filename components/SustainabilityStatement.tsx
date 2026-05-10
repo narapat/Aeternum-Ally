@@ -177,7 +177,6 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
             <div className="flex flex-col items-end gap-1 w-full sm:w-auto">
               <button
                 onClick={handleGenerate}
-                disabled={loading}
                 className="flex items-center justify-center gap-2 bg-esg-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-esg-700 shadow-lg shadow-esg-600/20 transition-all w-full sm:w-auto disabled:opacity-60"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
