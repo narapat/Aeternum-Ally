@@ -284,9 +284,9 @@ async function runAction(
     case "generateKPISuggestions":
       return generateKPISuggestions(ai, model, params);
     case "triggerReportGeneration":
-      return triggerReportGeneration(event, { organization_id, ...params });
+      return triggerReportGeneration(event, { organization_id, user_id: user.id, user_email: user.email ?? null, ...params });
     case "triggerDMAAnalysis":
-      return triggerDMAAnalysis(event, { organization_id, ...params });
+      return triggerDMAAnalysis(event, { organization_id, user_id: user.id, user_email: user.email ?? null, ...params });
     case "analyzeTopicQuality":
       return analyzeTopicQuality(ai, model, params);
     case "analyzeDMASynthesis":
@@ -818,7 +818,7 @@ Return ONLY valid JSON, no markdown:
   }
 }
 
-async function triggerReportGeneration(event: any, { organization_id, profile, materialAssessments }: any) {
+async function triggerReportGeneration(event: any, { organization_id, profile, materialAssessments, user_id, user_email }: any) {
   const host = event.headers.host || event.headers.Host;
   const protocol = host.startsWith('localhost') ? 'http' : 'https';
   const url = `${protocol}://${host}/.netlify/functions/report-background`;
@@ -829,7 +829,7 @@ async function triggerReportGeneration(event: any, { organization_id, profile, m
     fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ organization_id, profile, materialAssessments, user_id: user.id, user_email: user.email }),
+      body: JSON.stringify({ organization_id, profile, materialAssessments, user_id, user_email }),
     }).then(resp => console.log(`[api] Background function trigger status: ${resp.status}`))
       .catch(e => console.error("[api] Failed to trigger background function:", e));
   } catch (e) {
@@ -843,7 +843,7 @@ async function triggerReportGeneration(event: any, { organization_id, profile, m
   };
 }
 
-async function triggerDMAAnalysis(event: any, { organization_id, profile, materialAssessments, bmcItems, swotItems }: any) {
+async function triggerDMAAnalysis(event: any, { organization_id, profile, materialAssessments, bmcItems, swotItems, user_id, user_email }: any) {
   const host = event.headers.host || event.headers.Host;
   const protocol = host.startsWith('localhost') ? 'http' : 'https';
   const url = `${protocol}://${host}/.netlify/functions/dma-background`;
@@ -854,7 +854,7 @@ async function triggerDMAAnalysis(event: any, { organization_id, profile, materi
     fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ organization_id, profile, materialAssessments, bmcItems, swotItems, user_id: user.id, user_email: user.email }),
+      body: JSON.stringify({ organization_id, profile, materialAssessments, bmcItems, swotItems, user_id, user_email }),
     }).then(resp => console.log(`[api] Background function trigger status: ${resp.status}`))
       .catch(e => console.error("[api] Failed to trigger background function:", e));
   } catch (e) {
