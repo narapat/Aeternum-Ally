@@ -8,11 +8,12 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DEFAULT_MODEL = "gemini-2.5-flash";
 
 const handler = async (event: any) => {
+  const start = Date.now();
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
-  const { organization_id, profile, materialAssessments, model = DEFAULT_MODEL } = JSON.parse(event.body);
+  const { organization_id, profile, materialAssessments, user_id, user_email, model = DEFAULT_MODEL } = JSON.parse(event.body);
 
   if (!organization_id || !profile || !materialAssessments) {
     console.error("[report-background] Missing required fields");
@@ -119,8 +120,32 @@ const handler = async (event: any) => {
 
     const [headerResp, ...topicResps] = await Promise.all([
       headerRespPromise,
-      ...topicCalls
+      ...topicCalls,
     ]);
+
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+
+    totalInputTokens += headerResp.usageMetadata?.promptTokenCount ?? 0;
+    totalOutputTokens += headerResp.usageMetadata?.candidatesTokenCount ?? 0;
+
+    topicResps.forEach((r: any) => {
+      totalInputTokens += r.usageMetadata?.promptTokenCount ?? 0;
+      totalOutputTokens += r.usageMetadata?.candidatesTokenCount ?? 0;
+    });
+
+    // Log usage
+    await admin.from("ai_usage_log").insert({
+      organization_id,
+      user_id: user_id || null,
+      user_email: user_email || null,
+      action: "report_generation_job",
+      provider: "gemini",
+      model,
+      input_tokens: totalInputTokens,
+      output_tokens: totalOutputTokens,
+      duration_ms: Date.now() - start,
+    });
 
     console.log("[report-background] All AI responses received. Parsing...");
 
