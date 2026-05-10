@@ -19,14 +19,14 @@ const handler = async (event: any) => {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
-  const { organization_id, profile, materialAssessments, bmcItems, swotItems, user_id, user_email } = JSON.parse(event.body);
+  const { organization_id, profile, assessments, bmcData, swotData, user_id, user_email } = JSON.parse(event.body);
 
-  if (!organization_id || !profile || !materialAssessments) {
+  if (!organization_id || !profile || !assessments) {
     console.error("[dma-background] Missing required fields");
     return { statusCode: 400, body: "Missing required fields" };
   }
 
-  console.log(`[dma-background] Starting DMA analysis for org=${organization_id}, topics=${materialAssessments.length}`);
+  console.log(`[dma-background] Starting DMA analysis for org=${organization_id}, topics=${assessments.length}`);
 
   const admin = createClient(supabaseUrl!, serviceKey!);
 
@@ -96,11 +96,11 @@ const handler = async (event: any) => {
     let totalOutputTokens = 0;
 
     // Run Quality Checks SEQUENTIALLY for progressive updates and safety
-    for (const a of materialAssessments) {
+    for (const a of assessments) {
       console.log(`[dma-background] Analyzing topic: ${a.topic}`);
       
       const topicCode  = String(a.topic).split(" ")[0];
-      const companySection = buildDMACompanySection(profile, bmcItems, swotItems);
+      const companySection = buildDMACompanySection(profile, bmcData, swotData);
       const scores = a.impactScore ?? {};
 
       const prompt = `
