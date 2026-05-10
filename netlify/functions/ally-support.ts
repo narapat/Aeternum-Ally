@@ -63,6 +63,7 @@ export const handler = async (event: any) => {
       4. Once you have collected enough information about the issue or feedback and are ready to send it to support, end your message with the exact tag: [SEND_EMAIL].
          Example: "Got it! I have collected your feedback and sent it to support. [SEND_EMAIL]"
          Do NOT include this tag unless you have the actual feedback to send.
+      5. When explaining how to use a module (like DMA) or answering based on the manual, DO NOT just throw the whole text at the user. Give a brief summary or the first step, and ask the user if they need to know more or if they want to explore that specific topic. Keep it interactive and conversational!
     `;
 
     // Map conversation history to Gemini format
