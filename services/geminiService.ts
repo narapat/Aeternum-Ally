@@ -134,12 +134,20 @@ export interface GeneratedStatement {
   }[];
 }
 
-export const generateSustainabilityStatement = async (
+export const generateSustainabilityHeader = async (
   profile: CompanyProfile,
   materialAssessments: AssessmentData[]
-): Promise<GeneratedStatement> => {
-  // Re-throws so the caller can show a real error message instead of a silent null.
-  return await callApi("generateSustainabilityStatement", { profile, materialAssessments });
+): Promise<{ generalDisclosure: string; strategyDisclosure: string }> => {
+  const resp = await callApi("generateSustainabilityStatement", { profile, materialAssessments, mode: 'header' });
+  return resp.result;
+};
+
+export const generateTopicalDisclosure = async (
+  profile: CompanyProfile,
+  targetTopic: AssessmentData
+): Promise<{ topicId: string; topicName: string; disclosureContent: string }> => {
+  const resp = await callApi("generateSustainabilityStatement", { profile, materialAssessments: [targetTopic], mode: 'topic', targetTopic });
+  return resp.result;
 };
 
 // Pass 1 — quality check for a single topic. Called once per assessment from the frontend.

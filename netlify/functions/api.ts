@@ -817,7 +817,7 @@ Return ONLY valid JSON, no markdown:
 async function generateSustainabilityStatement(
   ai: GoogleGenAI,
   model: string,
-  { profile, materialAssessments }: any
+  { profile, materialAssessments, mode, targetTopic }: any
 ) {
   if (!materialAssessments || materialAssessments.length === 0) {
     return {
@@ -829,29 +829,55 @@ async function generateSustainabilityStatement(
 
   const companyContext = buildCompanyContext(profile);
 
-  const topicSummary = materialAssessments
-    .map((a: any) => `- ${a.topic} (impact score: ${a.impactMaterialityValue}/100, financial score: ${a.financialMaterialityValue}/100): impact: ${a.impactDescription}; financial: ${a.financialDescription}`)
-    .join("\n");
+  if (mode === 'header') {
+    const topicSummary = materialAssessments
+      .map((a: any) => `- ${a.topic} (impact score: ${a.impactMaterialityValue}/100, financial score: ${a.financialMaterialityValue}/100): impact: ${a.impactDescription}; financial: ${a.financialDescription}`)
+      .join("\n");
 
-  // ── Call 1: Header sections (fast — no per-topic content) ──────────────────
-  const headerPrompt = `
-    Act as a Sustainability Reporting Officer drafting a "Sustainability Statement" aligned with ESRS and GRI Standards.
+    const headerPrompt = `
+      Act as a Sustainability Reporting Officer drafting a "Sustainability Statement" aligned with ESRS and GRI Standards.
 
-    ${companyContext}
+      ${companyContext}
 
-    Material topics identified (above threshold of 40/100 on either axis):
-    ${topicSummary}
+      Material topics identified (above threshold of 40/100 on either axis):
+      ${topicSummary}
 
-    Generate ONLY the two header sections below as JSON.
+      Generate ONLY the two header sections below as JSON.
 
-    1. generalDisclosure: "Basis of Preparation" (ESRS 2 BP-1/BP-2). Explain the Double Materiality approach (impact materiality + financial materiality) as applied by this company. Reference the company's scale and sector. ~120 words.
-    2. strategyDisclosure: "Strategy & Business Model" (ESRS 2 SBM-3). Summarise how the company's specific products/services and business model interact with the material impacts and risks identified. ~150 words.
-  `;
+      1. generalDisclosure: "Basis of Preparation" (ESRS 2 BP-1/BP-2). Explain the Double Materiality approach (impact materiality + financial materiality) as applied by this company. Reference the company's scale and sector. ~120 words.
+      2. strategyDisclosure: "Strategy & Business Model" (ESRS 2 SBM-3). Summarise how the company's specific products/services and business model interact with the material impacts and risks identified. ~150 words.
+    `;
 
-  // ── Calls 2…N: One call per topic (run in parallel) ────────────────────────
-  const topicPrompts = materialAssessments.map((a: any) => {
+    const response = await ai.models.generateContent({
+      model,
+      contents: headerPrompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            generalDisclosure: { type: Type.STRING },
+            strategyDisclosure: { type: Type.STRING },
+          },
+        },
+      },
+    });
+
+    const header = parseAIJson(response.text, { generalDisclosure: "", strategyDisclosure: "" });
+
+    return {
+      result: {
+        generalDisclosure: header.generalDisclosure ?? "",
+        strategyDisclosure: header.strategyDisclosure ?? "",
+      },
+      ...extractTokens(response),
+    };
+  }
+
+  if (mode === 'topic' && targetTopic) {
+    const a = targetTopic;
     const topicCode = String(a.topic).split(" ")[0];
-    return `
+    const prompt = `
       Act as a Sustainability Reporting Officer drafting topical disclosures aligned with ESRS and GRI Standards.
 
       ${companyContext}
@@ -870,63 +896,29 @@ async function generateSustainabilityStatement(
         Reference the relevant GRI Standard number (e.g. GRI 305 for climate, GRI 303 for water).
         Use plain text with line breaks between paragraphs; no markdown.
     `;
-  });
 
-  const topicConfig = {
-    responseMimeType: "application/json",
-    responseSchema: {
-      type: Type.OBJECT,
-      properties: {
-        topicId: { type: Type.STRING },
-        topicName: { type: Type.STRING },
-        disclosureContent: { type: Type.STRING },
-      },
-    },
-  };
-
-  // Fire header and topic batches. Topics run in batches of 3 (sequential batches,
-  // parallel within each batch) to avoid Gemini rate limits and stay within the
-  // Netlify function timeout. Header fires concurrently with the first batch.
-  const headerRespPromise = ai.models.generateContent({
-    model,
-    contents: headerPrompt,
-    config: {
+    const topicConfig = {
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          generalDisclosure: { type: Type.STRING },
-          strategyDisclosure: { type: Type.STRING },
+          topicId: { type: Type.STRING },
+          topicName: { type: Type.STRING },
+          disclosureContent: { type: Type.STRING },
         },
       },
-    },
-  });
+    };
 
-  const topicCalls = topicPrompts.map((prompt: string) =>
-    ai.models.generateContent({ model, contents: prompt, config: topicConfig })
-  );
+    const response = await ai.models.generateContent({ model, contents: prompt, config: topicConfig });
+    const parsed = parseAIJson(response.text, { topicId: "", topicName: "", disclosureContent: "" });
 
-  const [headerResp, ...topicResps] = await Promise.all([
-    headerRespPromise,
-    ...topicCalls
-  ]);
-  const header = parseAIJson(headerResp.text, { generalDisclosure: "", strategyDisclosure: "" });
-  const topics = topicResps.map((r: any) => parseAIJson(r.text, { topicId: "", topicName: "", disclosureContent: "" }));
+    return {
+      result: parsed,
+      ...extractTokens(response),
+    };
+  }
 
-  // Sum token usage across all calls
-  const allResps = [headerResp, ...topicResps];
-  const inputTokens = allResps.reduce((sum: number, r: any) => sum + Number(r.usageMetadata?.promptTokenCount ?? 0), 0);
-  const outputTokens = allResps.reduce((sum: number, r: any) => sum + Number(r.usageMetadata?.candidatesTokenCount ?? r.usageMetadata?.responseTokenCount ?? 0), 0);
-
-  return {
-    result: {
-      generalDisclosure: header.generalDisclosure ?? "",
-      strategyDisclosure: header.strategyDisclosure ?? "",
-      topics,
-    },
-    inputTokens,
-    outputTokens,
-  };
+  return { result: null, inputTokens: 0, outputTokens: 0 };
 }
 
 // ── Shared helpers for DMA analysis ──────────────────────────────────────────
