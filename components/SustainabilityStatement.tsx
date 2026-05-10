@@ -82,6 +82,9 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
   }, [polling]);
 
   const handleGenerate = async () => {
+    if (polling && !window.confirm("A report generation is already in progress. Do you want to stop waiting and start a new one?")) {
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -195,7 +198,6 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
               </button>
               <button 
                   onClick={handleGenerate}
-                  disabled={loading}
                   className="flex items-center justify-center gap-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-all w-full sm:w-auto disabled:opacity-60 text-sm"
               >
                   {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
