@@ -82,7 +82,7 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
   }, [polling]);
 
   const handleGenerate = async () => {
-    if (polling && !window.confirm("A report generation is already in progress. Do you want to stop waiting and start a new one?")) {
+    if (loading && !window.confirm("A report generation is already in progress. Do you want to stop waiting and start a new one?")) {
       return;
     }
     setLoading(true);
