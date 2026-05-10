@@ -79,6 +79,11 @@ const handler = async (event: any) => {
         Financial score: ${a.financialMaterialityValue ?? 0}/100 — "${a.financialDescription || "No description provided"}"
         ${scores.scale ? `Sub-scores: scale=${scores.scale} scope=${scores.scope} irremediability=${scores.irremediability} likelihood=${scores.likelihood}` : ""}
 
+        Assess quality:
+        - "needs_fix": critical gap that would fail a CSRD compliance review
+        - "review": minor concern worth addressing, not blocking
+        - "ok": meets minimum ESRS requirements for this topic
+
         Provide a critical review of this topic assessment.
         Return JSON matching the schema.
       `;
@@ -91,7 +96,7 @@ const handler = async (event: any) => {
           responseSchema: {
             type: Type.OBJECT,
             properties: {
-              status: { type: Type.STRING, enum: ["pass", "warn", "fail"] },
+              status: { type: Type.STRING, enum: ["needs_fix", "review", "ok"] },
               summary: { type: Type.STRING },
               issues: {
                 type: Type.ARRAY,
