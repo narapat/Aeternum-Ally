@@ -172,6 +172,10 @@ export interface GeneratedStatement {
     topicName: string;
     disclosureContent: string;
   }[];
+  dmaInsight?: {
+    strategicInsight: StrategicInsight;
+    recommendedActions: RecommendedAction[];
+  } | null;
 }
 
 export const triggerReportGeneration = async (
