@@ -4,6 +4,7 @@ import * as path from 'path';
 
 const apiKey = process.env.GEMINI_API_KEY;
 const resendKey = process.env.RESEND_API_KEY;
+const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'noreply@aeternumally.com';
 
 export const handler = async (event: any) => {
   if (event.httpMethod !== "POST") {
@@ -92,7 +93,7 @@ export const handler = async (event: any) => {
       }
 
       const emailBody = {
-        from: "Ally Assistant <onboarding@resend.dev>", // Resend requires verified domain or this default
+        from: `Ally Assistant <${fromEmail}>`,
         to: ["Support@aeternumally.com"],
         subject: `Support Request from Ally Assistant`,
         html: `
