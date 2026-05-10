@@ -110,6 +110,37 @@ export const AllyAssistant: React.FC = () => {
     setIsWaitingForFeedback(true);
   };
 
+  const renderMessageText = (text: string, isUser: boolean) => {
+    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = linkRegex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(text.substring(lastIndex, match.index));
+      }
+      parts.push(
+        <a 
+          key={match.index} 
+          href={match[2]} 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className={isUser ? "underline hover:text-emerald-100 font-semibold" : "text-emerald-600 dark:text-emerald-400 underline hover:text-emerald-700 dark:hover:text-emerald-300 font-semibold"}
+        >
+          {match[1]}
+        </a>
+      );
+      lastIndex = linkRegex.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : text;
+  };
+
   return (
     <>
       {/* Floating Bubble */}
@@ -186,7 +217,7 @@ export const AllyAssistant: React.FC = () => {
                     ? 'bg-emerald-600 text-white border-emerald-500 rounded-tr-none' 
                     : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-100 dark:border-slate-700 rounded-tl-none'
                 }`}>
-                  <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                  <p className="text-sm whitespace-pre-wrap">{renderMessageText(msg.text, msg.role === 'user')}</p>
                 </div>
               </div>
             ))}
