@@ -145,6 +145,7 @@ const handler = async (event: any) => {
     const topicConfig = {
       ...noThinkingConfig(activeModel),
       responseMimeType: "application/json",
+      maxOutputTokens: 1000,
       responseSchema: {
         type: Type.OBJECT,
         properties: {
@@ -166,8 +167,8 @@ const handler = async (event: any) => {
         ${companyContext}
 
         Topic: ${a.topic} (code: "${topicCode}")
-        Impact materiality score: ${a.impactMaterialityValue}/100 — ${a.impactDescription}
-        Financial materiality score: ${a.financialMaterialityValue}/100 — ${a.financialDescription}
+        Impact materiality score: ${a.impactMaterialityValue}/100 — ${a.impactDescription?.substring(0, 1000)}
+        Financial materiality score: ${a.financialMaterialityValue}/100 — ${a.financialDescription?.substring(0, 1000)}
 
         Write a structured narrative disclosure for this single topic as JSON with:
         - topicId: the short code only — "${topicCode}"
