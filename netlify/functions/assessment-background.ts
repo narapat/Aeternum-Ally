@@ -343,6 +343,8 @@ Return ONLY valid JSON, no markdown:
         },
       });
 
+      console.log(`[assessment-background] Scoring raw response:`, response.text);
+
       totalInputTokens += Number(response.usageMetadata?.promptTokenCount ?? 0);
       totalOutputTokens += Number(response.usageMetadata?.candidatesTokenCount ?? 0);
 

@@ -88,12 +88,22 @@ const AssessmentForm: React.FC<Props> = ({ profile, bmcData, swotData, onSave, o
     return () => clearInterval(interval);
   }, [loadingAI, assessmentId]);
 
-  // Polling for Scoring
   useEffect(() => {
     let interval: NodeJS.Timeout;
+    const startTime = Date.now();
+    const TIMEOUT_MS = 60000; // 60 seconds
+
     if (loadingScoring) {
       interval = setInterval(async () => {
         try {
+          if (Date.now() - startTime > TIMEOUT_MS) {
+            console.warn("Scoring polling timed out after 60s");
+            setScoringError(true);
+            setLoadingScoring(false);
+            clearInterval(interval);
+            return;
+          }
+
           const job = await getAssessmentJobStatus(assessmentId);
           if (job && job.scoring_status === 'completed') {
             const result = job.scoring_result;
