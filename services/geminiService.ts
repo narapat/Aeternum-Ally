@@ -156,6 +156,30 @@ export const getReportStatus = async (): Promise<{ status: string; result?: any;
   return data;
 };
 
+export const triggerDMAAnalysis = async (
+  profile: CompanyProfile,
+  materialAssessments: AssessmentData[],
+  bmcItems: any,
+  swotItems: any
+): Promise<{ message: string }> => {
+  return await callApi("triggerDMAAnalysis", { profile, materialAssessments, bmcItems, swotItems });
+};
+
+export const getDMAAnalysisStatus = async (): Promise<{ status: string; quality_result?: any[]; insight_result?: any; error?: string } | null> => {
+  if (!currentOrgId) return null;
+  const { data, error } = await supabase
+    .from("dma_analysis_jobs")
+    .select("status, quality_result, insight_result, error")
+    .eq("organization_id", currentOrgId)
+    .maybeSingle();
+    
+  if (error) {
+    console.warn("getDMAAnalysisStatus failed:", error.message);
+    return null;
+  }
+  return data;
+};
+
 // Pass 1 — quality check for a single topic. Called once per assessment from the frontend.
 export const analyzeTopicQuality = async (
   assessment: AssessmentData,

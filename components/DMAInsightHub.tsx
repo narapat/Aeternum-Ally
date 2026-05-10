@@ -14,7 +14,7 @@ import {
   XCircle,
   Zap,
 } from "lucide-react";
-import { analyzeTopicQuality, analyzeDMASynthesis } from "../services/geminiService";
+import { triggerDMAAnalysis, getDMAAnalysisStatus } from "../services/geminiService";
 import type {
   AssessmentData,
   CompanyProfile,
@@ -121,63 +121,79 @@ const DMAInsightHub: React.FC<Props> = ({
       : { phase: "idle" }
   );
 
-  // Incremented on each Re-analyse so stale async callbacks self-cancel
-  const runIdRef = useRef(0);
+  const [polling, setPolling] = useState(false);
 
-  const runAnalysis = React.useCallback(() => {
-    const runId = ++runIdRef.current;
-
+  const runAnalysis = React.useCallback(async () => {
     setTopicStates(new Map(assessments.map((a) => [String(a.topic).split(" ")[0], { phase: "loading" } as TopicPhase])));
     setSynthesisState({ phase: "idle" });
+    setPolling(true);
 
-    const doneChecks: QualityCheck[] = [];
-    let settledCount = 0;
-
-    const onTopicSettle = async () => {
-      settledCount++;
-      if (settledCount < assessments.length) return;
-      if (runId !== runIdRef.current) return;
-
-      if (doneChecks.length === 0) {
-        setSynthesisState({ phase: "error", message: "All topic checks failed — unable to synthesise." });
-        return;
-      }
-
-      setSynthesisState({ phase: "loading" });
-      try {
-        const synth = await analyzeDMASynthesis(doneChecks, assessments, profile, bmcData, swotData);
-        if (runId !== runIdRef.current) return;
-        setSynthesisState({ phase: "done", insight: synth.strategicInsight, actions: synth.recommendedActions });
-        onInsightReady?.({ qualityChecks: doneChecks, strategicInsight: synth.strategicInsight, recommendedActions: synth.recommendedActions });
-      } catch (err) {
-        if (runId !== runIdRef.current) return;
-        setSynthesisState({ phase: "error", message: err instanceof Error ? err.message : "Strategic analysis failed." });
-      }
-    };
-
-    assessments.forEach(async (assessment) => {
-      const topicCode = String(assessment.topic).split(" ")[0];
-      try {
-        const check = await analyzeTopicQuality(assessment, profile, bmcData, swotData);
-        if (runId !== runIdRef.current) return;
-        doneChecks.push(check);
-        setTopicStates((prev) => new Map(prev).set(topicCode, { phase: "done", check }));
-        onQualityCheckReady?.(assessment.id, check);
-      } catch (err) {
-        if (runId !== runIdRef.current) return;
-        setTopicStates((prev) =>
-          new Map(prev).set(topicCode, { phase: "error", message: err instanceof Error ? err.message : "Check failed" })
-        );
-      }
-      await onTopicSettle();
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    try {
+      await triggerDMAAnalysis(profile, assessments, bmcData, swotData);
+    } catch (err) {
+      setSynthesisState({ phase: "error", message: err instanceof Error ? err.message : "Failed to start analysis." });
+      setPolling(false);
+    }
   }, [assessments, profile, bmcData, swotData]);
 
   useEffect(() => {
-    if (!cachedInsight) runAnalysis();
+    const init = async () => {
+      if (cachedInsight) return;
+      
+      const data = await getDMAAnalysisStatus();
+      if (data) {
+        if (data.status === 'completed' && data.insight_result) {
+          const map = new Map(topicStates);
+          (data.quality_result || []).forEach((c: any) => {
+            map.set(c.topicCode, { phase: "done", check: c });
+          });
+          setTopicStates(map);
+          setSynthesisState({ phase: "done", insight: data.insight_result.strategicInsight, actions: data.insight_result.recommendedActions });
+          return;
+        } else if (data.status === 'processing') {
+          setPolling(true);
+          return;
+        }
+      }
+      // If no data or failed, run analysis
+      runAnalysis();
+    };
+    init();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [cachedInsight]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (polling) {
+      interval = setInterval(async () => {
+        const data = await getDMAAnalysisStatus();
+        if (data) {
+          // Update topics progressively
+          const map = new Map(topicStates);
+          let updated = false;
+          (data.quality_result || []).forEach((c: any) => {
+            const current = map.get(c.topicCode);
+            if (!current || current.phase !== 'done') {
+              map.set(c.topicCode, { phase: "done", check: c });
+              updated = true;
+            }
+          });
+          if (updated) {
+            setTopicStates(map);
+          }
+
+          if (data.status === 'completed') {
+            setSynthesisState({ phase: "done", insight: data.insight_result.strategicInsight, actions: data.insight_result.recommendedActions });
+            setPolling(false);
+          } else if (data.status === 'failed') {
+            setSynthesisState({ phase: "error", message: data.error || "Analysis failed" });
+            setPolling(false);
+          }
+        }
+      }, 3000); // Poll every 3 seconds
+    }
+    return () => clearInterval(interval);
+  }, [polling, topicStates]);
 
   // Derived
   const completedChecks = assessments
