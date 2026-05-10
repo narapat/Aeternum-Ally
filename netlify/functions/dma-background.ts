@@ -222,7 +222,7 @@ const handler = async (event: any) => {
 
       Generate a strategic insight report as JSON matching the requested schema.
       Ensure you populate all fields: summary, keyRisks, opportunities, bottomLine, and recommendedActions.
-      The entire JSON response MUST NOT exceed 2000 characters.
+      The entire JSON response MUST NOT exceed 50000 characters.
     `;
 
     const synthesisResponse = await ai.models.generateContent({
@@ -231,7 +231,7 @@ const handler = async (event: any) => {
       config: {
         ...noThinkingConfig(activeModel),
         responseMimeType: "application/json",
-        maxOutputTokens: 1000,
+        maxOutputTokens: 8000,
         responseSchema: {
           type: Type.OBJECT,
           properties: {
