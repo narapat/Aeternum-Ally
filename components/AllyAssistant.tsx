@@ -5,9 +5,11 @@ interface AllyAssistantProps {
   userEmail?: string;
   companyName?: string;
   userRole?: string;
+  userId?: string;
+  orgId?: string;
 }
 
-export const AllyAssistant: React.FC<AllyAssistantProps> = ({ userEmail, companyName, userRole }) => {
+export const AllyAssistant: React.FC<AllyAssistantProps> = ({ userEmail, companyName, userRole, userId, orgId }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -95,7 +97,9 @@ export const AllyAssistant: React.FC<AllyAssistantProps> = ({ userEmail, company
           userInfo: {
             email: userEmail,
             company: companyName,
-            role: userRole
+            role: userRole,
+            userId: userId,
+            orgId: orgId
           }
         })
       });

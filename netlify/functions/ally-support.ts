@@ -1,8 +1,13 @@
 import { GoogleGenAI } from "@google/genai";
 import * as fs from 'fs';
 import * as path from 'path';
+import { createClient } from "@supabase/supabase-js";
 
 const apiKey = process.env.GEMINI_API_KEY;
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+const admin = createClient(supabaseUrl!, serviceKey!);
 const resendKey = process.env.RESEND_API_KEY;
 const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'noreply@aeternumally.com';
 
@@ -21,6 +26,7 @@ export const handler = async (event: any) => {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
+  const start = Date.now();
   try {
     const { messages, context, errors, userInfo } = JSON.parse(event.body);
 
@@ -95,6 +101,27 @@ export const handler = async (event: any) => {
     });
 
     let text = typeof response.text === "function" ? response.text() : response.text;
+
+    // Log usage to ai_usage_log
+    try {
+      const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
+      const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
+
+      await admin.from("ai_usage_log").insert({
+        organization_id: userInfo?.orgId || null,
+        user_id: userInfo?.userId || null,
+        user_email: userInfo?.email || null,
+        action: "ally_assistant",
+        provider: "gemini",
+        model: "gemini-2.5-flash-lite",
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        duration_ms: Date.now() - start,
+        success: true
+      });
+    } catch (logErr) {
+      console.error("[ally-support] Failed to log usage:", logErr);
+    }
 
     // Check for email trigger
     if (text.includes("[SEND_EMAIL]") && resendKey) {

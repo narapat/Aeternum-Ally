@@ -719,6 +719,8 @@ const App: React.FC = () => {
         userEmail={user?.email} 
         companyName={profile.data.name} 
         userRole={currentUserRole || undefined} 
+        userId={user?.id}
+        orgId={organization?.id}
       />
     </div>
   );
