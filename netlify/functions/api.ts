@@ -283,7 +283,7 @@ async function runAction(
     case "generateKPISuggestions":
       return generateKPISuggestions(ai, model, params);
     case "triggerReportGeneration":
-      return triggerReportGeneration(event, params);
+      return triggerReportGeneration(event, { organization_id, ...params });
     case "analyzeTopicQuality":
       return analyzeTopicQuality(ai, model, params);
     case "analyzeDMASynthesis":
