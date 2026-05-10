@@ -122,6 +122,7 @@ const DMAInsightHub: React.FC<Props> = ({
   );
 
   const [polling, setPolling] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
 
   const runAnalysis = React.useCallback(async () => {
     setTopicStates(new Map(assessments.map((a) => [String(a.topic).split(" ")[0], { phase: "loading" } as TopicPhase])));
@@ -138,7 +139,10 @@ const DMAInsightHub: React.FC<Props> = ({
 
   useEffect(() => {
     const init = async () => {
-      if (cachedInsight) return;
+      if (cachedInsight) {
+        setIsInitializing(false);
+        return;
+      }
       
       const data = await getDMAAnalysisStatus();
       if (data) {
@@ -149,6 +153,7 @@ const DMAInsightHub: React.FC<Props> = ({
           });
           setTopicStates(map);
           setSynthesisState({ phase: "done", insight: data.insight_result.strategicInsight, actions: data.insight_result.recommendedActions });
+          setIsInitializing(false);
           return;
         } else if (data.status === 'processing') {
           const map = new Map(topicStates);
@@ -164,11 +169,13 @@ const DMAInsightHub: React.FC<Props> = ({
           setTopicStates(map);
           setSynthesisState({ phase: "loading" });
           setPolling(true);
+          setIsInitializing(false);
           return;
         }
       }
       // If no data or failed, run analysis
       runAnalysis();
+      setIsInitializing(false);
     };
     init();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -241,10 +248,10 @@ const DMAInsightHub: React.FC<Props> = ({
         </div>
         <button
           onClick={runAnalysis}
-          disabled={isAnalysing || synthesisState.phase === "loading" || polling}
-          className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg px-4 py-2 transition-colors flex-shrink-0 disabled:opacity-40 shadow-sm"
+          disabled={isAnalysing || synthesisState.phase === "loading" || polling || isInitializing}
+          className="flex items-center gap-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-2 transition-colors flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm disabled:text-slate-500 disabled:bg-white disabled:border-slate-300 dark:disabled:text-slate-400 dark:disabled:bg-slate-800 dark:disabled:border-slate-600"
         >
-          <RotateCcw className="w-4 h-4" />
+          <RotateCcw className={`w-4 h-4 ${(polling || isAnalysing) ? 'animate-spin' : ''}`} />
           Re-analyse
         </button>
       </div>
