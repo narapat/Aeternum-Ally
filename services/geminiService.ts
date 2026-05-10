@@ -109,8 +109,19 @@ export const triggerAssessmentScoring = async (
 };
 
 export const getAssessmentJobStatus = async (assessmentId: string): Promise<any> => {
-  const resp = await callApi("getAssessmentJobStatus", { assessment_id: assessmentId });
-  return resp.result;
+  if (!currentOrgId) return null;
+  const { data, error } = await supabase
+    .from("assessment_ai_jobs")
+    .select("*")
+    .eq("organization_id", currentOrgId)
+    .eq("assessment_id", assessmentId)
+    .maybeSingle();
+    
+  if (error) {
+    console.warn("getAssessmentJobStatus failed:", error.message);
+    return null;
+  }
+  return data;
 };
 
 export const generateCanvasSuggestion = async (

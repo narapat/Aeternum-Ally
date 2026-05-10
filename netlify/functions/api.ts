@@ -292,8 +292,6 @@ async function runAction(
       return triggerAssessmentAutofill(event, { organization_id, user_id: user.id, user_email: user.email ?? null, ...params });
     case "triggerAssessmentScoring":
       return triggerAssessmentScoring(event, { organization_id, user_id: user.id, user_email: user.email ?? null, ...params });
-    case "getAssessmentJobStatus":
-      return getAssessmentJobStatus(organization_id, params.assessment_id);
     case "analyzeTopicQuality":
       return analyzeTopicQuality(ai, model, params);
     case "analyzeDMASynthesis":
@@ -923,19 +921,6 @@ async function triggerAssessmentScoring(event: any, { organization_id, assessmen
     inputTokens: 0,
     outputTokens: 0,
   };
-}
-
-async function getAssessmentJobStatus(organization_id: string, assessment_id: string) {
-  const admin = createClient(supabaseUrl!, serviceKey!);
-  const { data, error } = await admin
-    .from("assessment_ai_jobs")
-    .select("*")
-    .eq("organization_id", organization_id)
-    .eq("assessment_id", assessment_id)
-    .maybeSingle();
-
-  if (error) throw error;
-  return { result: data, inputTokens: 0, outputTokens: 0 };
 }
 
 function buildDMACompanySection(profile: any, bmcItems: any, swotItems: any): string {
