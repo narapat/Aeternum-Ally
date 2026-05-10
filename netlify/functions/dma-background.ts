@@ -187,7 +187,8 @@ const handler = async (event: any) => {
       Quality Check Results:
       ${qualitySummary}
 
-      Generate a strategic insight report as JSON.
+      Generate a strategic insight report as JSON matching the requested schema.
+      Ensure you populate all fields: summary, keyRisks, opportunities, bottomLine, and recommendedActions.
     `;
 
     const synthesisResponse = await ai.models.generateContent({
@@ -228,6 +229,8 @@ const handler = async (event: any) => {
         },
       },
     });
+
+    console.log(`[dma-background] Synthesis raw response:`, synthesisResponse.text);
 
     const insight_result = parseAIJson(synthesisResponse.text, { 
       strategicInsight: { summary: "", keyRisks: [], opportunities: [], bottomLine: "" }, 
