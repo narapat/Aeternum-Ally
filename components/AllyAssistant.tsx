@@ -96,7 +96,8 @@ export const AllyAssistant: React.FC = () => {
           setMessages(prev => [...prev, { role: 'assistant', text: data.response }]);
         }
       } else {
-        setMessages(prev => [...prev, { role: 'assistant', text: "Sorry, I encountered an error. Please try again." }]);
+        const errorMsg = data.details?.message || data.error || "Sorry, I encountered an error. Please try again.";
+        setMessages(prev => [...prev, { role: 'assistant', text: `Error: ${errorMsg}` }]);
       }
     } catch (error) {
       setMessages(prev => [...prev, { role: 'assistant', text: "Sorry, I couldn't connect to the support service." }]);
