@@ -4,6 +4,38 @@
 
 Thank you for taking the time to contribute. This document explains how to set up a development environment, how the codebase is organized, and the conventions to follow when submitting changes.
 
+## Our Business Model
+ 
+AeternumAlly is an **open-core** project:
+- **Core platform**: Open source (AGPL-3.0), free to self-host
+- **Managed SaaS**: Commercial service at app.aeternumally.com (Free/Pro/Enterprise tiers)
+ 
+By contributing, you help both the open-source community and our commercial offering.
+ 
+---
+ 
+## Contribution Agreement
+ 
+By submitting a pull request, you agree that:
+ 
+1. **License**: Your contribution will be licensed under **AGPL-3.0**
+2. **Commercial Use**: AeternumAlly may use your code in our commercial SaaS
+3. **Copyright**: You retain copyright but grant us commercial use rights
+4. **Attribution**: You will be credited in CONTRIBUTORS.md
+ 
+If you're not comfortable with this, please discuss with us before contributing.
+ 
+---
+ 
+## Contributor Benefits
+ 
+As a thank you for contributing:
+ 
+- 🎁 **Free Pro Account** (lifetime, for significant contributions)
+- 📣 **Recognition** in release notes and social media
+- 🏆 **Contributor Badge** on our community page
+- 💼 **Job Opportunities** (we hire from our contributors)
+ 
 ---
 
 ## Table of Contents
@@ -18,6 +50,10 @@ Thank you for taking the time to contribute. This document explains how to set u
 8. Database migrations
 9. Adding AI actions
 10. Running checks
+11. Code of Conduct
+12. Reporting security vulnerabilities
+13. Community & support
+14. License
 
 ---
 
@@ -109,6 +145,24 @@ Never commit directly to `main`. Open a pull request from your branch.
 ### Feature flag
 
 There are no feature flags in the current codebase. New features should be complete and tested before merging to `main`.
+
+### What NOT to contribute
+ 
+Please avoid submitting PRs for:
+ 
+❌ **Premium features** (Evidence upload, AI quota > 500, white-label)  
+→ These are proprietary and not part of the open-source core
+ 
+❌ **Breaking changes** without prior discussion  
+→ Open a GitHub Discussion or Issue first
+ 
+❌ **Large refactors** (>500 lines changed)  
+→ Discuss with maintainers before starting work
+ 
+❌ **Dependencies without justification**  
+→ Keep the bundle size small; justify why a new dependency is needed
+ 
+For major features, always open an **RFC (Request for Comments)** issue first.
 
 ---
 
@@ -209,20 +263,95 @@ To add a new AI-powered feature:
 ---
 
 ## 10. Running checks
-
-There is currently no automated test suite. Verify your changes manually:
-
+ 
+### Before submitting a PR:
+ 
+**Type checking:**
 ```bash
-# TypeScript type check (no emit)
 npx tsc --noEmit
-
-# Build the production bundle (catches tree-shaking and bundler issues)
+```
+ 
+**Build verification:**
+```bash
 npm run build
 ```
+ 
+**Manual testing checklist:**
+- [ ] TypeScript type check passes (`npx tsc --noEmit`)
+- [ ] Production build succeeds (`npm run build`)
+- [ ] Feature tested end-to-end in browser
+- [ ] Dark mode and light mode both work correctly
+- [ ] Multi-tenant isolation verified (can't access other org's data)
+- [ ] AI calls logged to `ai_usage_log` (if applicable)
+- [ ] RLS policies tested (if database changes)
+ 
+**For auth/invite changes:**
+- [ ] Full invite flow tested: send → receive email → click link → join org
+- [ ] Tested with existing user AND new user scenarios
+ 
+**For database migrations:**
+- [ ] Migration tested on fresh database
+- [ ] Rollback plan documented in PR description
+- [ ] `schema.sql` updated after migration
 
-Before submitting a PR:
-- [ ] `npx tsc --noEmit` passes with no errors
-- [ ] `npm run build` succeeds
-- [ ] You have manually tested the affected feature end-to-end in the browser
-- [ ] Dark mode and light mode both look correct for any UI changes
-- [ ] If your change touches auth or invites, test the full invite flow (send → receive email → click link → join org)
+---
+ 
+## 11. Code of Conduct
+ 
+We are committed to providing a welcoming and inclusive environment for all contributors.
+ 
+### Our Standards
+ 
+- ✅ Be respectful and constructive in discussions
+- ✅ Welcome newcomers and help them learn
+- ✅ Focus on what's best for the community
+- ❌ No harassment, discrimination, or personal attacks
+- ❌ No spam or self-promotion
+ 
+### Enforcement
+ 
+Violations can be reported to conduct@aeternumally.com. All reports will be reviewed and investigated promptly.
+ 
+For full details, see [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
+ 
+---
+ 
+## 12. Reporting security vulnerabilities
+ 
+**Do NOT open a public GitHub issue for security vulnerabilities.**
+ 
+Instead, email security@aeternumally.com with:
+- Description of the vulnerability
+- Steps to reproduce
+- Potential impact
+- Suggested fix (if any)
+ 
+We will respond within 48 hours and work with you to address the issue before public disclosure.
+ 
+See [SECURITY.md](./SECURITY.md) for our full security policy.
+ 
+---
+ 
+## 13. Community & support
+ 
+**Need help?**
+- 💬 [GitHub Discussions](https://github.com/narapat/Aeternum-Ally/discussions) — Q&A, ideas, feedback
+- 🐛 [GitHub Issues](https://github.com/narapat/Aeternum-Ally/issues) — Bug reports and feature requests
+- 📧 Email: hello@aeternumally.com
+ 
+**Want to help but don't know where to start?**
+- Look for issues labeled `good first issue`
+- Check the roadmap for upcoming features
+- Improve documentation — it's always appreciated!
+ 
+---
+ 
+## 14. License
+ 
+By contributing to AeternumAlly, you agree that your contributions will be licensed under the **AGPL-3.0** license.
+ 
+See [LICENSE](./LICENSE) for the full license text.
+ 
+---
+ 
+Thank you for contributing to AeternumAlly! 🌍💚
