@@ -7,10 +7,10 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
 
-const MODEL_REGISTRY: Record<string, { input: number; output: number; canDisableThinking: boolean }> = {
-  "gemini-2.5-flash-lite": { input: 0.10, output: 0.40,  canDisableThinking: false },
-  "gemini-2.5-flash":      { input: 0.30, output: 2.50,  canDisableThinking: true  },
-  "gemini-2.5-pro":        { input: 1.25, output: 10.00, canDisableThinking: true  },
+const MODEL_REGISTRY: Record<string, { input: number; output: number; canDisableThinking: boolean; maxAllowedOutputChars: number }> = {
+  "gemini-2.5-flash-lite": { input: 0.10, output: 0.40,  canDisableThinking: false, maxAllowedOutputChars: 4000 },
+  "gemini-2.5-flash":      { input: 0.30, output: 2.50,  canDisableThinking: true,  maxAllowedOutputChars: 4000 },
+  "gemini-2.5-pro":        { input: 1.25, output: 10.00, canDisableThinking: true,  maxAllowedOutputChars: 4000 },
 };
 
 const handler = async (event: any) => {
@@ -161,15 +161,41 @@ const handler = async (event: any) => {
       totalInputTokens += response.usageMetadata?.promptTokenCount ?? 0;
       totalOutputTokens += response.usageMetadata?.candidatesTokenCount ?? 0;
 
-      const parsed = parseAIJson(response.text, { status: "fail", summary: "Failed to generate", issues: [], recommendation: "" });
-      
-      const checkResult = {
-        topic: a.topic,
-        topicCode,
-        ...parsed,
-      };
+      try {
+        const text = typeof response.text === "function" ? response.text() : response.text;
+        const finishReason = response.candidates?.[0]?.finishReason;
 
-      quality_result.push(checkResult);
+        console.info("[dma-background] model", activeModel);
+        console.info("[dma-background] output chars", text?.length ?? 0);
+        console.info("[dma-background] finishReason", finishReason);
+
+        if (finishReason === "MAX_TOKENS") {
+          throw new Error(`AI output truncated for topic ${a.topic}: MAX_TOKENS`);
+        }
+
+        if (!text) {
+          throw new Error(`Empty AI response for topic ${a.topic}`);
+        }
+
+        const modelCfg = MODEL_REGISTRY[activeModel];
+        if (text.length > modelCfg.maxAllowedOutputChars) {
+          console.warn("[dma-background] oversized output tail", text.slice(-1000));
+          throw new Error(`AI output too large: ${text.length} chars`);
+        }
+
+        const parsed = JSON.parse(text);
+        quality_result.push({ topic: a.topic, topicCode, ...parsed });
+      } catch (e: any) {
+        console.error(`[dma-background] Failed check for ${a.topic}:`, e.message);
+        quality_result.push({ 
+          topic: a.topic, 
+          topicCode, 
+          status: "fail", 
+          summary: `Failed: ${e.message}`, 
+          issues: [], 
+          recommendation: "Please try again or check the logs." 
+        });
+      }
 
       // Progressive update to DB
       console.log(`[dma-background] Updating DB with ${quality_result.length} completed checks`);
@@ -241,10 +267,37 @@ const handler = async (event: any) => {
 
     console.log(`[dma-background] Synthesis raw response:`, synthesisResponse.text);
 
-    const insight_result = parseAIJson(synthesisResponse.text, { 
-      strategicInsight: { summary: "", keyRisks: [], opportunities: [], bottomLine: "" }, 
-      recommendedActions: [] 
-    });
+    let insight_result;
+    try {
+      const text = typeof synthesisResponse.text === "function" ? synthesisResponse.text() : synthesisResponse.text;
+      const finishReason = synthesisResponse.candidates?.[0]?.finishReason;
+
+      console.info("[dma-background] synthesis model", activeModel);
+      console.info("[dma-background] synthesis output chars", text?.length ?? 0);
+      console.info("[dma-background] synthesis finishReason", finishReason);
+
+      if (finishReason === "MAX_TOKENS") {
+        throw new Error(`AI output truncated for Strategic Synthesis: MAX_TOKENS`);
+      }
+
+      if (!text) {
+        throw new Error(`Empty AI response for Strategic Synthesis`);
+      }
+
+      const modelCfg = MODEL_REGISTRY[activeModel];
+      if (text.length > modelCfg.maxAllowedOutputChars) {
+        console.warn("[dma-background] oversized synthesis output tail", text.slice(-1000));
+        throw new Error(`AI output too large: ${text.length} chars`);
+      }
+
+      insight_result = JSON.parse(text);
+    } catch (e: any) {
+      console.error(`[dma-background] Failed Strategic Synthesis:`, e.message);
+      insight_result = { 
+        strategicInsight: { summary: `Failed to generate: ${e.message}`, keyRisks: [], opportunities: [], bottomLine: "" }, 
+        recommendedActions: [] 
+      };
+    }
 
     totalInputTokens += synthesisResponse.usageMetadata?.promptTokenCount ?? 0;
     totalOutputTokens += synthesisResponse.usageMetadata?.candidatesTokenCount ?? 0;
