@@ -7,6 +7,12 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
 
+const MODEL_REGISTRY: Record<string, { input: number; output: number; canDisableThinking: boolean }> = {
+  "gemini-2.5-flash-lite": { input: 0.10, output: 0.40,  canDisableThinking: true  },
+  "gemini-2.5-flash":      { input: 0.30, output: 2.50,  canDisableThinking: true  },
+  "gemini-2.5-pro":        { input: 1.25, output: 10.00, canDisableThinking: false },
+};
+
 const ESRS_TOPIC_GUIDANCE: Record<string, { impactAreas: string; financialAreas: string }> = {
   "E1": {
     impactAreas: "GHG emissions (Scope 1, 2, 3), energy consumption mix, climate transition plan, carbon reduction targets, physical climate risks to operations and value chain",
@@ -81,6 +87,12 @@ const handler = async (event: any) => {
 
   const admin = createClient(supabaseUrl!, serviceKey!);
 
+  function noThinkingConfig(m: string): object {
+    const entry = MODEL_REGISTRY[m];
+    const canDisable = entry != null ? entry.canDisableThinking : m.includes("flash");
+    return canDisable ? { thinkingConfig: { thinkingBudget: 0 } } : {};
+  }
+
   function parseAIJson<T>(text: string | undefined, fallback: T): T {
     if (!text) return fallback;
     try {
@@ -117,9 +129,15 @@ const handler = async (event: any) => {
       updateData.scoring_status = "processing";
     }
 
-    await admin
+    console.log(`[assessment-background] Upserting job row...`);
+    const { error: upsertError } = await admin
       .from("assessment_ai_jobs")
       .upsert({ organization_id, assessment_id, topic, ...updateData }, { onConflict: "organization_id,assessment_id" });
+
+    if (upsertError) {
+      console.error("[assessment-background] Upsert error:", upsertError);
+      throw upsertError;
+    }
 
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
@@ -184,9 +202,10 @@ ${(qualityCheckContext.issues as any[]).map((i: any) =>
         Return ONLY the plain text description. No JSON, no markdown, no label.
       `;
 
+      console.log(`[assessment-background] Calling Gemini for autofill (impact & financial in parallel)...`);
       const [impactResp, financialResp] = await Promise.all([
-        ai.models.generateContent({ model, contents: impactPrompt }),
-        ai.models.generateContent({ model, contents: financialPrompt }),
+        ai.models.generateContent({ model, contents: impactPrompt, config: noThinkingConfig(model) }),
+        ai.models.generateContent({ model, contents: financialPrompt, config: noThinkingConfig(model) }),
       ]);
 
       totalInputTokens += Number(impactResp.usageMetadata?.promptTokenCount ?? 0);
@@ -199,11 +218,19 @@ ${(qualityCheckContext.issues as any[]).map((i: any) =>
         financialSuggestion: financialResp.text?.trim() ?? "",
       };
 
-      await admin
+      console.log(`[assessment-background] Updating job row to completed...`);
+      const { error: updateError } = await admin
         .from("assessment_ai_jobs")
         .update({ autofill_status: "completed", autofill_result: result, updated_at: new Date().toISOString() })
         .eq("organization_id", organization_id)
         .eq("assessment_id", assessment_id);
+
+      if (updateError) {
+        console.error("[assessment-background] Update error:", updateError);
+        throw updateError;
+      }
+
+      console.log(`[assessment-background] Autofill completed successfully.`);
 
     } else if (action === "scoring") {
       const keyActivities = joinField(bmcData?.keyActivities);
@@ -263,10 +290,12 @@ Return ONLY valid JSON, no markdown:
         },
       };
 
+      console.log(`[assessment-background] Calling Gemini for scoring...`);
       const response = await ai.models.generateContent({
         model,
         contents: prompt,
         config: {
+          ...noThinkingConfig(model),
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
@@ -340,14 +369,23 @@ Return ONLY valid JSON, no markdown:
       safe.financial.magnitude.score    = clamp(safe.financial.magnitude.score);
       safe.financial.likelihood.score   = clamp(safe.financial.likelihood.score);
 
-      await admin
+      console.log(`[assessment-background] Updating job row to completed...`);
+      const { error: updateError } = await admin
         .from("assessment_ai_jobs")
         .update({ scoring_status: "completed", scoring_result: safe, updated_at: new Date().toISOString() })
         .eq("organization_id", organization_id)
         .eq("assessment_id", assessment_id);
+
+      if (updateError) {
+        console.error("[assessment-background] Update error:", updateError);
+        throw updateError;
+      }
+
+      console.log(`[assessment-background] Scoring completed successfully.`);
     }
 
     // Log usage
+    console.log(`[assessment-background] Logging AI usage...`);
     await admin.from("ai_usage_log").insert({
       organization_id,
       user_id: user_id || null,
@@ -375,6 +413,7 @@ Return ONLY valid JSON, no markdown:
       .eq("assessment_id", assessment_id);
   }
 
+  console.log(`[assessment-background] Finished ${action} in ${Date.now() - start}ms`);
   return { statusCode: 200, body: "Done" };
 };
 
