@@ -7,13 +7,19 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
 
+const MODEL_REGISTRY: Record<string, { input: number; output: number; canDisableThinking: boolean }> = {
+  "gemini-2.5-flash-lite": { input: 0.10, output: 0.40,  canDisableThinking: true  },
+  "gemini-2.5-flash":      { input: 0.30, output: 2.50,  canDisableThinking: true  },
+  "gemini-2.5-pro":        { input: 1.25, output: 10.00, canDisableThinking: false },
+};
+
 const handler = async (event: any) => {
   const start = Date.now();
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
-  const { organization_id, profile, materialAssessments, user_id, user_email, model = DEFAULT_MODEL } = JSON.parse(event.body);
+  const { organization_id, profile, materialAssessments, user_id, user_email } = JSON.parse(event.body);
 
   if (!organization_id || !profile || !materialAssessments) {
     console.error("[report-background] Missing required fields");
@@ -23,6 +29,20 @@ const handler = async (event: any) => {
   console.log(`[report-background] Starting generation for org=${organization_id}, topics=${materialAssessments.length}`);
 
   const admin = createClient(supabaseUrl!, serviceKey!);
+
+  // Look up the org's chosen model + BYOK settings
+  const { data: settings } = await admin
+    .from("organization_ai_settings")
+    .select("model, use_byok, byok_provider, byok_api_key")
+    .eq("organization_id", organization_id)
+    .maybeSingle();
+
+  const activeModel = settings?.model ?? DEFAULT_MODEL;
+  const useBYOK = settings?.use_byok === true && !!settings?.byok_api_key;
+  const resolvedApiKey = useBYOK ? settings!.byok_api_key! : apiKey!;
+  const quotaType = useBYOK ? "byok" : "platform_free";
+
+  console.log(`[report-background] Using model=${activeModel}, quotaType=${quotaType}`);
 
   function parseAIJson<T>(text: string | undefined, fallback: T): T {
     if (!text) return fallback;
@@ -35,13 +55,25 @@ const handler = async (event: any) => {
     }
   }
 
+  function estimateCost(m: string, inputTokens: number, outputTokens: number): number {
+    const p = MODEL_REGISTRY[m];
+    if (!p) return 0;
+    return (inputTokens * p.input + outputTokens * p.output) / 1_000_000;
+  }
+
+  function noThinkingConfig(m: string): object {
+    const entry = MODEL_REGISTRY[m];
+    const canDisable = entry != null ? entry.canDisableThinking : m.includes("flash");
+    return canDisable ? { thinkingConfig: { thinkingBudget: 0 } } : {};
+  }
+
   try {
     // 1. Update status to processing
     await admin
       .from("sustainability_reports")
       .upsert({ organization_id, status: "processing", updated_at: new Date().toISOString() }, { onConflict: "organization_id" });
 
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = new GoogleGenAI({ apiKey: resolvedApiKey });
     const companyContext = `
       Company: ${profile.name}
       Industry: ${profile.industry}
@@ -70,9 +102,10 @@ const handler = async (event: any) => {
 
     console.log("[report-background] Requesting header sections...");
     const headerRespPromise = ai.models.generateContent({
-      model,
+      model: activeModel,
       contents: headerPrompt,
       config: {
+        ...noThinkingConfig(activeModel),
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -86,6 +119,7 @@ const handler = async (event: any) => {
 
     // ── Calls 2…N: One call per topic ────────────────────────
     const topicConfig = {
+      ...noThinkingConfig(activeModel),
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -113,7 +147,7 @@ const handler = async (event: any) => {
         - topicName: the full string — "${a.topic}"
         - disclosureContent: 200-300 word multi-paragraph narrative.
       `;
-      return ai.models.generateContent({ model, contents: prompt, config: topicConfig });
+      return ai.models.generateContent({ model: activeModel, contents: prompt, config: topicConfig });
     });
 
     console.log(`[report-background] Requesting ${topicCalls.length} topical disclosures in parallel...`);
@@ -135,16 +169,20 @@ const handler = async (event: any) => {
     });
 
     // Log usage
+    console.log(`[report-background] Logging AI usage...`);
     await admin.from("ai_usage_log").insert({
       organization_id,
       user_id: user_id || null,
       user_email: user_email || null,
       action: "report_generation_job",
       provider: "gemini",
-      model,
+      model: activeModel,
       input_tokens: totalInputTokens,
       output_tokens: totalOutputTokens,
       duration_ms: Date.now() - start,
+      estimated_cost_usd: Number(estimateCost(activeModel, totalInputTokens, totalOutputTokens).toFixed(6)),
+      quota_type: quotaType,
+      success: true
     });
 
     console.log("[report-background] All AI responses received. Parsing...");

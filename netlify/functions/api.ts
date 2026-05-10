@@ -203,22 +203,25 @@ const handler = async (event: any) => {
   // 6. Log the call (best-effort; never fail the response if logging fails)
   // ------------------------------------------------------------------
   try {
-    await admin.from("ai_usage_log").insert({
-      organization_id,
-      user_id: user.id,
-      user_email: user.email ?? null,
-      action,
-      provider: "gemini",
-      model,
-      input_tokens: inputTokens || null,
-      output_tokens: outputTokens || null,
-      duration_ms: durationMs,
-      success,
-      error_message: success ? null : errorMessage,
-      http_status: success ? null : upstreamStatus,
-      estimated_cost_usd: success ? Number(estimateCost(model, inputTokens, outputTokens).toFixed(6)) : 0,
-      quota_type: quotaType,
-    });
+    const skipLogging = action.startsWith("trigger") || action === "getAssessmentJobStatus";
+    if (!skipLogging) {
+      await admin.from("ai_usage_log").insert({
+        organization_id,
+        user_id: user.id,
+        user_email: user.email ?? null,
+        action,
+        provider: "gemini",
+        model,
+        input_tokens: inputTokens || null,
+        output_tokens: outputTokens || null,
+        duration_ms: durationMs,
+        success,
+        error_message: success ? null : errorMessage,
+        http_status: success ? null : upstreamStatus,
+        estimated_cost_usd: success ? Number(estimateCost(model, inputTokens, outputTokens).toFixed(6)) : 0,
+        quota_type: quotaType,
+      });
+    }
   } catch (logErr) {
     console.warn("Failed to log AI usage:", logErr);
   }
