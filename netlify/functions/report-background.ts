@@ -114,7 +114,7 @@ const handler = async (event: any) => {
     `;
 
     console.log("[report-background] Requesting header sections...");
-    const headerRespPromise = ai.models.generateContent({
+    const headerResp = await ai.models.generateContent({
       model: activeModel,
       contents: headerPrompt,
       config: {
@@ -130,7 +130,29 @@ const handler = async (event: any) => {
       },
     });
 
-    // ── Calls 2…N: One call per topic ────────────────────────
+    let totalInputTokens = headerResp.usageMetadata?.promptTokenCount ?? 0;
+    let totalOutputTokens = headerResp.usageMetadata?.candidatesTokenCount ?? 0;
+
+    const header = parseAIJson(headerResp.text, { generalDisclosure: "", strategyDisclosure: "" });
+
+    const result = {
+      generalDisclosure: header.generalDisclosure ?? "",
+      strategyDisclosure: header.strategyDisclosure ?? "",
+      topics: [] as any[],
+      dmaInsight: dmaInsight ? {
+        strategicInsight: dmaInsight.strategic_insight,
+        recommendedActions: dmaInsight.recommended_actions,
+      } : null,
+    };
+
+    // Save initial structure
+    console.log("[report-background] Saving initial report structure to DB...");
+    await admin
+      .from("sustainability_reports")
+      .update({ result, updated_at: new Date().toISOString() })
+      .eq("organization_id", organization_id);
+
+    // ── Calls 2…N: One call per topic (SEQUENTIAL) ────────────────────────
     const topicConfig = {
       ...noThinkingConfig(activeModel),
       responseMimeType: "application/json",
@@ -144,7 +166,10 @@ const handler = async (event: any) => {
       },
     };
 
-    const topicCalls = materialAssessments.map((a: any) => {
+    console.log(`[report-background] Processing ${materialAssessments.length} topics sequentially...`);
+
+    for (const a of materialAssessments) {
+      console.log(`[report-background] Generating disclosure for topic: ${a.topic}`);
       const topicCode = String(a.topic).split(" ")[0];
       const prompt = `
         Act as a Sustainability Reporting Officer drafting topical disclosures aligned with ESRS and GRI Standards.
@@ -192,29 +217,40 @@ const handler = async (event: any) => {
         Recommended next steps
         [Suggest practical next action based on missing data]
       `;
-      return ai.models.generateContent({ model: activeModel, contents: prompt, config: topicConfig });
-    });
 
-    console.log(`[report-background] Requesting ${topicCalls.length} topical disclosures in parallel...`);
+      try {
+        const response = await ai.models.generateContent({ model: activeModel, contents: prompt, config: topicConfig });
+        
+        totalInputTokens += response.usageMetadata?.promptTokenCount ?? 0;
+        totalOutputTokens += response.usageMetadata?.candidatesTokenCount ?? 0;
 
-    const [headerResp, ...topicResps] = await Promise.all([
-      headerRespPromise,
-      ...topicCalls,
-    ]);
+        const parsed = parseAIJson(response.text, { topicId: topicCode, topicName: String(a.topic), disclosureContent: "Failed to generate." });
+        result.topics.push(parsed);
 
-    let totalInputTokens = 0;
-    let totalOutputTokens = 0;
+        // Progressive update
+        console.log(`[report-background] Updating DB with ${result.topics.length} completed topics`);
+        await admin
+          .from("sustainability_reports")
+          .update({ result, updated_at: new Date().toISOString() })
+          .eq("organization_id", organization_id);
 
-    totalInputTokens += headerResp.usageMetadata?.promptTokenCount ?? 0;
-    totalOutputTokens += headerResp.usageMetadata?.candidatesTokenCount ?? 0;
+      } catch (e: any) {
+        console.error(`[report-background] Failed for topic ${a.topic}:`, e);
+        result.topics.push({
+          topicId: topicCode,
+          topicName: String(a.topic),
+          disclosureContent: `Failed to generate disclosure due to an error: ${e.message || e}`
+        });
+        // Still update DB so we don't lose previous topics
+        await admin
+          .from("sustainability_reports")
+          .update({ result, updated_at: new Date().toISOString() })
+          .eq("organization_id", organization_id);
+      }
+    }
 
-    topicResps.forEach((r: any) => {
-      totalInputTokens += r.usageMetadata?.promptTokenCount ?? 0;
-      totalOutputTokens += r.usageMetadata?.candidatesTokenCount ?? 0;
-    });
-
-    // Log usage
-    console.log(`[report-background] Logging AI usage...`);
+    // Log usage at the end
+    console.log(`[report-background] Logging total AI usage...`);
     await admin.from("ai_usage_log").insert({
       organization_id,
       user_id: user_id || null,
@@ -229,21 +265,6 @@ const handler = async (event: any) => {
       quota_type: quotaType,
       success: true
     });
-
-    console.log("[report-background] All AI responses received. Parsing...");
-
-    const header = parseAIJson(headerResp.text, { generalDisclosure: "", strategyDisclosure: "" });
-    const topics = topicResps.map((r: any) => parseAIJson(r.text, { topicId: "", topicName: "", disclosureContent: "" }));
-
-    const result = {
-      generalDisclosure: header.generalDisclosure ?? "",
-      strategyDisclosure: header.strategyDisclosure ?? "",
-      topics,
-      dmaInsight: dmaInsight ? {
-        strategicInsight: dmaInsight.strategic_insight,
-        recommendedActions: dmaInsight.recommended_actions,
-      } : null,
-    };
 
     // 2. Update status to completed
     const { error } = await admin
