@@ -16,6 +16,7 @@ Welcome to Aeternum Ally! This platform guides your organization through a struc
 7. [Workspace & Settings](#7-workspace--settings)
 8. [Example Use Cases & Scenarios](#8-example-use-cases--scenarios)
 9. [Troubleshooting](#9-troubleshooting)
+10. [Support & Feedback](#10-support--feedback)
 
 ---
 
@@ -260,3 +261,13 @@ To help you understand how Aeternum Ally works in practice, here are two common 
 - **Data Not Saving:** Look for the spinning save indicator in the top right. If an error persists, refresh the page.
 - **Empty Materiality Matrix:** Ensure you have completed at least one Double Materiality Assessment.
 - **Missing Sidebar Sections:** Some features are role-restricted. Consultants (Read-Only) will not see management or destructive actions. Contact your Workspace Owner if you need your role upgraded.
+
+---
+
+## 10. Support & Feedback
+
+If you encounter any problems with the application, have questions, or want to share suggestions, you have several options:
+
+- **Ally Assistant (Recommended)**: Click the floating "Ally" icon on the screen. Ally can automatically understand your current page context and help collect your information to send directly to support!
+- **GitHub Issues**: You can report issues directly on our <a href="https://github.com/narapat/Aeternum-Ally/issues" target="_blank">GitHub Repository</a>.
+- **Email**: Send an email directly to [Support@aeternumally.com](mailto:Support@aeternumally.com).
