@@ -125,7 +125,7 @@ const DMAInsightHub: React.FC<Props> = ({
 
   const runAnalysis = React.useCallback(async () => {
     setTopicStates(new Map(assessments.map((a) => [String(a.topic).split(" ")[0], { phase: "loading" } as TopicPhase])));
-    setSynthesisState({ phase: "idle" });
+    setSynthesisState({ phase: "loading" });
     setPolling(true);
 
     try {
@@ -151,6 +151,18 @@ const DMAInsightHub: React.FC<Props> = ({
           setSynthesisState({ phase: "done", insight: data.insight_result.strategicInsight, actions: data.insight_result.recommendedActions });
           return;
         } else if (data.status === 'processing') {
+          const map = new Map(topicStates);
+          (data.quality_result || []).forEach((c: any) => {
+            map.set(c.topicCode, { phase: "done", check: c });
+          });
+          assessments.forEach((a) => {
+            const code = String(a.topic).split(" ")[0];
+            if (!map.has(code)) {
+              map.set(code, { phase: "loading" });
+            }
+          });
+          setTopicStates(map);
+          setSynthesisState({ phase: "loading" });
           setPolling(true);
           return;
         }
@@ -307,36 +319,56 @@ const SynthesisSection: React.FC<{
 
   if (state.phase === "loading") {
     return (
-      <section>
-        <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-          <Lightbulb className="w-5 h-5 text-amber-500" />
-          Strategic Insight
-        </h2>
-        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 space-y-5">
-          <div className="animate-pulse space-y-3">
-            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
-            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
-            
-            <div className="grid sm:grid-cols-2 gap-4 pt-2">
-              <div className="space-y-2">
-                <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/4"></div>
-                <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
-                <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
-              </div>
-              <div className="space-y-2">
-                <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/4"></div>
-                <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
-                <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
+      <div className="space-y-8">
+        <section>
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+            <Lightbulb className="w-5 h-5 text-amber-500" />
+            Strategic Insight
+          </h2>
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 space-y-5">
+            <div className="animate-pulse space-y-3">
+              <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
+              <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
+              
+              <div className="grid sm:grid-cols-2 gap-4 pt-2">
+                <div className="space-y-2">
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/4"></div>
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
+                </div>
+                <div className="space-y-2">
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/4"></div>
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
+                </div>
               </div>
             </div>
+            
+            <div className="flex items-center gap-3 pt-4 text-slate-500 dark:text-slate-400 text-sm border-t border-slate-100 dark:border-slate-700">
+              <Loader2 className="w-4 h-4 animate-spin flex-shrink-0 text-esg-500" />
+              Synthesizing strategic context across all topics…
+            </div>
           </div>
-          
-          <div className="flex items-center gap-3 pt-4 text-slate-500 dark:text-slate-400 text-sm border-t border-slate-100 dark:border-slate-700">
-            <Loader2 className="w-4 h-4 animate-spin flex-shrink-0 text-esg-500" />
-            Synthesizing strategic context across all topics…
+        </section>
+
+        <section>
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+            <Zap className="w-5 h-5 text-esg-500" />
+            Recommended Actions
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 space-y-3">
+                <div className="animate-pulse space-y-2">
+                  <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/4"></div>
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
     );
   }
 
