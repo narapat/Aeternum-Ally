@@ -102,6 +102,9 @@ const handler = async (event: any) => {
 
   function noThinkingConfig(m: string): object {
     const entry = MODEL_REGISTRY[m];
+    if (entry && !entry.canDisableThinking) {
+      return { thinkingConfig: { thinkingBudget: 128 } };
+    }
     const canDisable = entry != null ? entry.canDisableThinking : m.includes("flash");
     return canDisable ? { thinkingConfig: { thinkingBudget: 0 } } : {};
   }
