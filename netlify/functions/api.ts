@@ -833,6 +833,11 @@ async function triggerReportGeneration(event: any, { organization_id, profile, m
   
   console.log(`[api] Triggering background report at ${url}`);
   
+  const admin = createClient(supabaseUrl!, serviceKey!);
+  await admin
+    .from("sustainability_reports")
+    .upsert({ organization_id, status: "processing", updated_at: new Date().toISOString() }, { onConflict: "organization_id" });
+
   try {
     fetch(url, {
       method: "POST",
