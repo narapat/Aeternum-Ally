@@ -198,11 +198,11 @@ export const getReportStatus = async (): Promise<{ status: string; result?: any;
 
 export const triggerDMAAnalysis = async (
   profile: CompanyProfile,
-  materialAssessments: AssessmentData[],
-  bmcItems: any,
-  swotItems: any
+  assessments: AssessmentData[],
+  bmcData: any,
+  swotData: any
 ): Promise<{ message: string }> => {
-  return await callApi("triggerDMAAnalysis", { profile, materialAssessments, bmcItems, swotItems });
+  return await callApi("triggerDMAAnalysis", { profile, assessments, bmcData, swotData });
 };
 
 export const getDMAAnalysisStatus = async (): Promise<{ status: string; quality_result?: any[]; insight_result?: any; error?: string } | null> => {
