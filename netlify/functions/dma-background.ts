@@ -8,9 +8,9 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DEFAULT_MODEL = "gemini-2.5-flash";
 
 const MODEL_REGISTRY: Record<string, { input: number; output: number; canDisableThinking: boolean; maxAllowedOutputChars: number }> = {
-  "gemini-2.5-flash-lite": { input: 0.10, output: 0.40,  canDisableThinking: false, maxAllowedOutputChars: 4000 },
-  "gemini-2.5-flash":      { input: 0.30, output: 2.50,  canDisableThinking: true,  maxAllowedOutputChars: 4000 },
-  "gemini-2.5-pro":        { input: 1.25, output: 10.00, canDisableThinking: true,  maxAllowedOutputChars: 4000 },
+  "gemini-2.5-flash-lite": { input: 0.10, output: 0.40,  canDisableThinking: false, maxAllowedOutputChars: 8000 },
+  "gemini-2.5-flash":      { input: 0.30, output: 2.50,  canDisableThinking: true,  maxAllowedOutputChars: 8000 },
+  "gemini-2.5-pro":        { input: 1.25, output: 10.00, canDisableThinking: true,  maxAllowedOutputChars: 8000 },
 };
 
 const handler = async (event: any) => {
@@ -121,7 +121,7 @@ const handler = async (event: any) => {
 
         Provide a critical, yet concise review of this topic assessment. 
         - Keep the 'summary' to 1-2 sentences maximum.
-        - Ensure 'issues' are specific and descriptions are brief (1-2 sentences) and actionable.
+        - Ensure 'issues' are specific, limited to a maximum of 3 items, and descriptions are brief (1-2 sentences) and actionable.
         - Keep the 'recommendation' to a single actionable sentence.
         Avoid generic auditor speak; be direct and specific to the data provided.
         The entire JSON response MUST NOT exceed 2000 characters.
@@ -134,7 +134,7 @@ const handler = async (event: any) => {
         config: {
           ...noThinkingConfig(activeModel),
           responseMimeType: "application/json",
-          maxOutputTokens: 1000,
+          maxOutputTokens: 2000,
           responseSchema: {
             type: Type.OBJECT,
             properties: {
