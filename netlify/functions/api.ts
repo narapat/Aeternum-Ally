@@ -168,7 +168,7 @@ const handler = async (event: any) => {
 
   try {
     const outcome = await Promise.race([
-      runAction(ai, model, action, params),
+      runAction(ai, model, action, params, event, organization_id),
       fencePromise,
     ]);
     clearTimeout(fenceId!);
@@ -266,7 +266,9 @@ async function runAction(
   ai: GoogleGenAI,
   model: string,
   action: string,
-  params: any
+  params: any,
+  event: any,
+  organization_id: string
 ): Promise<{ result: any; inputTokens: number; outputTokens: number }> {
   switch (action) {
     case "generateAssessmentSuggestions":
@@ -281,8 +283,8 @@ async function runAction(
       return generateSwotExternal(ai, model, params);
     case "generateKPISuggestions":
       return generateKPISuggestions(ai, model, params);
-    case "generateSustainabilityStatement":
-      return generateSustainabilityStatement(ai, model, params);
+    case "triggerReportGeneration":
+      return triggerReportGeneration(event, { organization_id, ...params });
     case "analyzeTopicQuality":
       return analyzeTopicQuality(ai, model, params);
     case "analyzeDMASynthesis":
@@ -814,131 +816,28 @@ Return ONLY valid JSON, no markdown:
   }
 }
 
-async function generateSustainabilityStatement(
-  ai: GoogleGenAI,
-  model: string,
-  { profile, materialAssessments }: any
-) {
-  if (!materialAssessments || materialAssessments.length === 0) {
-    return {
-      result: { generalDisclosure: "No data", strategyDisclosure: "No data", topics: [] },
-      inputTokens: 0,
-      outputTokens: 0,
-    };
+async function triggerReportGeneration(event: any, { organization_id, profile, materialAssessments }: any) {
+  const host = event.headers.host || event.headers.Host;
+  const protocol = host.startsWith('localhost') ? 'http' : 'https';
+  const url = `${protocol}://${host}/.netlify/functions/report-background`;
+  
+  console.log(`[api] Triggering background report at ${url}`);
+  
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id, profile, materialAssessments }),
+    });
+    console.log(`[api] Background function trigger status: ${resp.status}`);
+  } catch (e) {
+    console.error("[api] Failed to trigger background function:", e);
   }
-
-  const companyContext = buildCompanyContext(profile);
-
-  const topicSummary = materialAssessments
-    .map((a: any) => `- ${a.topic} (impact score: ${a.impactMaterialityValue}/100, financial score: ${a.financialMaterialityValue}/100): impact: ${a.impactDescription}; financial: ${a.financialDescription}`)
-    .join("\n");
-
-  // ── Call 1: Header sections (fast — no per-topic content) ──────────────────
-  const headerPrompt = `
-    Act as a Sustainability Reporting Officer drafting a "Sustainability Statement" aligned with ESRS and GRI Standards.
-
-    ${companyContext}
-
-    Material topics identified (above threshold of 40/100 on either axis):
-    ${topicSummary}
-
-    Generate ONLY the two header sections below as JSON.
-
-    1. generalDisclosure: "Basis of Preparation" (ESRS 2 BP-1/BP-2). Explain the Double Materiality approach (impact materiality + financial materiality) as applied by this company. Reference the company's scale and sector. ~120 words.
-    2. strategyDisclosure: "Strategy & Business Model" (ESRS 2 SBM-3). Summarise how the company's specific products/services and business model interact with the material impacts and risks identified. ~150 words.
-  `;
-
-  // ── Calls 2…N: One call per topic (run in parallel) ────────────────────────
-  const topicPrompts = materialAssessments.map((a: any) => {
-    const topicCode = String(a.topic).split(" ")[0];
-    return `
-      Act as a Sustainability Reporting Officer drafting topical disclosures aligned with ESRS and GRI Standards.
-
-      ${companyContext}
-
-      Topic: ${a.topic} (code: "${topicCode}")
-      Impact materiality score: ${a.impactMaterialityValue}/100 — ${a.impactDescription}
-      Financial materiality score: ${a.financialMaterialityValue}/100 — ${a.financialDescription}
-
-      Write a structured narrative disclosure for this single topic as JSON with:
-      - topicId: the short code only — "${topicCode}"
-      - topicName: the full string — "${a.topic}"
-      - disclosureContent: 200-300 word multi-paragraph narrative covering:
-          • Policies (ESRS MDR-P) — reference the company's specific context
-          • Actions & Resources (MDR-A) — tie to the company's products/services and scale
-          • Metrics & Targets (MDR-M) — suggest targets appropriate for a ${profile.employeeCount}-scale company
-        Reference the relevant GRI Standard number (e.g. GRI 305 for climate, GRI 303 for water).
-        Use plain text with line breaks between paragraphs; no markdown.
-    `;
-  });
-
-  const topicConfig = {
-    responseMimeType: "application/json",
-    responseSchema: {
-      type: Type.OBJECT,
-      properties: {
-        topicId: { type: Type.STRING },
-        topicName: { type: Type.STRING },
-        disclosureContent: { type: Type.STRING },
-      },
-    },
-  };
-
-  // Fire header and topic batches. Topics run in batches of 3 (sequential batches,
-  // parallel within each batch) to avoid Gemini rate limits and stay within the
-  // Netlify function timeout. Header fires concurrently with the first batch.
-  const BATCH_SIZE = 3;
-  const topicBatches: string[][] = [];
-  for (let i = 0; i < topicPrompts.length; i += BATCH_SIZE) {
-    topicBatches.push(topicPrompts.slice(i, i + BATCH_SIZE));
-  }
-
-  const headerRespPromise = ai.models.generateContent({
-    model,
-    contents: headerPrompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          generalDisclosure: { type: Type.STRING },
-          strategyDisclosure: { type: Type.STRING },
-        },
-      },
-    },
-  });
-
-  const topicResps: any[] = [];
-  let firstBatch = true;
-  for (const batch of topicBatches) {
-    const batchCalls = batch.map((prompt: string) =>
-      ai.models.generateContent({ model, contents: prompt, config: topicConfig })
-    );
-    // Run header concurrently with the first topic batch
-    const results = firstBatch
-      ? (await Promise.all([headerRespPromise, ...batchCalls])).slice(1)
-      : await Promise.all(batchCalls);
-    topicResps.push(...results);
-    firstBatch = false;
-  }
-
-  const headerResp = await headerRespPromise;
-  const header = parseAIJson(headerResp.text, { generalDisclosure: "", strategyDisclosure: "" });
-  const topics = topicResps.map((r: any) => parseAIJson(r.text, { topicId: "", topicName: "", disclosureContent: "" }));
-
-  // Sum token usage across all calls
-  const allResps = [headerResp, ...topicResps];
-  const inputTokens = allResps.reduce((sum: number, r: any) => sum + Number(r.usageMetadata?.promptTokenCount ?? 0), 0);
-  const outputTokens = allResps.reduce((sum: number, r: any) => sum + Number(r.usageMetadata?.candidatesTokenCount ?? r.usageMetadata?.responseTokenCount ?? 0), 0);
 
   return {
-    result: {
-      generalDisclosure: header.generalDisclosure ?? "",
-      strategyDisclosure: header.strategyDisclosure ?? "",
-      topics,
-    },
-    inputTokens,
-    outputTokens,
+    result: { message: "Report generation started" },
+    inputTokens: 0,
+    outputTokens: 0,
   };
 }
 

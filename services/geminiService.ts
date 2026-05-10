@@ -134,12 +134,26 @@ export interface GeneratedStatement {
   }[];
 }
 
-export const generateSustainabilityStatement = async (
+export const triggerReportGeneration = async (
   profile: CompanyProfile,
   materialAssessments: AssessmentData[]
-): Promise<GeneratedStatement> => {
-  // Re-throws so the caller can show a real error message instead of a silent null.
-  return await callApi("generateSustainabilityStatement", { profile, materialAssessments });
+): Promise<{ message: string }> => {
+  return await callApi("triggerReportGeneration", { profile, materialAssessments });
+};
+
+export const getReportStatus = async (): Promise<{ status: string; result?: any; error?: string } | null> => {
+  if (!currentOrgId) return null;
+  const { data, error } = await supabase
+    .from("sustainability_reports")
+    .select("status, result, error")
+    .eq("organization_id", currentOrgId)
+    .maybeSingle();
+    
+  if (error) {
+    console.warn("getReportStatus failed:", error.message);
+    return null;
+  }
+  return data;
 };
 
 // Pass 1 — quality check for a single topic. Called once per assessment from the frontend.

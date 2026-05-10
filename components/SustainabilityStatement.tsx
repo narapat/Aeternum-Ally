@@ -1,8 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CompanyProfile, AssessmentData, SustainabilityBusinessModel } from '../types';
 import { GRI_MAPPING } from '../constants';
-import { generateSustainabilityStatement, GeneratedStatement } from '../services/geminiService';
+import { triggerReportGeneration, getReportStatus, GeneratedStatement } from '../services/geminiService';
 import { logError } from '../services/errorLogService';
 import { FileText, Download, Loader2, Book, RefreshCw, ShieldCheck, AlertCircle } from 'lucide-react';
 
@@ -20,24 +20,64 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
 
   const materialTopics = assessments.filter(a => a.isMaterial);
 
+  const [polling, setPolling] = useState(false);
+
+  useEffect(() => {
+    // Check initial status
+    const checkStatus = async () => {
+      const data = await getReportStatus();
+      if (data) {
+        if (data.status === 'completed' && data.result) {
+          setGeneratedContent(data.result);
+        } else if (data.status === 'processing') {
+          setPolling(true);
+          setLoading(true);
+        } else if (data.status === 'failed') {
+          setError(data.error || "Generation failed");
+        }
+      }
+    };
+    checkStatus();
+  }, [organizationId]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (polling) {
+      interval = setInterval(async () => {
+        const data = await getReportStatus();
+        if (data) {
+          if (data.status === 'completed') {
+            setGeneratedContent(data.result);
+            setPolling(false);
+            setLoading(false);
+          } else if (data.status === 'failed') {
+            setError(data.error || "Generation failed");
+            setPolling(false);
+            setLoading(false);
+          }
+        }
+      }, 5000); // Poll every 5 seconds
+    }
+    return () => clearInterval(interval);
+  }, [polling]);
+
   const handleGenerate = async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await generateSustainabilityStatement(profile, materialTopics);
-      setGeneratedContent(result);
+      await triggerReportGeneration(profile, materialTopics);
+      setPolling(true);
     } catch (e: any) {
-      const msg = e?.message ?? 'Failed to generate the report. Please try again.';
+      const msg = e?.message ?? 'Failed to start report generation.';
       setError(msg);
+      setLoading(false);
       logError({
         context: 'sustainability-statement',
-        action: 'generate_report',
+        action: 'trigger_report',
         error: e,
         organizationId,
         metadata: { topic_count: materialTopics.length },
       });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -91,13 +131,23 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
               )}
             </div>
           ) : (
-             <button 
-                onClick={() => window.print()}
-                className="flex items-center justify-center gap-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-6 py-2.5 rounded-lg font-medium hover:bg-slate-800 dark:hover:bg-slate-100 shadow-lg transition-all w-full sm:w-auto"
-            >
-                <Download className="w-4 h-4" />
-                Export to PDF
-            </button>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <button 
+                  onClick={() => window.print()}
+                  className="flex items-center justify-center gap-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-6 py-2.5 rounded-lg font-medium hover:bg-slate-800 dark:hover:bg-slate-100 shadow-lg transition-all w-full sm:w-auto"
+              >
+                  <Download className="w-4 h-4" />
+                  Export to PDF
+              </button>
+              <button 
+                  onClick={handleGenerate}
+                  disabled={loading}
+                  className="flex items-center justify-center gap-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-all w-full sm:w-auto disabled:opacity-60 text-sm"
+              >
+                  {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                  {loading ? 'Generating…' : 'Regenerate'}
+              </button>
+            </div>
           )}
         </div>
       </div>
