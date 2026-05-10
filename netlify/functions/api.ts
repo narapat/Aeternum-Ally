@@ -281,8 +281,8 @@ async function runAction(
       return generateSwotExternal(ai, model, params);
     case "generateKPISuggestions":
       return generateKPISuggestions(ai, model, params);
-    case "generateSustainabilityStatement":
-      return generateSustainabilityStatement(ai, model, params);
+    case "triggerReportGeneration":
+      return triggerReportGeneration(params);
     case "analyzeTopicQuality":
       return analyzeTopicQuality(ai, model, params);
     case "analyzeDMASynthesis":
@@ -814,111 +814,24 @@ Return ONLY valid JSON, no markdown:
   }
 }
 
-async function generateSustainabilityStatement(
-  ai: GoogleGenAI,
-  model: string,
-  { profile, materialAssessments, mode, targetTopic }: any
-) {
-  if (!materialAssessments || materialAssessments.length === 0) {
-    return {
-      result: { generalDisclosure: "No data", strategyDisclosure: "No data", topics: [] },
-      inputTokens: 0,
-      outputTokens: 0,
-    };
-  }
-
-  const companyContext = buildCompanyContext(profile);
-
-  if (mode === 'header') {
-    const topicSummary = materialAssessments
-      .map((a: any) => `- ${a.topic} (impact score: ${a.impactMaterialityValue}/100, financial score: ${a.financialMaterialityValue}/100): impact: ${a.impactDescription}; financial: ${a.financialDescription}`)
-      .join("\n");
-
-    const headerPrompt = `
-      Act as a Sustainability Reporting Officer drafting a "Sustainability Statement" aligned with ESRS and GRI Standards.
-
-      ${companyContext}
-
-      Material topics identified (above threshold of 40/100 on either axis):
-      ${topicSummary}
-
-      Generate ONLY the two header sections below as JSON.
-
-      1. generalDisclosure: "Basis of Preparation" (ESRS 2 BP-1/BP-2). Explain the Double Materiality approach (impact materiality + financial materiality) as applied by this company. Reference the company's scale and sector. ~120 words.
-      2. strategyDisclosure: "Strategy & Business Model" (ESRS 2 SBM-3). Summarise how the company's specific products/services and business model interact with the material impacts and risks identified. ~150 words.
-    `;
-
-    const response = await ai.models.generateContent({
-      model,
-      contents: headerPrompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            generalDisclosure: { type: Type.STRING },
-            strategyDisclosure: { type: Type.STRING },
-          },
-        },
-      },
+async function triggerReportGeneration({ organization_id, profile, materialAssessments }: any) {
+  const url = `${process.env.URL}/.netlify/functions/report-background`;
+  
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id, profile, materialAssessments }),
     });
-
-    const header = parseAIJson(response.text, { generalDisclosure: "", strategyDisclosure: "" });
-
-    return {
-      result: {
-        generalDisclosure: header.generalDisclosure ?? "",
-        strategyDisclosure: header.strategyDisclosure ?? "",
-      },
-      ...extractTokens(response),
-    };
+  } catch (e) {
+    console.error("Failed to trigger background function:", e);
   }
 
-  if (mode === 'topic' && targetTopic) {
-    const a = targetTopic;
-    const topicCode = String(a.topic).split(" ")[0];
-    const prompt = `
-      Act as a Sustainability Reporting Officer drafting topical disclosures aligned with ESRS and GRI Standards.
-
-      ${companyContext}
-
-      Topic: ${a.topic} (code: "${topicCode}")
-      Impact materiality score: ${a.impactMaterialityValue}/100 — ${a.impactDescription}
-      Financial materiality score: ${a.financialMaterialityValue}/100 — ${a.financialDescription}
-
-      Write a structured narrative disclosure for this single topic as JSON with:
-      - topicId: the short code only — "${topicCode}"
-      - topicName: the full string — "${a.topic}"
-      - disclosureContent: 200-300 word multi-paragraph narrative covering:
-          • Policies (ESRS MDR-P) — reference the company's specific context
-          • Actions & Resources (MDR-A) — tie to the company's products/services and scale
-          • Metrics & Targets (MDR-M) — suggest targets appropriate for a ${profile.employeeCount}-scale company
-        Reference the relevant GRI Standard number (e.g. GRI 305 for climate, GRI 303 for water).
-        Use plain text with line breaks between paragraphs; no markdown.
-    `;
-
-    const topicConfig = {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          topicId: { type: Type.STRING },
-          topicName: { type: Type.STRING },
-          disclosureContent: { type: Type.STRING },
-        },
-      },
-    };
-
-    const response = await ai.models.generateContent({ model, contents: prompt, config: topicConfig });
-    const parsed = parseAIJson(response.text, { topicId: "", topicName: "", disclosureContent: "" });
-
-    return {
-      result: parsed,
-      ...extractTokens(response),
-    };
-  }
-
-  return { result: null, inputTokens: 0, outputTokens: 0 };
+  return {
+    result: { message: "Report generation started" },
+    inputTokens: 0,
+    outputTokens: 0,
+  };
 }
 
 // ── Shared helpers for DMA analysis ──────────────────────────────────────────

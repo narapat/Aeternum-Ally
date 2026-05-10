@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { CompanyProfile, AssessmentData, SustainabilityBusinessModel } from '../types';
 import { GRI_MAPPING } from '../constants';
-import { generateSustainabilityHeader, generateTopicalDisclosure, GeneratedStatement } from '../services/geminiService';
+import { triggerReportGeneration, getReportStatus, GeneratedStatement } from '../services/geminiService';
 import { logError } from '../services/errorLogService';
 import { FileText, Download, Loader2, Book, RefreshCw, ShieldCheck, AlertCircle } from 'lucide-react';
 
@@ -20,51 +20,64 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
 
   const materialTopics = assessments.filter(a => a.isMaterial);
 
+  const [polling, setPolling] = useState(false);
+
   useEffect(() => {
-    const cached = localStorage.getItem(`report_cache_${organizationId}`);
-    if (cached) {
-      try {
-        setGeneratedContent(JSON.parse(cached));
-      } catch (e) {
-        console.error("Failed to parse cached report:", e);
+    // Check initial status
+    const checkStatus = async () => {
+      const data = await getReportStatus();
+      if (data) {
+        if (data.status === 'completed' && data.result) {
+          setGeneratedContent(data.result);
+        } else if (data.status === 'processing') {
+          setPolling(true);
+          setLoading(true);
+        } else if (data.status === 'failed') {
+          setError(data.error || "Generation failed");
+        }
       }
-    }
+    };
+    checkStatus();
   }, [organizationId]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (polling) {
+      interval = setInterval(async () => {
+        const data = await getReportStatus();
+        if (data) {
+          if (data.status === 'completed') {
+            setGeneratedContent(data.result);
+            setPolling(false);
+            setLoading(false);
+          } else if (data.status === 'failed') {
+            setError(data.error || "Generation failed");
+            setPolling(false);
+            setLoading(false);
+          }
+        }
+      }, 5000); // Poll every 5 seconds
+    }
+    return () => clearInterval(interval);
+  }, [polling]);
 
   const handleGenerate = async () => {
     setLoading(true);
     setError(null);
     try {
-      // 1. Generate Header
-      const header = await generateSustainabilityHeader(profile, materialTopics);
-      
-      // 2. Generate Topics in parallel
-      const topicPromises = materialTopics.map(topic => generateTopicalDisclosure(profile, topic));
-      const topics = await Promise.all(topicPromises);
-      
-      const result: GeneratedStatement = {
-        generalDisclosure: header.generalDisclosure,
-        strategyDisclosure: header.strategyDisclosure,
-        topics: topics
-      };
-      
-      setGeneratedContent(result);
-      
-      // Save to cache
-      localStorage.setItem(`report_cache_${organizationId}`, JSON.stringify(result));
-      
+      await triggerReportGeneration(profile, materialTopics);
+      setPolling(true);
     } catch (e: any) {
-      const msg = e?.message ?? 'Failed to generate the report. Please try again.';
+      const msg = e?.message ?? 'Failed to start report generation.';
       setError(msg);
+      setLoading(false);
       logError({
         context: 'sustainability-statement',
-        action: 'generate_report',
+        action: 'trigger_report',
         error: e,
         organizationId,
         metadata: { topic_count: materialTopics.length },
       });
-    } finally {
-      setLoading(false);
     }
   };
 

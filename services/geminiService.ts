@@ -134,20 +134,26 @@ export interface GeneratedStatement {
   }[];
 }
 
-export const generateSustainabilityHeader = async (
+export const triggerReportGeneration = async (
   profile: CompanyProfile,
   materialAssessments: AssessmentData[]
-): Promise<{ generalDisclosure: string; strategyDisclosure: string }> => {
-  const resp = await callApi("generateSustainabilityStatement", { profile, materialAssessments, mode: 'header' });
-  return resp.result;
+): Promise<{ message: string }> => {
+  return await callApi("triggerReportGeneration", { profile, materialAssessments });
 };
 
-export const generateTopicalDisclosure = async (
-  profile: CompanyProfile,
-  targetTopic: AssessmentData
-): Promise<{ topicId: string; topicName: string; disclosureContent: string }> => {
-  const resp = await callApi("generateSustainabilityStatement", { profile, materialAssessments: [targetTopic], mode: 'topic', targetTopic });
-  return resp.result;
+export const getReportStatus = async (): Promise<{ status: string; result?: any; error?: string } | null> => {
+  if (!currentOrgId) return null;
+  const { data, error } = await supabase
+    .from("sustainability_reports")
+    .select("status, result, error")
+    .eq("organization_id", currentOrgId)
+    .maybeSingle();
+    
+  if (error) {
+    console.warn("getReportStatus failed:", error.message);
+    return null;
+  }
+  return data;
 };
 
 // Pass 1 — quality check for a single topic. Called once per assessment from the frontend.
