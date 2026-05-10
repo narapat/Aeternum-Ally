@@ -168,7 +168,7 @@ const handler = async (event: any) => {
 
   try {
     const outcome = await Promise.race([
-      runAction(ai, model, action, params, event),
+      runAction(ai, model, action, params, event, organization_id),
       fencePromise,
     ]);
     clearTimeout(fenceId!);
@@ -267,7 +267,8 @@ async function runAction(
   model: string,
   action: string,
   params: any,
-  event: any
+  event: any,
+  organization_id: string
 ): Promise<{ result: any; inputTokens: number; outputTokens: number }> {
   switch (action) {
     case "generateAssessmentSuggestions":
