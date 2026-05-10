@@ -1,4 +1,4 @@
--- Migration 015: Persist Sustainability Reports for Polling/Background Job
+-- Migration 017: Persist Sustainability Reports for Polling/Background Job
 --
 -- Changes:
 --   sustainability_reports — new singleton-per-org table for report generation status and results
