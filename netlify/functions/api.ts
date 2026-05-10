@@ -839,12 +839,12 @@ async function triggerReportGeneration(event: any, { organization_id, profile, m
     .upsert({ organization_id, status: "processing", updated_at: new Date().toISOString() }, { onConflict: "organization_id" });
 
   try {
-    fetch(url, {
+    const resp = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ organization_id, profile, materialAssessments, user_id, user_email }),
-    }).then(resp => console.log(`[api] Background function trigger status: ${resp.status}`))
-      .catch(e => console.error("[api] Failed to trigger background function:", e));
+    });
+    console.log(`[api] Background function trigger status: ${resp.status}`);
   } catch (e) {
     console.error("[api] Failed to trigger background function:", e);
   }
