@@ -18,7 +18,27 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const materialTopics = assessments.filter(a => a.isMaterial);
+  const materialTopics = React.useMemo(() => {
+    const topicMap = new Map<string, AssessmentData>();
+    
+    assessments.filter(a => a.isMaterial).forEach(assessment => {
+      const topicCode = assessment.topic.split(' ')[0];
+      
+      if (!topicMap.has(topicCode)) {
+        topicMap.set(topicCode, assessment);
+      } else {
+        const existing = topicMap.get(topicCode)!;
+        const existingTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+        const newTime = assessment.updatedAt ? new Date(assessment.updatedAt).getTime() : 0;
+        
+        if (newTime > existingTime) {
+          topicMap.set(topicCode, assessment);
+        }
+      }
+    });
+    
+    return Array.from(topicMap.values());
+  }, [assessments]);
 
   const [polling, setPolling] = useState(false);
 
@@ -81,6 +101,40 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
     }
   };
 
+  const validateAndExport = () => {
+    if (!generatedContent) return;
+    
+    const BLOCKED_PATTERNS = [
+      /AI Draft not generated/i,
+      /This section would typically contain/i,
+      /TODO/i,
+      /TBD/i,
+      /\[Insert/i,
+      /\[Placeholder/i,
+      /Lorem ipsum/i,
+      /\bundefined\b/i,
+      /\bnull\b/i,
+      /\bNaN\b/i,
+      /\{\{/,
+      /\}\}/
+    ];
+
+    const fullText = [
+      generatedContent.generalDisclosure,
+      generatedContent.strategyDisclosure,
+      ...generatedContent.topics.map(t => t.disclosureContent)
+    ].join(" ");
+
+    const hasIssue = BLOCKED_PATTERNS.some(pattern => pattern.test(fullText));
+
+    if (hasIssue) {
+      alert("This report cannot be exported yet because it contains unresolved draft or placeholder content. Please review the flagged sections before exporting.");
+      return;
+    }
+
+    window.print();
+  };
+
   if (materialTopics.length === 0) {
     return (
         <div className="flex flex-col items-center justify-center h-[500px] bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-8 text-center animate-in fade-in duration-500">
@@ -110,9 +164,9 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
       {/* Header Actions */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 print:hidden">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Sustainability Statement</h2>
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Baseline Sustainability Statement</h2>
           <p className="text-slate-500 dark:text-slate-400 text-sm">
-            Aligned with ESRS (CSRD) and GRI Standards • FY {new Date().getFullYear()}
+            Generated from available sustainability data • FY {new Date().getFullYear()}
           </p>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
@@ -133,7 +187,7 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
           ) : (
             <div className="flex gap-2 w-full sm:w-auto">
               <button 
-                  onClick={() => window.print()}
+                  onClick={validateAndExport}
                   className="flex items-center justify-center gap-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-6 py-2.5 rounded-lg font-medium hover:bg-slate-800 dark:hover:bg-slate-100 shadow-lg transition-all w-full sm:w-auto"
               >
                   <Download className="w-4 h-4" />
@@ -159,7 +213,7 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
          <div className="bg-slate-900 text-white p-8 md:p-12 print:bg-white print:text-black print:border-b-2 print:border-black">
             <div className="flex justify-between items-start">
                 <div>
-                    <div className="uppercase tracking-widest text-xs font-bold text-slate-400 mb-4">Sustainability Report {new Date().getFullYear()}</div>
+                    <div className="uppercase tracking-widest text-xs font-bold text-slate-400 mb-4">Baseline Sustainability Statement {new Date().getFullYear()}</div>
                     <h1 className="text-3xl md:text-5xl font-serif font-bold mb-4">{profile.name}</h1>
                     <div className="text-lg opacity-80 max-w-2xl">{profile.description}</div>
                 </div>
@@ -177,6 +231,41 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
          {/* Content Body */}
          <div className="p-8 md:p-12 max-w-4xl mx-auto w-full space-y-12">
             
+            {/* About this Statement (Status & Limitations) */}
+            <section className="bg-slate-50 p-6 rounded-lg border border-slate-200 space-y-6">
+                <div>
+                    <h3 className="text-lg font-bold text-slate-900 mb-4">About this Statement</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <p><span className="font-semibold">Report status:</span> Draft Baseline</p>
+                            <p><span className="font-semibold">Report type:</span> Baseline Sustainability Statement</p>
+                            <p><span className="font-semibold">Reporting period:</span> FY{new Date().getFullYear()}</p>
+                        </div>
+                        <div>
+                            <p><span className="font-semibold">Generated date:</span> {new Date().toLocaleDateString()}</p>
+                            <p><span className="font-semibold">Reporting boundary:</span> Organization-level data only</p>
+                            <p><span className="font-semibold">Assurance status:</span> Not externally assured</p>
+                        </div>
+                    </div>
+                    <p className="text-sm text-slate-600 mt-4">
+                        <span className="font-semibold">Data basis:</span> This statement was generated from available company profile, double materiality assessment, KPI, carbon tracking, and user-entered sustainability data.
+                    </p>
+                </div>
+
+                <div className="border-t border-slate-200 pt-4">
+                    <h4 className="font-bold text-slate-900 mb-2">Data Limitations and Reporting Boundaries</h4>
+                    <p className="text-sm text-slate-600 text-justify">
+                        This statement has been generated from the information currently available in the AeternumAlly platform. It represents a baseline view of the organization’s sustainability position for the reporting period.
+                    </p>
+                    <p className="text-sm text-slate-600 text-justify mt-2">
+                        Historical year-on-year comparison is not yet available for all ESG indicators. Where quantitative data, policy documentation, implementation evidence, or historical records are incomplete, this statement identifies the limitation rather than assuming full availability.
+                    </p>
+                    <p className="text-sm text-slate-600 text-justify mt-2">
+                        Unless otherwise stated, this statement has not been externally assured. It should be treated as a draft baseline document to support internal review, customer discussions, ESG readiness planning, and future sustainability reporting improvement.
+                    </p>
+                </div>
+            </section>
+
             {/* Section 1: ESRS 2 General Disclosures */}
             <section>
                 <div className="flex items-center gap-3 mb-6 border-b border-slate-200 pb-2">
@@ -322,7 +411,8 @@ const SustainabilityStatement: React.FC<Props> = ({ profile, assessments, canvas
             {/* Footer */}
             <div className="mt-16 pt-8 border-t border-slate-200 text-center text-xs text-slate-400">
                 <p>This Sustainability Statement is generated by Aeternum Ally SaaS.</p>
-                <p className="mt-1">Verification Status: Self-Declared</p>
+                <p className="mt-1">Assurance Status: Not externally assured</p>
+                <p className="mt-1 text-slate-400">This statement has not been externally assured. The information should be reviewed internally before external use.</p>
             </div>
          </div>
       </div>

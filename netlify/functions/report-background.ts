@@ -87,7 +87,7 @@ const handler = async (event: any) => {
 
     // ── Call 1: Header sections ──────────────────
     const headerPrompt = `
-      Act as a Sustainability Reporting Officer drafting a "Sustainability Statement" aligned with ESRS and GRI Standards.
+      Act as a Sustainability Reporting Officer drafting a "Baseline Sustainability Statement" aligned with ESRS and GRI Standards.
 
       ${companyContext}
 
@@ -98,6 +98,11 @@ const handler = async (event: any) => {
 
       1. generalDisclosure: "Basis of Preparation" (ESRS 2 BP-1/BP-2). Explain the Double Materiality approach. ~120 words.
       2. strategyDisclosure: "Strategy & Business Model" (ESRS 2 SBM-3). Summarise how the company's business model interacts with the material impacts. ~150 words.
+
+      You MUST follow these safety rules:
+      - Do not invent policies, actions, targets, or historical data.
+      - If information is missing, state clearly that it is not available.
+      - Do not claim full compliance or assurance.
     `;
 
     console.log("[report-background] Requesting header sections...");
@@ -145,7 +150,39 @@ const handler = async (event: any) => {
         Write a structured narrative disclosure for this single topic as JSON with:
         - topicId: the short code only — "${topicCode}"
         - topicName: the full string — "${a.topic}"
-        - disclosureContent: 200-300 word multi-paragraph narrative.
+        - disclosureContent: 200-300 word narrative following the structure below.
+
+        You MUST follow these safety rules:
+        - Do not invent policies, actions, targets, or historical data.
+        - If information is missing, you MUST use the exact phrases below:
+          - If policy is missing: "No formal policy has been documented in the platform for this topic."
+          - If action is missing: "No formal action has been documented in the platform for this topic."
+          - If KPI/target is missing: "No quantitative KPI or target has been documented for this topic."
+          - If evidence is missing: "No evidence has been provided in the platform."
+          - For other missing data: "Information is not yet available."
+
+        The disclosureContent MUST follow this exact structure (include the headers):
+        
+        Why this topic is material
+        [Explain based on the impact/financial descriptions provided]
+
+        Current impact, risk, or opportunity
+        [Explain based on the assessment provided]
+
+        Current policies
+        [State the policy or use the missing phrase]
+
+        Current actions
+        [State the actions or use the missing phrase]
+
+        Metrics and targets
+        [State the KPIs or use the missing phrase]
+
+        Data limitations
+        [State missing data clearly]
+
+        Recommended next steps
+        [Suggest practical next action based on missing data]
       `;
       return ai.models.generateContent({ model: activeModel, contents: prompt, config: topicConfig });
     });
