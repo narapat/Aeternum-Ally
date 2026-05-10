@@ -102,9 +102,6 @@ const handler = async (event: any) => {
 
   function noThinkingConfig(m: string): object {
     const entry = MODEL_REGISTRY[m];
-    if (entry && !entry.canDisableThinking) {
-      return { thinkingConfig: { thinkingBudget: 128 } };
-    }
     const canDisable = entry != null ? entry.canDisableThinking : m.includes("flash");
     return canDisable ? { thinkingConfig: { thinkingBudget: 0 } } : {};
   }
@@ -433,9 +430,15 @@ Return ONLY valid JSON, no markdown:
     } else if (action === "scoring") {
       failData.scoring_status = "failed";
     }
+    
+    let friendlyError = error.message || String(error);
+    if (friendlyError.includes("fetch failed") || friendlyError.includes("Timeout")) {
+      friendlyError = "The AI Model service timed out or failed to respond. This can happen with Gemini Pro on large tasks. Please try again or use Gemini Flash for faster results.";
+    }
+    
     await admin
       .from("assessment_ai_jobs")
-      .update({ ...failData, error: error.message || String(error) })
+      .update({ ...failData, error: friendlyError })
       .eq("organization_id", organization_id)
       .eq("assessment_id", assessment_id);
   }

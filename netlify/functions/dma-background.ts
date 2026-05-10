@@ -63,9 +63,6 @@ const handler = async (event: any) => {
 
   function noThinkingConfig(m: string): object {
     const entry = MODEL_REGISTRY[m];
-    if (entry && !entry.canDisableThinking) {
-      return { thinkingConfig: { thinkingBudget: 128 } };
-    }
     const canDisable = entry != null ? entry.canDisableThinking : m.includes("flash");
     return canDisable ? { thinkingConfig: { thinkingBudget: 0 } } : {};
   }
@@ -272,9 +269,13 @@ const handler = async (event: any) => {
 
   } catch (error: any) {
     console.error("[dma-background] Failed:", error);
+    let friendlyError = error.message || String(error);
+    if (friendlyError.includes("fetch failed") || friendlyError.includes("Timeout")) {
+      friendlyError = "The AI Model service timed out or failed to respond. This can happen with Gemini Pro on large tasks. Please try again or use Gemini Flash for faster results.";
+    }
     await admin
       .from("dma_analysis_jobs")
-      .update({ status: "failed", error: error.message || String(error), updated_at: new Date().toISOString() })
+      .update({ status: "failed", error: friendlyError, updated_at: new Date().toISOString() })
       .eq("organization_id", organization_id);
   }
 
