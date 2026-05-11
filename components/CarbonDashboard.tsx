@@ -794,18 +794,31 @@ const BulkUploadModal: React.FC<{
   const [result, setResult] = useState<{ success: number; failed: number } | null>(null);
 
   const downloadTemplate = () => {
-    const rows = sources.map(s => ({
-      'Source Name': s.source_name,
-      'Source ID': s.id,
-      'Scope': s.scope,
-      'Unit': s.unit,
-      'Factor (kgCO₂e/unit)': s.emission_factor_value ?? '',
-      'Period Start (YYYY-MM-DD)': '',
-      'Period End (YYYY-MM-DD)': '',
-      'Activity Data': '',
-      'Notes': '',
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
+    const headers = [
+      'Source Name',
+      'Source ID',
+      'Scope',
+      'Unit',
+      'Factor (kgCO₂e/unit)',
+      'Period Start (YYYY-MM-DD)',
+      'Period End (YYYY-MM-DD)',
+      'Activity Data',
+      'Notes'
+    ];
+    
+    const data = sources.map(s => [
+      s.source_name,
+      s.id,
+      s.scope,
+      s.unit,
+      s.emission_factor_value ?? '',
+      '',
+      '',
+      '',
+      ''
+    ]);
+    
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
     ws['!cols'] = [{ wch: 25 }, { wch: 36 }, { wch: 8 }, { wch: 8 }, { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 16 }, { wch: 30 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Emissions');
