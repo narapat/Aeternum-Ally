@@ -31,6 +31,9 @@ export const handler = async (event: any) => {
     const { messages, context, errors, userInfo } = JSON.parse(event.body);
     const organization_id = userInfo?.orgId;
 
+    // Log the conversation for analysis and improvement
+    console.log(`[ally-support] Conversation log for user ${userInfo?.email || 'unknown'} (org: ${organization_id || 'unknown'}):`, JSON.stringify(messages));
+
     let activeModel = "gemini-2.5-flash"; // Default fallback
     if (organization_id) {
       const { data: settings } = await admin
