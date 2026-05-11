@@ -2,6 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import * as fs from 'fs';
 import * as path from 'path';
 import { createClient } from "@supabase/supabase-js";
+import { getStore } from "@netlify/blobs";
 
 const apiKey = process.env.GEMINI_API_KEY;
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -33,6 +34,22 @@ export const handler = async (event: any) => {
 
     // Log the conversation for analysis and improvement
     console.log(`[ally-support] Conversation log for user ${userInfo?.email || 'unknown'} (org: ${organization_id || 'unknown'}):`, JSON.stringify(messages));
+
+    // Save to Netlify Blobs for analysis and improvement
+    try {
+      const store = getStore("ally-conversations");
+      const conversationId = `${userInfo?.orgId || 'no-org'}_${userInfo?.userId || 'anon'}_${Date.now()}`;
+      await store.setJSON(conversationId, {
+        messages,
+        context,
+        errors,
+        userInfo,
+        timestamp: new Date().toISOString()
+      });
+      console.log(`[ally-support] Saved conversation to blob: ${conversationId}`);
+    } catch (blobErr) {
+      console.error("[ally-support] Failed to save conversation to blob:", blobErr);
+    }
 
     let activeModel = "gemini-2.5-flash"; // Default fallback
     if (organization_id) {
