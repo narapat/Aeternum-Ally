@@ -800,6 +800,8 @@ const BulkUploadModal: React.FC<{
       'Scope',
       'Unit',
       'Factor (kgCO₂e/unit)',
+      'Identification No',
+      'Asset No',
       'Period Start (YYYY-MM-DD)',
       'Period End (YYYY-MM-DD)',
       'Activity Data',
@@ -812,6 +814,8 @@ const BulkUploadModal: React.FC<{
       s.scope,
       s.unit,
       s.emission_factor_value ?? '',
+      s.identification_number ?? '',
+      s.asset_number ?? '',
       '',
       '',
       '',
@@ -819,7 +823,7 @@ const BulkUploadModal: React.FC<{
     ]);
     
     const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
-    ws['!cols'] = [{ wch: 25 }, { wch: 36 }, { wch: 8 }, { wch: 8 }, { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 16 }, { wch: 30 }];
+    ws['!cols'] = [{ wch: 25 }, { wch: 36 }, { wch: 8 }, { wch: 8 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 16 }, { wch: 30 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Emissions');
     XLSX.writeFile(wb, `carbon-bulk-template-${new Date().toISOString().slice(0, 10)}.xlsx`);
