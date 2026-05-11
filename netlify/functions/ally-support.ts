@@ -10,7 +10,7 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const admin = createClient(supabaseUrl!, serviceKey!);
 const resendKey = process.env.RESEND_API_KEY;
-const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'noreply@aeternumally.com';
+const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'no-reply@aeternumally.com';
 
 function redactSecrets(text: string): string {
   if (!text) return text;
