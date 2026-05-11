@@ -29,7 +29,7 @@ export const handler = async (event: any) => {
 
   const start = Date.now();
   try {
-    const { messages, context, errors, userInfo } = JSON.parse(event.body);
+    const { messages, context, errors, userInfo, sessionId } = JSON.parse(event.body);
     const organization_id = userInfo?.orgId;
 
     // Log the conversation for analysis and improvement
@@ -38,7 +38,7 @@ export const handler = async (event: any) => {
     // Save to Netlify Blobs for analysis and improvement
     try {
       const store = getStore("ally-conversations");
-      const conversationId = `${userInfo?.orgId || 'no-org'}_${userInfo?.userId || 'anon'}_${Date.now()}`;
+      const conversationId = `${userInfo?.orgId || 'no-org'}_${userInfo?.userId || 'anon'}_${sessionId || 'no-session'}`;
       await store.setJSON(conversationId, {
         messages,
         context,

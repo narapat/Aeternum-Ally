@@ -21,6 +21,7 @@ export const AllyAssistant: React.FC<AllyAssistantProps> = ({ userEmail, company
   ]);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionId] = useState(() => Math.random().toString(36).substr(2, 9));
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -94,6 +95,7 @@ export const AllyAssistant: React.FC<AllyAssistantProps> = ({ userEmail, company
           messages: [...messages, { role: 'user', text: textToSend }],
           context: window.location.pathname,
           errors: '',
+          sessionId: sessionId,
           userInfo: {
             email: userEmail,
             company: companyName,
