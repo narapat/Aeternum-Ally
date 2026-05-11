@@ -828,18 +828,8 @@ const BulkUploadModal: React.FC<{
   const handleFile = async (file: File) => {
     const buf = await file.arrayBuffer();
     let rawRows: Record<string, any>[];
-    if (file.name.toLowerCase().endsWith('.csv')) {
-      const text = new TextDecoder().decode(buf);
-      const lines = text.split(/\r?\n/).filter(l => l.trim());
-      const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim());
-      rawRows = lines.slice(1).map(line => {
-        const vals = line.split(',').map(v => v.replace(/^"|"$/g, '').trim());
-        return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
-      });
-    } else {
-      const wb = XLSX.read(buf, { type: 'array' });
-      rawRows = XLSX.utils.sheet_to_json<Record<string, any>>(wb.Sheets[wb.SheetNames[0]]);
-    }
+    const wb = XLSX.read(buf, { type: 'array' });
+    rawRows = XLSX.utils.sheet_to_json<Record<string, any>>(wb.Sheets[wb.SheetNames[0]]);
 
     const sourceById = Object.fromEntries(sources.map(s => [s.id, s]));
     const sourceByName = Object.fromEntries(sources.map(s => [s.source_name.toLowerCase(), s]));
@@ -847,8 +837,17 @@ const BulkUploadModal: React.FC<{
     const rows: BulkRow[] = rawRows.map(r => {
       const srcId = String(r['Source ID'] ?? '').trim();
       const srcName = String(r['Source Name'] ?? '').trim();
-      const src = sourceById[srcId] ?? sourceByName[srcName.toLowerCase()];
-      if (!src) return { source_id: '', source_name: srcName, period_start: '', period_end: '', activity_data: 0, calculated_emissions_kgco2e: 0, notes: '', error: `Source not found: ${srcName || srcId}` };
+      
+      let src;
+      if (srcId) {
+        src = sourceById[srcId];
+        if (!src) return { source_id: '', source_name: srcName, period_start: '', period_end: '', activity_data: 0, calculated_emissions_kgco2e: 0, notes: '', error: `Source with ID "${srcId}" not found` };
+      } else if (srcName) {
+        src = sourceByName[srcName.toLowerCase()];
+        if (!src) return { source_id: '', source_name: srcName, period_start: '', period_end: '', activity_data: 0, calculated_emissions_kgco2e: 0, notes: '', error: `Source with name "${srcName}" not found` };
+      } else {
+        return { source_id: '', source_name: '', period_start: '', period_end: '', activity_data: 0, calculated_emissions_kgco2e: 0, notes: '', error: 'Either Source ID or Source Name is required' };
+      }
 
       const start = String(r['Period Start (YYYY-MM-DD)'] ?? '').trim();
       const end   = String(r['Period End (YYYY-MM-DD)'] ?? '').trim();
