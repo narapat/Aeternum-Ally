@@ -98,6 +98,7 @@ export const handler = async (event: any) => {
       7. Always maintain the persona of an AI assistant. Remind the user that you are an AI and can sometimes make mistakes, but you will try her best to help them succeed!
       8. DO NOT ask the user for any secrets, credentials, passwords, or highly confidential PII (Personally Identifiable Information). If the user shares any such information, remind them not to do so.
       9. Always respond in the same language that the user used to initiate or continue the conversation (e.g., if the user speaks Thai, respond in Thai; if Finnish, respond in Finnish).
+      10. For languages other than English, when you translate technical terms, jargon, or platform-specific words, always keep the original English term in parentheses next to it (e.g., "การประเมินความสำคัญ (Materiality Assessment)") to ensure the user knows the original concept.
     `;
 
     // Map conversation history to Gemini format
