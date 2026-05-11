@@ -15,6 +15,7 @@ import UserProfilePage from './components/UserProfilePage';
 import PerformanceDashboard from './components/PerformanceDashboard';
 import SustainabilityStatement from './components/SustainabilityStatement';
 import MaterialTopicsList from './components/MaterialTopicsList';
+import AllyAssistant from './components/AllyAssistant';
 import AuthScreen from './components/AuthScreen';
 import ResetPasswordModal from './components/ResetPasswordModal';
 import OrgSetupScreen from './components/OrgSetupScreen';
@@ -714,6 +715,13 @@ const App: React.FC = () => {
           </div>
         </main>
       </div>
+      <AllyAssistant 
+        userEmail={user?.email} 
+        companyName={profile.data.name} 
+        userRole={currentUserRole || undefined} 
+        userId={user?.id}
+        orgId={organization?.id}
+      />
     </div>
   );
 };

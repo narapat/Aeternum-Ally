@@ -3,6 +3,9 @@
   publish = "dist"
   functions = "netlify/functions"
 
+[functions]
+  included_files = ["Docs v1.1.0/**"]
+
 [dev]
   command = "npm run dev"
   port = 8888
