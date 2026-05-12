@@ -524,7 +524,7 @@ const App: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
                       <StatCard title="Assessments Completed" value={assessments.length.toString()} icon={<FileText className="text-blue-500" />} description="Total ESRS topics assessed across all categories" />
                       <StatCard title="Material Topics Identified" value={materialTopics.length.toString()} icon={<AlertTriangle className="text-amber-500" />} description="Topics scoring ≥ 40 on financial or impact materiality" />
-                      <StatCard title="High Impact Risks" value={assessments.filter(a => a.financialMaterialityValue > 60).length.toString()} icon={<CheckCircle className="text-esg-500" />} description="Topics with financial materiality score > 60 (orange dots on matrix)" />
+                      <StatCard title="High Impact Risks" value={assessments.filter(a => a.financialMaterialityValue > 60).length.toString()} icon={<CheckCircle className="text-esg-500" />} description="Topics with financial materiality score > 60 (green dots on matrix)" />
                     </div>
                     <div className="space-y-6">
                       <MaterialityMatrix data={assessments} />
