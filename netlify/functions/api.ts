@@ -303,6 +303,8 @@ async function runAction(
       return analyzeDMAQuality(ai, model, params);
     case "generateTasks":
       return generateTasks(ai, model, params);
+    case "generateDMAGuide":
+      return generateDMAGuide(ai, model, params);
     default:
       throw new Error(`Unknown action: ${action}`);
   }
@@ -1498,6 +1500,67 @@ Return ONLY a valid JSON array of task objects. No markdown, no backticks, no ex
   const { inputTokens, outputTokens } = extractTokens(response);
 
   return { result: tasks, inputTokens, outputTokens };
+}
+
+async function generateDMAGuide(
+  ai: GoogleGenAI,
+  model: string,
+  { profile }: { profile: any }
+) {
+  const companyName = profile.name || "this company";
+  const companyCtx = `
+Company Name: ${companyName}
+Industry: ${profile.industry || "Not specified"}
+ISIC Code: ${profile.isicCode || "Not specified"}
+Description: ${profile.description || "Not specified"}
+Employees: ${profile.employees || "Not specified"}
+Revenue: ${profile.revenue || "Not specified"}
+`;
+
+  const prompt = `
+You are an ESRS/CSRD sustainability expert.
+Based on the following company context, suggest the top 3 Double Materiality Assessment (DMA) topics that this company should focus on.
+
+Company Context:
+${companyCtx}
+
+Provide a short guide message and the top 3 topics.
+Each topic must have a reason why it is a focus area, and the related ESRS standard (e.g. "ESRS E1", "ESRS S1").
+Keep the total response short and precise. The explanation for all 3 topics combined should not exceed 100 words.
+`;
+
+  const response = await ai.models.generateContent({
+    model,
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          message: { type: Type.STRING },
+          topics: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                topic: { type: Type.STRING },
+                reason: { type: Type.STRING },
+                esrs_ref: { type: Type.STRING }
+              },
+              required: ["topic", "reason", "esrs_ref"]
+            }
+          }
+        },
+        required: ["message", "topics"]
+      },
+      ...noThinkingConfig(model),
+    },
+  });
+
+  const result = parseAIJson<any>(response.text, { message: "", topics: [] });
+  const { inputTokens, outputTokens } = extractTokens(response);
+
+  return { result, inputTokens, outputTokens };
 }
 
 export { handler };

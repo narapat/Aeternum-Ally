@@ -6,6 +6,7 @@ import TaskManagement from './components/TaskManagement';
 import CarbonWizard from './components/CarbonWizard';
 import CarbonDashboard from './components/CarbonDashboard';
 import MaterialityMatrix from './components/MaterialityMatrix';
+import DMAGuide from './components/DMAGuide';
 import BusinessModelCanvas from './components/BusinessModelCanvas';
 import SwotAnalysisWizard from './components/SwotAnalysisWizard';
 import DataCompletenessDashboard from './components/DataCompletenessDashboard';
@@ -526,8 +527,15 @@ const App: React.FC = () => {
                       <StatCard title="Material Topics Identified" value={materialTopics.length.toString()} icon={<AlertTriangle className="text-amber-500" />} description="Topics scoring ≥ 40 on financial or impact materiality" />
                       <StatCard title="High Impact Risks" value={assessments.filter(a => a.financialMaterialityValue > 60).length.toString()} icon={<CheckCircle className="text-esg-500" />} description="Topics with financial materiality score > 60 (green dots on matrix)" />
                     </div>
-                    <div className="space-y-6">
-                      <MaterialityMatrix data={assessments} />
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      <div className="lg:col-span-2">
+                        <MaterialityMatrix data={assessments} />
+                      </div>
+                      <div className="lg:col-span-1">
+                        <DMAGuide profile={profile.data} />
+                      </div>
+                    </div>
+                    <div className="mt-6">
                       <MaterialTopicsList assessments={assessments} onEdit={handleEditAssessment} onDelete={handleDeleteAssessment} orgId={organization?.id} currentUserId={user?.id} />
                     </div>
                   </div>

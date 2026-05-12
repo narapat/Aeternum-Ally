@@ -55,6 +55,12 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "An unexpected error occurred. Please try again.";
 }
 
+export const getDMAGuide = async (
+  profile: CompanyProfile
+): Promise<{ message: string; topics: { topic: string; reason: string; esrs_ref: string }[] }> => {
+  return callApi("generateDMAGuide", { profile });
+};
+
 // Re-throws on error — caller must catch and show an error state.
 export const generateAssessmentSuggestions = async (
   profile: CompanyProfile,
