@@ -57,7 +57,7 @@ function errorMessage(error: unknown): string {
 
 export const getDMAGuide = async (
   profile: CompanyProfile
-): Promise<{ message: string; topics: { topic: string; reason: string }[] }> => {
+): Promise<{ message: string; topics: { topic: string; reason: string; esrs_ref: string }[] }> => {
   return callApi("generateDMAGuide", { profile });
 };
 

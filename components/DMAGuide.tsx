@@ -10,7 +10,7 @@ interface Props {
 const DMAGuide: React.FC<Props> = ({ profile }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [guide, setGuide] = useState<{ message: string; topics: { topic: string; reason: string }[] } | null>(null);
+  const [guide, setGuide] = useState<{ message: string; topics: { topic: string; reason: string; esrs_ref: string }[] } | null>(null);
 
   useEffect(() => {
     const fetchGuide = async () => {
@@ -64,7 +64,12 @@ const DMAGuide: React.FC<Props> = ({ profile }) => {
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Top 3 Recommended Topics</p>
             {guide.topics.map((t, i) => (
               <div key={i} className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
-                <p className="text-sm font-semibold text-slate-800 dark:text-white mb-1">{t.topic}</p>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <p className="text-sm font-semibold text-slate-800 dark:text-white">{t.topic}</p>
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-mono flex-shrink-0">
+                    {t.esrs_ref}
+                  </span>
+                </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{t.reason}</p>
               </div>
             ))}

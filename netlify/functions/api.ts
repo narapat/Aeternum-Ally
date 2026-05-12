@@ -1525,7 +1525,7 @@ Company Context:
 ${companyCtx}
 
 Provide a short guide message and the top 3 topics.
-Each topic must have a reason why it is a focus area.
+Each topic must have a reason why it is a focus area, and the related ESRS standard (e.g. "ESRS E1", "ESRS S1").
 Keep the total response short and precise. The explanation for all 3 topics combined should not exceed 100 words.
 `;
 
@@ -1544,9 +1544,10 @@ Keep the total response short and precise. The explanation for all 3 topics comb
               type: Type.OBJECT,
               properties: {
                 topic: { type: Type.STRING },
-                reason: { type: Type.STRING }
+                reason: { type: Type.STRING },
+                esrs_ref: { type: Type.STRING }
               },
-              required: ["topic", "reason"]
+              required: ["topic", "reason", "esrs_ref"]
             }
           }
         },
