@@ -302,7 +302,7 @@ const GeneratorTab: React.FC<GeneratorProps> = ({
 
       {suggested.length === 0 && !generating && (
         <div className="text-center py-16 text-slate-400 dark:text-slate-500">
-          <Sparkles className="w-8 h-8 mx-auto mb-3 opacity-40" />
+          <CheckCircle className="w-8 h-8 mx-auto mb-3 opacity-40" />
           <p className="font-medium">No suggested tasks yet</p>
           <p className="text-sm mt-1">Click "Generate Tasks" to let AI build your action list.</p>
         </div>
@@ -678,6 +678,9 @@ const ManagerTab: React.FC<ManagerProps> = ({
     setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
   };
 
+  // The current user's member row id (for "pick up")
+  const currentMemberId = members.find(m => m.user_id === currentUserId)?.id ?? null;
+
   // Pick up = assign to self using this user's member row id
   const handlePickUp = (task: Task) => {
     if (!currentMemberId) return;
@@ -710,9 +713,6 @@ const ManagerTab: React.FC<ManagerProps> = ({
     memberByMemberId(memberId)?.email ?? (memberId ? '…' : null);
   const assignedByName = (userId: string | null) =>
     memberByUserId(userId)?.email ?? null;
-
-  // The current user's member row id (for "pick up")
-  const currentMemberId = members.find(m => m.user_id === currentUserId)?.id ?? null;
 
   if (loading) {
     return (
@@ -833,7 +833,7 @@ const ManagerTab: React.FC<ManagerProps> = ({
       {/* Task list */}
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center py-16 text-center">
-          <ListChecks className="w-10 h-10 text-slate-300 dark:text-slate-600 mb-4" />
+          <CheckCircle className="w-10 h-10 text-slate-300 dark:text-slate-600 mb-4" />
           <p className="font-semibold text-slate-700 dark:text-slate-200 text-base">No tasks yet</p>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 mb-5 max-w-xs">
             Let AI analyse your DMA quality checks and material topics to suggest an action plan.
@@ -842,7 +842,7 @@ const ManagerTab: React.FC<ManagerProps> = ({
             onClick={onGoToGenerator}
             className="flex items-center gap-2 px-4 py-2 bg-esg-600 hover:bg-esg-700 text-white text-sm font-medium rounded-lg transition-colors"
           >
-            <Sparkles className="w-4 h-4" />Go to Generator
+            <CheckCircle className="w-4 h-4" />Go to Generator
           </button>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-4">
             Or add a task manually using the button above.
