@@ -678,6 +678,9 @@ const ManagerTab: React.FC<ManagerProps> = ({
     setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
   };
 
+  // The current user's member row id (for "pick up")
+  const currentMemberId = members.find(m => m.user_id === currentUserId)?.id ?? null;
+
   // Pick up = assign to self using this user's member row id
   const handlePickUp = (task: Task) => {
     if (!currentMemberId) return;
@@ -710,9 +713,6 @@ const ManagerTab: React.FC<ManagerProps> = ({
     memberByMemberId(memberId)?.email ?? (memberId ? '…' : null);
   const assignedByName = (userId: string | null) =>
     memberByUserId(userId)?.email ?? null;
-
-  // The current user's member row id (for "pick up")
-  const currentMemberId = members.find(m => m.user_id === currentUserId)?.id ?? null;
 
   if (loading) {
     return (
