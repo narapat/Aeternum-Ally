@@ -370,7 +370,7 @@ const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, profile, saveSta
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Sustainability Business Model Canvas</h2>
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Sustainable Business Model Canvas</h2>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Define your business logic including economic, environmental, and social layers.</p>
         </div>
         <div className="flex gap-2 w-full md:w-auto justify-between md:justify-end">
