@@ -16,6 +16,9 @@ import UserProfilePage from './components/UserProfilePage';
 import PerformanceDashboard from './components/PerformanceDashboard';
 import SustainabilityStatement from './components/SustainabilityStatement';
 import MaterialTopicsList from './components/MaterialTopicsList';
+import StartHere from './components/StartHere';
+import type { StartHerePathId } from './components/StartHere';
+import StartHerePath from './components/StartHerePath';
 import AllyAssistant from './components/AllyAssistant';
 import AuthScreen from './components/AuthScreen';
 import ResetPasswordModal from './components/ResetPasswordModal';
@@ -33,7 +36,7 @@ import {
 } from './services/dbService';
 import { setOrganizationContext } from './services/geminiService';
 import { supabase } from './lib/supabaseClient';
-import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, ChevronDown, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2, ListChecks, Zap, Leaf, Settings, UserCircle, ChevronUp, ScatterChart } from 'lucide-react';
+import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, ChevronDown, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2, ListChecks, Zap, Leaf, Settings, UserCircle, ChevronUp, ScatterChart, Compass } from 'lucide-react';
 import type { InsightHubResponse, QualityCheck } from './types';
 
 const DEFAULT_PROFILE: CompanyProfile = {
@@ -95,7 +98,7 @@ const App: React.FC = () => {
   }, [organization?.id]);
 
   // UI state
-  const [view, setView] = useState<'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub' | 'tasks' | 'carbon_wizard' | 'carbon_dashboard' | 'settings' | 'user_profile'>('overview');
+  const [view, setView] = useState<'start_here' | 'start_here_esg' | 'start_here_carbon' | 'start_here_stakeholder' | 'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub' | 'tasks' | 'carbon_wizard' | 'carbon_dashboard' | 'settings' | 'user_profile'>('start_here');
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -296,6 +299,7 @@ const App: React.FC = () => {
 
           <nav className="flex-1 p-2 sm:p-4 space-y-6 overflow-y-auto overflow-x-hidden">
             <div className="space-y-1">
+              <NavItem active={view === 'start_here' || view === 'start_here_esg' || view === 'start_here_carbon' || view === 'start_here_stakeholder'} collapsed={isSidebarCollapsed} onClick={() => setView('start_here')} icon={<Compass />} label="Start Here" />
               <NavItem active={view === 'overview'} collapsed={isSidebarCollapsed} onClick={() => setView('overview')} icon={<Home />} label="Overview" />
             </div>
 
@@ -348,6 +352,7 @@ const App: React.FC = () => {
               </button>
               <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 whitespace-nowrap overflow-hidden">
                 <span className="font-medium text-slate-800 dark:text-white hidden sm:inline">
+                  {(view === 'start_here' || view === 'start_here_esg' || view === 'start_here_carbon' || view === 'start_here_stakeholder') && 'Start Here'}
                   {view === 'overview' && 'Overview'}
                   {(view === 'profile' || view === 'canvas' || view === 'swot' || view === 'kpi') && 'My Business'}
                   {(view === 'dm_dashboard' || view === 'assess' || view === 'report' || view === 'insight_hub') && 'Double Materiality'}
@@ -358,6 +363,10 @@ const App: React.FC = () => {
                 </span>
                 <ChevronRight className="w-4 h-4 hidden sm:block" />
                 <span className="truncate">
+                  {view === 'start_here' && 'Choose Your Path'}
+                  {view === 'start_here_esg' && 'ESG Readiness'}
+                  {view === 'start_here_carbon' && 'Carbon Starter'}
+                  {view === 'start_here_stakeholder' && 'Stakeholder Request Readiness'}
                   {view === 'overview' && 'System Status'}
                   {view === 'profile' && 'Company Profile'}
                   {view === 'canvas' && 'Business Model Canvas'}
@@ -467,6 +476,18 @@ const App: React.FC = () => {
               </div>
             ) : (
               <>
+                {view === 'start_here' && (
+                  <StartHere onSelectPath={(path: StartHerePathId) => setView(path)} />
+                )}
+
+                {(view === 'start_here_esg' || view === 'start_here_carbon' || view === 'start_here_stakeholder') && (
+                  <StartHerePath
+                    pathId={view}
+                    onBack={() => setView('start_here')}
+                    onNavigate={(v) => setView(v)}
+                  />
+                )}
+
                 {view === 'overview' && (
                   <DataCompletenessDashboard
                     bmcData={canvas.data}
