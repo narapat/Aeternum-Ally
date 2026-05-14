@@ -18,6 +18,7 @@ import SustainabilityStatement from './components/SustainabilityStatement';
 import MaterialTopicsList from './components/MaterialTopicsList';
 import StartHere from './components/StartHere';
 import type { StartHerePathId } from './components/StartHere';
+import StartHerePath from './components/StartHerePath';
 import AllyAssistant from './components/AllyAssistant';
 import AuthScreen from './components/AuthScreen';
 import ResetPasswordModal from './components/ResetPasswordModal';
@@ -480,12 +481,11 @@ const App: React.FC = () => {
                 )}
 
                 {(view === 'start_here_esg' || view === 'start_here_carbon' || view === 'start_here_stakeholder') && (
-                  <div className="animate-in fade-in duration-500 flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
-                    <p className="text-slate-500 dark:text-slate-400 text-sm">Path detail coming soon…</p>
-                    <button onClick={() => setView('start_here')} className="text-sm text-esg-600 dark:text-esg-400 hover:underline">
-                      ← Back to Start Here
-                    </button>
-                  </div>
+                  <StartHerePath
+                    pathId={view}
+                    onBack={() => setView('start_here')}
+                    onNavigate={(v) => setView(v)}
+                  />
                 )}
 
                 {view === 'overview' && (
