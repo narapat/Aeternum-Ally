@@ -98,7 +98,7 @@ const App: React.FC = () => {
   }, [organization?.id]);
 
   // UI state
-  const [view, setView] = useState<'start_here' | 'start_here_esg' | 'start_here_carbon' | 'start_here_stakeholder' | 'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub' | 'tasks' | 'carbon_wizard' | 'carbon_dashboard' | 'settings' | 'user_profile'>('overview');
+  const [view, setView] = useState<'start_here' | 'start_here_esg' | 'start_here_carbon' | 'start_here_stakeholder' | 'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub' | 'tasks' | 'carbon_wizard' | 'carbon_dashboard' | 'settings' | 'user_profile'>('start_here');
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
