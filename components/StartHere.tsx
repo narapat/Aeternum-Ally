@@ -108,13 +108,6 @@ const COLOR_MAP = {
   },
 };
 
-const STATEMENT_OUTPUTS = [
-  'Internal sustainability review',
-  'ESG readiness planning',
-  'Customer and stakeholder discussions',
-  'Identification of sustainability gaps and next steps',
-];
-
 const StartHere: React.FC<StartHereProps> = ({ onSelectPath }) => (
   <div className="animate-in fade-in duration-500 space-y-8 max-w-6xl mx-auto">
 
@@ -124,33 +117,6 @@ const StartHere: React.FC<StartHereProps> = ({ onSelectPath }) => (
       <p className="text-lg text-slate-500 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
         Choose the sustainability path that best matches your current business need.
       </p>
-    </div>
-
-    {/* What You Can Generate */}
-    <div className="bg-gradient-to-br from-esg-50 to-slate-50 dark:from-esg-900/20 dark:to-slate-800/50 rounded-2xl border border-esg-100 dark:border-esg-800/50 p-6 flex flex-col sm:flex-row gap-5">
-      <div className="w-12 h-12 rounded-xl bg-esg-100 dark:bg-esg-900/50 flex items-center justify-center flex-shrink-0">
-        <FileText className="w-6 h-6 text-esg-600 dark:text-esg-400" />
-      </div>
-      <div className="space-y-3 flex-1 min-w-0">
-        <h2 className="text-base font-bold text-slate-800 dark:text-white">What You Can Generate</h2>
-        <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-          After completing the recommended modules, organizations can generate an <span className="font-semibold text-esg-700 dark:text-esg-300">AI-Assisted Baseline Sustainability Statement</span> based on the sustainability information available in their workspace.
-        </p>
-        <div>
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">This draft statement is designed to support</p>
-          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-            {STATEMENT_OUTPUTS.map((item) => (
-              <li key={item} className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                <span className="w-1.5 h-1.5 rounded-full bg-esg-400 dark:bg-esg-500 flex-shrink-0" />
-                {item}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed border-t border-esg-100 dark:border-esg-800/50 pt-3">
-          The statement is AI-assisted and generated from available organizational data — including company profile, double materiality assessments, KPI structures, carbon tracking records, and user-entered sustainability information.
-        </p>
-      </div>
     </div>
 
     {/* Path cards */}
