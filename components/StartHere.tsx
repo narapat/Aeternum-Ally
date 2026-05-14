@@ -32,7 +32,7 @@ const PATHS = [
   {
     id: 'start_here_carbon' as StartHerePathId,
     icon: <Leaf className="w-6 h-6" />,
-    color: 'green',
+    color: 'amber',
     title: 'Carbon Starter',
     description: 'For organizations beginning Scope 1 and Scope 2 carbon tracking.',
     bestFor: [
@@ -80,12 +80,12 @@ const COLOR_MAP = {
     button: 'bg-esg-600 hover:bg-esg-700 focus-visible:ring-esg-500 text-white',
     cardHover: 'hover:border-esg-200 dark:hover:border-esg-800',
   },
-  green: {
-    iconBg: 'bg-green-50 dark:bg-green-900/30',
-    iconText: 'text-green-600 dark:text-green-400',
-    badge: 'bg-green-50 text-green-700 dark:bg-green-900/40 dark:text-green-300 border border-green-100 dark:border-green-800',
-    button: 'bg-green-600 hover:bg-green-700 focus-visible:ring-green-500 text-white',
-    cardHover: 'hover:border-green-200 dark:hover:border-green-800',
+  amber: {
+    iconBg: 'bg-amber-50 dark:bg-amber-900/30',
+    iconText: 'text-amber-600 dark:text-amber-400',
+    badge: 'bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-100 dark:border-amber-800',
+    button: 'bg-amber-500 hover:bg-amber-600 focus-visible:ring-amber-400 text-white',
+    cardHover: 'hover:border-amber-200 dark:hover:border-amber-800',
   },
   blue: {
     iconBg: 'bg-blue-50 dark:bg-blue-900/30',

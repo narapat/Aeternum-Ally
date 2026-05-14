@@ -16,7 +16,7 @@ interface Step {
 interface PathConfig {
   id: StartHerePathId;
   icon: React.ReactNode;
-  color: 'esg' | 'green' | 'blue';
+  color: 'esg' | 'amber' | 'blue';
   title: string;
   description: string;
   steps: Step[];
@@ -77,7 +77,7 @@ const PATHS: PathConfig[] = [
   {
     id: 'start_here_carbon',
     icon: <Leaf className="w-5 h-5" />,
-    color: 'green',
+    color: 'amber',
     title: 'Carbon Starter',
     description: 'Set up Scope 1 and Scope 2 carbon tracking step by step. Start small and build from there.',
     steps: [
@@ -174,13 +174,13 @@ const COLOR_MAP = {
     button: 'bg-esg-600 hover:bg-esg-700 text-white',
     optionalBadge: 'bg-esg-50 text-esg-600 dark:bg-esg-900/30 dark:text-esg-400 border border-esg-200 dark:border-esg-700',
   },
-  green: {
-    iconBg: 'bg-green-50 dark:bg-green-900/30',
-    iconText: 'text-green-600 dark:text-green-400',
-    stepCircle: 'bg-green-600 text-white',
-    stepLine: 'bg-green-200 dark:bg-green-800',
-    button: 'bg-green-600 hover:bg-green-700 text-white',
-    optionalBadge: 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-700',
+  amber: {
+    iconBg: 'bg-amber-50 dark:bg-amber-900/30',
+    iconText: 'text-amber-600 dark:text-amber-400',
+    stepCircle: 'bg-amber-500 text-white',
+    stepLine: 'bg-amber-200 dark:bg-amber-800',
+    button: 'bg-amber-500 hover:bg-amber-600 text-white',
+    optionalBadge: 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-700',
   },
   blue: {
     iconBg: 'bg-blue-50 dark:bg-blue-900/30',
