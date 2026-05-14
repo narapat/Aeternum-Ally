@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, ChevronRight, TrendingUp, Leaf, Globe } from 'lucide-react';
+import { Clock, ChevronRight, TrendingUp, Leaf, Globe, FileText, Info, AlertCircle } from 'lucide-react';
 
 export type StartHerePathId = 'start_here_esg' | 'start_here_carbon' | 'start_here_stakeholder';
 
@@ -26,7 +26,9 @@ const PATHS = [
       'Initial materiality understanding',
       'KPI structure',
       'Suggested sustainability tasks',
+      'AI-Assisted Baseline Sustainability Statement',
     ],
+    note: 'This path helps organizations build an initial sustainability structure that can support generation of a draft baseline sustainability statement.',
     cta: 'Start ESG Readiness',
   },
   {
@@ -46,7 +48,9 @@ const PATHS = [
       'Monthly emissions records',
       'Carbon activity overview',
       'Initial emissions hotspot visibility',
+      'Carbon data that can support future sustainability statements and climate-related disclosures',
     ],
+    note: 'Carbon information recorded in this workflow can contribute to future AI-assisted sustainability statements and climate-related reporting preparation.',
     cta: 'Start Carbon Starter',
   },
   {
@@ -67,7 +71,9 @@ const PATHS = [
       'Relevant KPI overview',
       'Evidence links attached to records',
       'Better visibility of missing information',
+      'Draft baseline sustainability statement for stakeholder discussion support',
     ],
+    note: 'This path helps organizations organize sustainability-related information and supporting evidence links that may assist in customer, investor, or partner sustainability discussions.',
     cta: 'Start Stakeholder Readiness',
   },
 ] as const;
@@ -77,27 +83,34 @@ const COLOR_MAP = {
     iconBg: 'bg-esg-50 dark:bg-esg-900/30',
     iconText: 'text-esg-600 dark:text-esg-400',
     badge: 'bg-esg-50 text-esg-700 dark:bg-esg-900/40 dark:text-esg-300 border border-esg-100 dark:border-esg-800',
+    highlightBadge: 'bg-esg-100 text-esg-800 dark:bg-esg-900/60 dark:text-esg-200 border border-esg-300 dark:border-esg-700 font-semibold',
     button: 'bg-esg-600 hover:bg-esg-700 focus-visible:ring-esg-500 text-white',
     cardHover: 'hover:border-esg-200 dark:hover:border-esg-800',
+    note: 'bg-esg-50 dark:bg-esg-900/20 border-esg-100 dark:border-esg-800 text-esg-700 dark:text-esg-300',
   },
   amber: {
     iconBg: 'bg-amber-50 dark:bg-amber-900/30',
     iconText: 'text-amber-600 dark:text-amber-400',
     badge: 'bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-100 dark:border-amber-800',
+    highlightBadge: 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-300 dark:border-amber-700 font-semibold',
     button: 'bg-amber-500 hover:bg-amber-600 focus-visible:ring-amber-400 text-white',
     cardHover: 'hover:border-amber-200 dark:hover:border-amber-800',
+    note: 'bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-800 text-amber-700 dark:text-amber-300',
   },
   blue: {
     iconBg: 'bg-blue-50 dark:bg-blue-900/30',
     iconText: 'text-blue-600 dark:text-blue-400',
     badge: 'bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-100 dark:border-blue-800',
+    highlightBadge: 'bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200 border border-blue-300 dark:border-blue-700 font-semibold',
     button: 'bg-blue-600 hover:bg-blue-700 focus-visible:ring-blue-500 text-white',
     cardHover: 'hover:border-blue-200 dark:hover:border-blue-800',
+    note: 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800 text-blue-700 dark:text-blue-300',
   },
 };
 
 const StartHere: React.FC<StartHereProps> = ({ onSelectPath }) => (
   <div className="animate-in fade-in duration-500 space-y-8 max-w-6xl mx-auto">
+
     {/* Header */}
     <div className="text-center space-y-3 pt-2 pb-2">
       <h1 className="text-3xl md:text-4xl font-bold text-slate-800 dark:text-white">Start Here</h1>
@@ -110,6 +123,8 @@ const StartHere: React.FC<StartHereProps> = ({ onSelectPath }) => (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       {PATHS.map((path) => {
         const c = COLOR_MAP[path.color];
+        const regularOutcomes = path.outcomes.slice(0, -1);
+        const highlightOutcome = path.outcomes[path.outcomes.length - 1];
         return (
           <div
             key={path.id}
@@ -146,14 +161,27 @@ const StartHere: React.FC<StartHereProps> = ({ onSelectPath }) => (
             </div>
 
             {/* Expected outcomes */}
-            <div className="flex-1">
-              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Expected outcomes</p>
+            <div className="flex-1 space-y-2">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Expected outcomes</p>
               <div className="flex flex-wrap gap-1.5">
-                {path.outcomes.map((outcome) => (
+                {regularOutcomes.map((outcome) => (
                   <span key={outcome} className={`text-xs px-2.5 py-1 rounded-full font-medium ${c.badge}`}>
                     {outcome}
                   </span>
                 ))}
+              </div>
+              {/* Highlighted final outcome */}
+              <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full ${c.highlightBadge}`}>
+                <FileText className="w-3 h-3 flex-shrink-0" />
+                {highlightOutcome}
+              </span>
+            </div>
+
+            {/* Path note */}
+            <div className={`rounded-xl border p-3 ${c.note}`}>
+              <div className="flex gap-2">
+                <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                <p className="text-xs leading-relaxed">{path.note}</p>
               </div>
             </div>
 
@@ -169,6 +197,20 @@ const StartHere: React.FC<StartHereProps> = ({ onSelectPath }) => (
         );
       })}
     </div>
+
+    {/* Important Notice */}
+    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 flex gap-4">
+      <div className="flex-shrink-0 mt-0.5">
+        <AlertCircle className="w-5 h-5 text-slate-400 dark:text-slate-500" />
+      </div>
+      <div className="space-y-1.5 min-w-0">
+        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Important Notice</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+          The AI-Assisted Baseline Sustainability Statement generated by AeternumAlly is intended as a draft baseline document generated from available organizational sustainability information. The generated statement may contain incomplete information, missing policies, or missing quantitative indicators depending on the data available in the workspace. The document is not externally assured and should be reviewed internally before external use or formal sustainability disclosure.
+        </p>
+      </div>
+    </div>
+
   </div>
 );
 
