@@ -4,13 +4,13 @@
 
 ## Overview
 
-These principles guide every product, engineering, and UX decision in Aeternum Ally. They are not aspirational statements — they are active constraints that resolve trade-offs when requirements pull in different directions.
+These principles guide every product, engineering, and UX decision in AeternumAlly. They are not aspirational statements — they are active constraints that resolve trade-offs when requirements pull in different directions.
 
 ---
 
 ## 1. Compliance Is a Starting Point, Not the Goal
 
-Aeternum Ally exists to help SMEs comply with ESRS and CSRD, but compliance is the floor, not the ceiling. Every feature should ask: does this also help the company become more sustainable and more competitive? If a feature only produces a checkbox, reconsider it. If it reveals a strategic insight, prioritize it.
+AeternumAlly exists to help SMEs comply with ESRS and CSRD, but compliance is the floor, not the ceiling. Every feature should ask: does this also help the company become more sustainable and more competitive? If a feature only produces a checkbox, reconsider it. If it reveals a strategic insight, prioritize it.
 
 **In practice:**
 - The Double Materiality Assessment reveals which environmental and social risks threaten the business financially — surface this clearly.
@@ -69,7 +69,7 @@ SMEs operate in a world of overlapping reporting standards. Aligning ESRS with G
 
 ## 6. Security Is Not Optional, Especially for SMEs
 
-SME clients often lack security expertise. Aeternum Ally must be secure by default so users do not have to make security trade-offs they are not equipped to evaluate.
+SME clients often lack security expertise. AeternumAlly must be secure by default so users do not have to make security trade-offs they are not equipped to evaluate.
 
 **In practice:**
 - API keys (Gemini, Supabase service-role) never reach the browser — ever. All privileged operations go through server-side Netlify Functions.
@@ -94,7 +94,7 @@ Sustainability reporting is not done in a single session. The workflow is design
 
 ## 8. Transparency About Limitations
 
-As a tool for regulatory compliance, Aeternum Ally must be honest about what it can and cannot guarantee. AI-generated content is a draft, not an audited disclosure. The system should communicate this clearly.
+As a tool for regulatory compliance, AeternumAlly must be honest about what it can and cannot guarantee. AI-generated content is a draft, not an audited disclosure. The system should communicate this clearly.
 
 **In practice:**
 - Generated statements and generated tasks are presented as drafts for review, not final reports or mandates.
@@ -114,4 +114,4 @@ Building on familiar mental models reduces onboarding friction and means users a
 
 ## 10. Open Source, Open Accountability
 
-Aeternum Ally is licensed under AGPL-3.0. This creates a mutual accountability loop: users who deploy the software as a service must share their improvements. This ensures that the communities the software serves — SMEs navigating complex sustainability requirements — can collectively benefit from any organization's investment in improving it.
+AeternumAlly is licensed under AGPL-3.0. This creates a mutual accountability loop: users who deploy the software as a service must share their improvements. This ensures that the communities the software serves — SMEs navigating complex sustainability requirements — can collectively benefit from any organization's investment in improving it.

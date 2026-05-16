@@ -4,7 +4,7 @@
 
 ## 1. System Context
 
-Aeternum Ally is a multi-tenant SaaS web application that helps SMEs produce ESRS/CSRD-compliant sustainability reports and track actionable sustainability metrics. The system sits at the intersection of three external services: a relational database with built-in auth (Supabase), a generative AI API (Google Gemini), and a static hosting + serverless runtime (Netlify).
+AeternumAlly is a multi-tenant SaaS web application that helps SMEs produce ESRS/CSRD-compliant sustainability reports and track actionable sustainability metrics. The system sits at the intersection of three external services: a relational database with built-in auth (Supabase), a generative AI API (Google Gemini), and a static hosting + serverless runtime (Netlify).
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
