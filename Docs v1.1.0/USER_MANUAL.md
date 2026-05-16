@@ -1,7 +1,7 @@
 <!-- Version: 1.1.0 — Last updated: 2026-05-09 -->
-# Aeternum Ally - User Manual (v1.1.0)
+# AeternumAlly - User Manual (v1.1.0)
 
-Welcome to Aeternum Ally! This platform guides your organization through a structured sustainability reporting workflow, allowing you to generate a draft Sustainability Statement aligned with ESRS (European Sustainability Reporting Standards) and GRI standards, all without needing prior expertise.
+Welcome to AeternumAlly! This platform guides your organization through a structured sustainability reporting workflow, allowing you to generate a draft Sustainability Statement aligned with ESRS (European Sustainability Reporting Standards) and GRI standards, all without needing prior expertise.
 
 ---
 
@@ -23,7 +23,7 @@ Welcome to Aeternum Ally! This platform guides your organization through a struc
 ## 1. Getting Started
 
 ### Authentication
-Aeternum Ally uses a combination of email magic-links for account creation and standard email/password for day-to-day login.
+AeternumAlly uses a combination of email magic-links for account creation and standard email/password for day-to-day login.
 - **New Users & Invites:** When creating an account or accepting a team invite, you will receive an email magic-link. Clicking this link securely sets up your account.
 - **Returning Users:** The main authentication method is email and password. Enter your registered credentials on the sign-in screen to access your workspace.
 
@@ -86,7 +86,7 @@ Analyze your internal Strengths/Weaknesses and external Opportunities/Threats.
 
 ## 4. Double Materiality
 
-The core engine of Aeternum Ally. You evaluate topics across two dimensions: 
+The core engine of AeternumAlly. You evaluate topics across two dimensions: 
 1. **Impact Materiality:** How your company impacts people and the environment (Inside-Out).
 2. **Financial Materiality:** How sustainability issues create financial risks or opportunities for your company (Outside-In).
 
@@ -120,7 +120,7 @@ Once your descriptions are filled out, the **Get Suggestions** button becomes av
 6. Click **Complete Assessment** (or Update Assessment) to save your results to the matrix.
 
 ### DMA Insight Hub
-The Insight Hub is a key differentiator of Aeternum Ally, moving you beyond mere compliance tracking into active strategic management. It acts as an automated sustainability consultant, performing a deep, two-pass AI analysis of all your assessments.
+The Insight Hub is a key differentiator of AeternumAlly, moving you beyond mere compliance tracking into active strategic management. It acts as an automated sustainability consultant, performing a deep, two-pass AI analysis of all your assessments.
 
 **Key Features & Behavior:**
 - **Automatic Loading:** When you open the page, it automatically fetches completed analyses from the database. If none exist or a previous one failed, it automatically triggers a new analysis.
@@ -177,7 +177,7 @@ This module acts as the "Do" phase of your continuous sustainability PDCA loop (
 - **Evidence Collection:** Link Google Drive documents directly to tasks to seamlessly compile audit evidence.
 
 ### Carbon Accounting
-Measuring greenhouse gas (GHG) emissions is notoriously complex. Aeternum Ally uses gamification to eliminate this barrier to entry, guiding you seamlessly from zero to a baseline carbon footprint.
+Measuring greenhouse gas (GHG) emissions is notoriously complex. AeternumAlly uses gamification to eliminate this barrier to entry, guiding you seamlessly from zero to a baseline carbon footprint.
 
 - **Carbon Quest Wizard:** A highly gamified, interactive onboarding experience that breaks down complex carbon accounting into three digestible "Missions":
   - **Mission 1 (Scope 2 - Electricity):** Starts with the easiest data to gather (electric bills), with AI Copilot bubbles providing regional averages to guide you.
@@ -234,7 +234,7 @@ Monitor your organization's API token consumption. This provides a transparent l
 
 ## 8. Example Use Cases & Scenarios
 
-To help you understand how Aeternum Ally works in practice, here are two common scenarios.
+To help you understand how AeternumAlly works in practice, here are two common scenarios.
 
 ### Scenario A: The Packaging Manufacturer (B2B SME)
 **The Situation:** EcoPack Ltd. manufactures cardboard packaging. A major corporate client recently requested their carbon footprint and a sustainability report to comply with the client's own supply chain requirements.

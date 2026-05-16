@@ -1,8 +1,8 @@
 <!-- Version: 1.1.0 — Last updated: 2026-05-09 -->
-# Aeternum Ally Branding & Design Specification
+# AeternumAlly Branding & Design Specification
 
 ## Overview
-This document outlines the core design language, typography, color palettes, and UI patterns used across the Aeternum Ally platform. Consistency in these elements ensures a professional, cohesive, and accessible experience for all users managing their sustainability and ESG workflows.
+This document outlines the core design language, typography, color palettes, and UI patterns used across the AeternumAlly platform. Consistency in these elements ensures a professional, cohesive, and accessible experience for all users managing their sustainability and ESG workflows.
 
 ---
 

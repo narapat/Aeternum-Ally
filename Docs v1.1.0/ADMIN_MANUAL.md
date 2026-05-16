@@ -1,8 +1,8 @@
 <!-- Version: 1.1.0 — Last updated: 2026-05-09 -->
 
-# Aeternum Ally - Admin Portal Manual (v1.1.0)
+# AeternumAlly - Admin Portal Manual (v1.1.0)
 
-Welcome to the Aeternum Ally Admin Portal. This portal is a secure, platform-wide management interface designed for super-administrators to monitor system health, manage tenant organizations, oversee AI consumption, and control administrator access.
+Welcome to the AeternumAlly Admin Portal. This portal is a secure, platform-wide management interface designed for super-administrators to monitor system health, manage tenant organizations, oversee AI consumption, and control administrator access.
 
 ---
 
@@ -87,7 +87,7 @@ This module allows administrators to view, add, edit, and delete global emission
 
 ## 6. AI Usage Tracking
 
-AI generation represents the primary variable cost for Aeternum Ally. This panel provides granular financial and operational oversight of the platform's AI consumption.
+AI generation represents the primary variable cost for AeternumAlly. This panel provides granular financial and operational oversight of the platform's AI consumption.
 
 ### Summary Metrics
 - **Total Calls & Tokens:** Displays the total number of requests, input tokens, and output tokens consumed platform-wide.
