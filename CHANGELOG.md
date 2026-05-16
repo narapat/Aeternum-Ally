@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Aeternum Ally are documented here.
+All notable changes to AeternumAlly are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project does not yet use semantic versioning. Entries are dated.

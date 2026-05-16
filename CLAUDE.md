@@ -1,4 +1,4 @@
-# Aeternum Ally — Claude Code Context
+# AeternumAlly — Claude Code Context
 
 This file provides context for AI-assisted development in this repository. It is read automatically by Claude Code at the start of every session.
 

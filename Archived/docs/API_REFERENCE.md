@@ -2,7 +2,7 @@
 
 # API Reference — Netlify Functions
 
-Aeternum Ally exposes three serverless HTTP endpoints. They are not a public API — they are internal to the application — but this document describes them precisely for contributors, integrators, and self-hosters who need to understand or extend them.
+AeternumAlly exposes three serverless HTTP endpoints. They are not a public API — they are internal to the application — but this document describes them precisely for contributors, integrators, and self-hosters who need to understand or extend them.
 
 All endpoints are at `/.netlify/functions/<name>` relative to the deployment base URL.
 

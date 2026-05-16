@@ -61,7 +61,7 @@ async function sendInviteEmail(
   // params that aren't explicitly listed in the allowed-redirects config.
   const redirectWithToken = `${appUrl}?invite_token=${inviteToken}`;
   const redirectBase = appUrl;
-  const data = { company_name: companyName, app_name: "Aeternum Ally" };
+  const data = { company_name: companyName, app_name: "AeternumAlly" };
 
   const emailMetadata = { email, invite_token: inviteToken };
 

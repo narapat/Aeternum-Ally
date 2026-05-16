@@ -2,9 +2,9 @@
 
 # User Manual
 
-## Welcome to Aeternum Ally
+## Welcome to AeternumAlly
 
-Aeternum Ally guides your organization through a structured sustainability reporting workflow. By the end of the process, you will have a draft Sustainability Statement aligned with ESRS (European Sustainability Reporting Standards) and cross-referenced to GRI standards — without needing prior expertise in sustainability reporting.
+AeternumAlly guides your organization through a structured sustainability reporting workflow. By the end of the process, you will have a draft Sustainability Statement aligned with ESRS (European Sustainability Reporting Standards) and cross-referenced to GRI standards — without needing prior expertise in sustainability reporting.
 
 This manual covers every screen and feature in plain language. Follow the sections in order the first time; return to individual sections as a reference when needed.
 
@@ -33,7 +33,7 @@ This manual covers every screen and feature in plain language. Follow the sectio
 
 ### Creating your account
 
-Aeternum Ally uses email magic-links — there is no password to create or remember.
+AeternumAlly uses email magic-links — there is no password to create or remember.
 
 1. Go to the app URL and enter your email address on the sign-in screen.
 2. Check your inbox for an email with a sign-in link.

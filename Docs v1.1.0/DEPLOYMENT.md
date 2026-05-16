@@ -2,7 +2,7 @@
 
 # Deployment Guide
 
-Step-by-step guide for deploying Aeternum Ally. See [`TECH_STACK.md`](./TECH_STACK.md) for architecture context.
+Step-by-step guide for deploying AeternumAlly. See [`TECH_STACK.md`](./TECH_STACK.md) for architecture context.
 
 ---
 

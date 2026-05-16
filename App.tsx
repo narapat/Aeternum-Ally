@@ -11,6 +11,7 @@ import BusinessModelCanvas from './components/BusinessModelCanvas';
 import SwotAnalysisWizard from './components/SwotAnalysisWizard';
 import DataCompletenessDashboard from './components/DataCompletenessDashboard';
 import CompanyProfileForm from './components/CompanyProfileForm';
+import StartHere from './components/StartHere';
 import SettingsDashboard from './components/SettingsDashboard';
 import UserProfilePage from './components/UserProfilePage';
 import PerformanceDashboard from './components/PerformanceDashboard';
@@ -33,7 +34,7 @@ import {
 } from './services/dbService';
 import { setOrganizationContext } from './services/geminiService';
 import { supabase } from './lib/supabaseClient';
-import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, ChevronDown, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2, ListChecks, Zap, Leaf, Settings, UserCircle, ChevronUp, ScatterChart } from 'lucide-react';
+import { Plus, FileText, BarChart3, CheckCircle, AlertTriangle, Grid, Moon, Sun, Target, Home, ChevronRight, ChevronDown, Building2, Menu, X, TrendingUp, ChevronsLeft, ChevronsRight, LogOut, Loader2, ListChecks, Zap, Leaf, Settings, UserCircle, ChevronUp, ScatterChart, Compass } from 'lucide-react';
 import type { InsightHubResponse, QualityCheck } from './types';
 
 const DEFAULT_PROFILE: CompanyProfile = {
@@ -95,7 +96,7 @@ const App: React.FC = () => {
   }, [organization?.id]);
 
   // UI state
-  const [view, setView] = useState<'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub' | 'tasks' | 'carbon_wizard' | 'carbon_dashboard' | 'settings' | 'user_profile'>('overview');
+  const [view, setView] = useState<'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub' | 'tasks' | 'carbon_wizard' | 'carbon_dashboard' | 'settings' | 'user_profile' | 'start_here'>('start_here');
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -282,7 +283,7 @@ const App: React.FC = () => {
             <div className="flex items-center gap-3 overflow-hidden">
               <img src="/favicon.png" alt="" className="w-8 h-8 flex-shrink-0" />
               <div className={`transition-opacity duration-200 ${isSidebarCollapsed ? 'lg:hidden' : 'opacity-100'} flex items-baseline gap-2`}>
-                <span className="text-white font-bold text-xl whitespace-nowrap">Aeternum Ally</span>
+                <span className="text-white font-bold text-xl whitespace-nowrap">AeternumAlly</span>
                 <span className="text-slate-400 text-xs font-semibold whitespace-nowrap">v 1.1.0</span>
               </div>
             </div>
@@ -296,6 +297,7 @@ const App: React.FC = () => {
 
           <nav className="flex-1 p-2 sm:p-4 space-y-6 overflow-y-auto overflow-x-hidden">
             <div className="space-y-1">
+              <NavItem active={view === 'start_here'} collapsed={isSidebarCollapsed} onClick={() => setView('start_here')} icon={<Compass className="w-5 h-5" />} label="Start Here" />
               <NavItem active={view === 'overview'} collapsed={isSidebarCollapsed} onClick={() => setView('overview')} icon={<Home />} label="Overview" />
             </div>
 
@@ -348,6 +350,7 @@ const App: React.FC = () => {
               </button>
               <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 whitespace-nowrap overflow-hidden">
                 <span className="font-medium text-slate-800 dark:text-white hidden sm:inline">
+                  {view === 'start_here' && 'Welcome'}
                   {view === 'overview' && 'Overview'}
                   {(view === 'profile' || view === 'canvas' || view === 'swot' || view === 'kpi') && 'My Business'}
                   {(view === 'dm_dashboard' || view === 'assess' || view === 'report' || view === 'insight_hub') && 'Double Materiality'}
@@ -358,6 +361,7 @@ const App: React.FC = () => {
                 </span>
                 <ChevronRight className="w-4 h-4 hidden sm:block" />
                 <span className="truncate">
+                  {view === 'start_here' && 'Onboarding'}
                   {view === 'overview' && 'System Status'}
                   {view === 'profile' && 'Company Profile'}
                   {view === 'canvas' && 'Business Model Canvas'}
@@ -467,6 +471,10 @@ const App: React.FC = () => {
               </div>
             ) : (
               <>
+                {view === 'start_here' && (
+                  <StartHere onNavigate={(v) => setView(v)} />
+                )}
+
                 {view === 'overview' && (
                   <DataCompletenessDashboard
                     bmcData={canvas.data}

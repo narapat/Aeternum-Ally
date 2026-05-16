@@ -302,7 +302,7 @@ const Header: React.FC = () => (
       <ShieldCheck className="w-7 h-7 text-white" />
     </div>
     <h1 className="text-2xl font-bold text-white">Admin Portal</h1>
-    <p className="text-slate-400 text-sm mt-1">Aeternum Ally — Platform Administration</p>
+    <p className="text-slate-400 text-sm mt-1">AeternumAlly — Platform Administration</p>
   </div>
 );
 

@@ -945,32 +945,32 @@ async function handleDeactivateAdmin(body: any, actorEmail: string): Promise<obj
 // ---------------------------------------------------------------------------
 async function sendOwnerInviteEmail(toEmail: string, magicLink: string, companyName: string): Promise<void> {
   const html = `<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><title>Welcome to Aeternum Ally</title></head>
+<html lang="en"><head><meta charset="UTF-8"/><title>Welcome to AeternumAlly</title></head>
 <body style="margin:0;padding:0;background:#020617;font-family:Inter,'Helvetica Neue',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#020617;padding:48px 16px;">
 <tr><td align="center">
 <table width="100%" style="max-width:480px;background:#0f172a;border:1px solid #1e293b;border-radius:16px;overflow:hidden;">
   <tr><td style="background:#14532d;padding:24px 32px;text-align:center;">
-    <span style="color:#fff;font-size:18px;font-weight:700;">🌿 Aeternum Ally</span><br/>
+    <span style="color:#fff;font-size:18px;font-weight:700;">🌿 AeternumAlly</span><br/>
     <span style="color:#86efac;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Sustainability Reporting Platform</span>
   </td></tr>
   <tr><td style="padding:32px;">
     <p style="margin:0 0 8px;color:#94a3b8;font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">You've been added</p>
     <h1 style="margin:0 0 16px;color:#f1f5f9;font-size:20px;font-weight:700;">Welcome to ${companyName}</h1>
     <p style="margin:0 0 24px;color:#94a3b8;font-size:15px;line-height:1.6;">
-      Your company <strong style="color:#e2e8f0;">${companyName}</strong> has been set up on Aeternum Ally.
+      Your company <strong style="color:#e2e8f0;">${companyName}</strong> has been set up on AeternumAlly.
       Click below to sign in as Owner and start your sustainability journey.
       Valid for <strong style="color:#e2e8f0;">60 minutes</strong>, single use.
     </p>
     <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
       <tr><td style="background:#16a34a;border-radius:10px;">
-        <a href="${magicLink}" style="display:inline-block;padding:14px 28px;color:#fff;font-size:15px;font-weight:600;text-decoration:none;">Sign in to Aeternum Ally →</a>
+        <a href="${magicLink}" style="display:inline-block;padding:14px 28px;color:#fff;font-size:15px;font-weight:600;text-decoration:none;">Sign in to AeternumAlly →</a>
       </td></tr>
     </table>
   </td></tr>
   <tr><td style="padding:0 32px 24px;"><p style="margin:0;color:#475569;font-size:11px;word-break:break-all;font-family:monospace;">${magicLink}</p></td></tr>
   <tr><td style="padding:16px 32px;border-top:1px solid #1e293b;text-align:center;">
-    <p style="margin:0;color:#334155;font-size:12px;">Aeternum Ally · Sustainability Reporting · Do not reply</p>
+    <p style="margin:0;color:#334155;font-size:12px;">AeternumAlly · Sustainability Reporting · Do not reply</p>
   </td></tr>
 </table>
 </td></tr></table>
@@ -980,9 +980,9 @@ async function sendOwnerInviteEmail(toEmail: string, magicLink: string, companyN
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${resendApiKey}` },
     body: JSON.stringify({
-      from:    `Aeternum Ally <${fromEmail}>`,
+      from:    `AeternumAlly <${fromEmail}>`,
       to:      [toEmail],
-      subject: `🌿 Welcome to Aeternum Ally — Your company ${companyName} is ready`,
+      subject: `🌿 Welcome to AeternumAlly — Your company ${companyName} is ready`,
       html,
     }),
   });
@@ -994,13 +994,13 @@ async function sendOwnerInviteEmail(toEmail: string, magicLink: string, companyN
 // ---------------------------------------------------------------------------
 async function sendAdminInviteEmail(toEmail: string, magicLink: string, invitedBy: string): Promise<void> {
   const html = `<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><title>Aeternum Ally Admin Invitation</title></head>
+<html lang="en"><head><meta charset="UTF-8"/><title>AeternumAlly Admin Invitation</title></head>
 <body style="margin:0;padding:0;background:#020617;font-family:Inter,'Helvetica Neue',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#020617;padding:48px 16px;">
 <tr><td align="center">
 <table width="100%" style="max-width:480px;background:#0f172a;border:1px solid #1e293b;border-radius:16px;overflow:hidden;">
   <tr><td style="background:#14532d;padding:24px 32px;text-align:center;">
-    <span style="color:#fff;font-size:18px;font-weight:700;">🛡️ Aeternum Ally</span><br/>
+    <span style="color:#fff;font-size:18px;font-weight:700;">🛡️ AeternumAlly</span><br/>
     <span style="color:#86efac;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Platform Admin Invitation</span>
   </td></tr>
   <tr><td style="padding:32px;">
@@ -1008,7 +1008,7 @@ async function sendAdminInviteEmail(toEmail: string, magicLink: string, invitedB
     <h1 style="margin:0 0 16px;color:#f1f5f9;font-size:20px;font-weight:700;">Admin portal access granted</h1>
     <p style="margin:0 0 24px;color:#94a3b8;font-size:15px;line-height:1.6;">
       <strong style="color:#e2e8f0;">${invitedBy}</strong> has granted you
-      <strong style="color:#e2e8f0;">Platform Admin</strong> access to Aeternum Ally.
+      <strong style="color:#e2e8f0;">Platform Admin</strong> access to AeternumAlly.
       Click below to sign in — valid for <strong style="color:#e2e8f0;">60 minutes</strong>, single use.
     </p>
     <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
@@ -1028,7 +1028,7 @@ async function sendAdminInviteEmail(toEmail: string, magicLink: string, invitedB
   </td></tr>
   <tr><td style="padding:0 32px 24px;"><p style="margin:0;color:#475569;font-size:11px;word-break:break-all;font-family:monospace;">${magicLink}</p></td></tr>
   <tr><td style="padding:16px 32px;border-top:1px solid #1e293b;text-align:center;">
-    <p style="margin:0;color:#334155;font-size:12px;">Aeternum Ally · Platform Administration · Do not reply</p>
+    <p style="margin:0;color:#334155;font-size:12px;">AeternumAlly · Platform Administration · Do not reply</p>
   </td></tr>
 </table>
 </td></tr></table>
@@ -1038,9 +1038,9 @@ async function sendAdminInviteEmail(toEmail: string, magicLink: string, invitedB
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resendApiKey}` },
     body: JSON.stringify({
-      from:    `Aeternum Ally Admin <${fromEmail}>`,
+      from:    `AeternumAlly Admin <${fromEmail}>`,
       to:      [toEmail],
-      subject: "🛡️ You've been invited to the Aeternum Ally Admin Portal",
+      subject: "🛡️ You've been invited to the AeternumAlly Admin Portal",
       html,
     }),
   });
@@ -1052,13 +1052,13 @@ async function sendAdminInviteEmail(toEmail: string, magicLink: string, invitedB
 // ---------------------------------------------------------------------------
 async function sendAdminMagicLinkEmail(toEmail: string, magicLink: string): Promise<void> {
   const html = `<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><title>Aeternum Ally Admin Access</title></head>
+<html lang="en"><head><meta charset="UTF-8"/><title>AeternumAlly Admin Access</title></head>
 <body style="margin:0;padding:0;background:#020617;font-family:Inter,'Helvetica Neue',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#020617;padding:48px 16px;">
 <tr><td align="center">
 <table width="100%" style="max-width:480px;background:#0f172a;border:1px solid #1e293b;border-radius:16px;overflow:hidden;">
   <tr><td style="background:#14532d;padding:24px 32px;text-align:center;">
-    <span style="color:#fff;font-size:18px;font-weight:700;">🛡️ Aeternum Ally</span><br/>
+    <span style="color:#fff;font-size:18px;font-weight:700;">🛡️ AeternumAlly</span><br/>
     <span style="color:#86efac;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Platform Admin Portal</span>
   </td></tr>
   <tr><td style="padding:32px;">
@@ -1085,7 +1085,7 @@ async function sendAdminMagicLinkEmail(toEmail: string, magicLink: string): Prom
   </td></tr>
   <tr><td style="padding:0 32px 24px;"><p style="margin:0;color:#475569;font-size:11px;word-break:break-all;font-family:monospace;">${magicLink}</p></td></tr>
   <tr><td style="padding:16px 32px;border-top:1px solid #1e293b;text-align:center;">
-    <p style="margin:0;color:#334155;font-size:12px;">Aeternum Ally · Platform Administration · Do not reply</p>
+    <p style="margin:0;color:#334155;font-size:12px;">AeternumAlly · Platform Administration · Do not reply</p>
   </td></tr>
 </table>
 </td></tr></table>
@@ -1095,9 +1095,9 @@ async function sendAdminMagicLinkEmail(toEmail: string, magicLink: string): Prom
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resendApiKey}` },
     body: JSON.stringify({
-      from:    `Aeternum Ally Admin <${fromEmail}>`,
+      from:    `AeternumAlly Admin <${fromEmail}>`,
       to:      [toEmail],
-      subject: '🛡️ Your Aeternum Ally Admin Access Link',
+      subject: '🛡️ Your AeternumAlly Admin Access Link',
       html,
     }),
   });

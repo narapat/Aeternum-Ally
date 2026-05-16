@@ -1,14 +1,14 @@
 <!-- Version: 1.0.0 — Last updated: 2026-05-01 -->
 
-# Aeternum Ally 🌿
+# AeternumAlly 🌿
 > **AI-Powered Sustainability Management & Reporting for SMEs**
 
-Aeternum Ally is a SaaS platform designed to democratize professional-grade sustainability reporting. It guides Small and Medium Enterprises (SMEs) through the complex landscape of **ESRS (European Sustainability Reporting Standards)** and **CSRD (Corporate Sustainability Reporting Directive)** compliance using an intuitive, AI-assisted workflow.
+AeternumAlly is a SaaS platform designed to democratize professional-grade sustainability reporting. It guides Small and Medium Enterprises (SMEs) through the complex landscape of **ESRS (European Sustainability Reporting Standards)** and **CSRD (Corporate Sustainability Reporting Directive)** compliance using an intuitive, AI-assisted workflow.
 
 ---
 
 ## 💡 Concept
-The gap between traditional business strategy and sustainability compliance is often vast and expensive to bridge. **Aeternum Ally** integrates the **Sustainable Business Model Canvas** directly with **Double Materiality Assessments**. 
+The gap between traditional business strategy and sustainability compliance is often vast and expensive to bridge. **AeternumAlly** integrates the **Sustainable Business Model Canvas** directly with **Double Materiality Assessments**. 
 
 By understanding a company's business model first, the platform uses Generative AI (Google Gemini) to intelligently suggest relevant environmental and social impacts, risks, and opportunities, turning a compliance burden into a strategic advantage.
 

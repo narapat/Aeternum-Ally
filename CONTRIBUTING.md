@@ -1,6 +1,6 @@
 <!-- Version: 1.0.0 — Last updated: 2026-05-01 -->
 
-# Contributing to Aeternum Ally
+# Contributing to AeternumAlly
 
 Thank you for taking the time to contribute. This document explains how to set up a development environment, how the codebase is organized, and the conventions to follow when submitting changes.
 

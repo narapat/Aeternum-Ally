@@ -9,7 +9,7 @@
 | Latest `main` | Yes |
 | Older tags | No — please upgrade to the latest commit on `main` |
 
-Aeternum Ally does not yet use semantic versioning. The production-ready code is always on `main`. Security fixes are applied there and deployed immediately.
+AeternumAlly does not yet use semantic versioning. The production-ready code is always on `main`. Security fixes are applied there and deployed immediately.
 
 ---
 
@@ -64,7 +64,7 @@ For a full description of the security architecture (RLS, key isolation, invite 
 
 ## Scope
 
-This policy covers the Aeternum Ally application code in this repository. It does not cover:
+This policy covers the AeternumAlly application code in this repository. It does not cover:
 - Supabase infrastructure (report to [Supabase's security team](https://supabase.com/security))
 - Google Gemini API (report to Google)
 - Netlify infrastructure (report to Netlify)

@@ -4,7 +4,7 @@
 
 ## 1. Purpose & Scope
 
-Aeternum Ally is a multi-tenant web application that guides SMEs through a structured, AI-assisted sustainability management workflow. The output is a publishable Sustainability Statement compliant with ESRS (European Sustainability Reporting Standards) and cross-referenced to GRI standards.
+AeternumAlly is a multi-tenant web application that guides SMEs through a structured, AI-assisted sustainability management workflow. The output is a publishable Sustainability Statement compliant with ESRS (European Sustainability Reporting Standards) and cross-referenced to GRI standards.
 
 This document describes the functional behaviour of every feature area: what it does, what data it requires, what actions are available, and what the system produces.
 

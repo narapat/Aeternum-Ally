@@ -2,7 +2,7 @@
 
 # Configuration Reference
 
-All configuration points in Aeternum Ally — environment variables, hardcoded constants, and database-level settings. Use this as the single reference when tuning a self-hosted deployment.
+All configuration points in AeternumAlly — environment variables, hardcoded constants, and database-level settings. Use this as the single reference when tuning a self-hosted deployment.
 
 ---
 

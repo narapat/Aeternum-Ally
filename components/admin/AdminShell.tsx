@@ -47,7 +47,7 @@ const AdminShell: React.FC<Props> = ({ adminToken, adminEmail, onSignOut }) => {
           </div>
           <div>
             <div className="flex items-baseline gap-1.5">
-              <p className="text-white font-bold text-sm leading-tight">Aeternum Ally</p>
+              <p className="text-white font-bold text-sm leading-tight">AeternumAlly</p>
               <span className="text-slate-400 text-[10px] font-semibold">v 1.1.0</span>
             </div>
             <p className="text-slate-500 text-xs leading-tight">Admin Portal</p>
