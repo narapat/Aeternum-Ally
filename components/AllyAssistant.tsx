@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, Send, Bot, HelpCircle, AlertTriangle, Sparkles, Loader2 } from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
 
 interface AllyAssistantProps {
   userEmail?: string;
@@ -9,7 +10,26 @@ interface AllyAssistantProps {
   orgId?: string;
 }
 
-export const AllyAssistant: React.FC<AllyAssistantProps> = ({ userEmail, companyName, userRole, userId, orgId }) => {
+const ALLY_MAX_CONTEXT_MESSAGES = 30;
+const ALLY_MAX_CONTEXT_CHARS = 30_000;
+const ALLY_MAX_MESSAGE_CHARS = 4_000;
+
+function getBoundedConversation(
+  messages: Array<{ role: 'user' | 'assistant', text: string }>,
+) {
+  const bounded: typeof messages = [];
+  let remainingChars = ALLY_MAX_CONTEXT_CHARS;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.text.length > remainingChars) break;
+    bounded.unshift(message);
+    remainingChars -= message.text.length;
+    if (bounded.length === ALLY_MAX_CONTEXT_MESSAGES) break;
+  }
+  return bounded;
+}
+
+export const AllyAssistant: React.FC<AllyAssistantProps> = ({ orgId }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -21,7 +41,7 @@ export const AllyAssistant: React.FC<AllyAssistantProps> = ({ userEmail, company
   ]);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionId] = useState(() => Math.random().toString(36).substr(2, 9));
+  const [sessionId] = useState(() => crypto.randomUUID());
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -88,21 +108,30 @@ export const AllyAssistant: React.FC<AllyAssistantProps> = ({ userEmail, company
     setIsLoading(true);
 
     try {
+      if (!orgId) {
+        throw new Error("Ally needs an organization context. Please refresh and try again.");
+      }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error("You must be signed in to use Ally.");
+      }
+
+      const outboundMessages = getBoundedConversation([
+        ...messages,
+        { role: 'user', text: textToSend },
+      ]);
       const response = await fetch('/.netlify/functions/ally-support', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
-          messages: [...messages, { role: 'user', text: textToSend }],
+          organization_id: orgId,
+          messages: outboundMessages,
           context: window.location.pathname,
           errors: '',
           sessionId: sessionId,
-          userInfo: {
-            email: userEmail,
-            company: companyName,
-            role: userRole,
-            userId: userId,
-            orgId: orgId
-          }
         })
       });
 
@@ -114,7 +143,10 @@ export const AllyAssistant: React.FC<AllyAssistantProps> = ({ userEmail, company
         setMessages(prev => [...prev, { role: 'assistant', text: `Error: ${errorMsg}` }]);
       }
     } catch (error) {
-      setMessages(prev => [...prev, { role: 'assistant', text: "Sorry, I couldn't connect to the support service." }]);
+      const message = error instanceof Error
+        ? error.message
+        : "Sorry, I couldn't connect to the support service.";
+      setMessages(prev => [...prev, { role: 'assistant', text: message }]);
     } finally {
       setIsLoading(false);
     }
@@ -287,6 +319,7 @@ export const AllyAssistant: React.FC<AllyAssistantProps> = ({ userEmail, company
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                maxLength={ALLY_MAX_MESSAGE_CHARS}
                 placeholder="Type your question..."
                 className="flex-1 px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-white"
                 disabled={isLoading}

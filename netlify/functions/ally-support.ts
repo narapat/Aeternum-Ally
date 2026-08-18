@@ -3,14 +3,84 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { createClient } from "@supabase/supabase-js";
 import { getStore } from "@netlify/blobs";
+import {
+  escapeHtml,
+  parseAllySupportBody,
+} from "./_shared/allySupportSecurity.js";
+import { withAIRequestFence } from "./_shared/aiRequestFence.js";
+import { loadOrganizationAiConfig } from "./_shared/organizationAiConfig.js";
 
-const apiKey = process.env.GEMINI_API_KEY;
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const DEFAULT_MODEL = "gemini-2.5-flash";
 
-const admin = createClient(supabaseUrl!, serviceKey!);
-const resendKey = process.env.RESEND_API_KEY;
-const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'no-reply@aeternumally.com';
+type HandlerDependencies = {
+  createAdminClient: () => any;
+  createAIClient: (apiKey: string) => GoogleGenAI;
+  getConversationStore: () => ReturnType<typeof getStore>;
+  fetchImpl: typeof fetch;
+  platformApiKey: string;
+  resendKey: string;
+  fromEmail: string;
+  now: () => Date;
+};
+
+const json = (statusCode: number, body: unknown) => ({
+  statusCode,
+  headers: {
+    "Content-Type": "application/json",
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+  },
+  body: JSON.stringify(body),
+});
+
+function getAdminClient() {
+  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+  if (!supabaseUrl || !serviceKey) {
+    throw new Error("Supabase server credentials are unavailable.");
+  }
+  return createClient(supabaseUrl, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
+function defaultDependencies(): HandlerDependencies {
+  return {
+    createAdminClient: getAdminClient,
+    createAIClient: (apiKey) => new GoogleGenAI({ apiKey }),
+    getConversationStore: () => getStore("ally-conversations"),
+    fetchImpl: fetch,
+    platformApiKey: process.env.GEMINI_API_KEY ?? "",
+    resendKey: process.env.RESEND_API_KEY ?? "",
+    fromEmail: process.env.RESEND_FROM_EMAIL ?? "no-reply@aeternumally.com",
+    now: () => new Date(),
+  };
+}
+
+async function getMembership(admin: any, organizationId: string, userId: string) {
+  const { data, error } = await admin
+    .from("organization_members")
+    .select("role")
+    .eq("organization_id", organizationId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error("Could not verify organization access.");
+  return data ?? null;
+}
+
+async function getCompanyName(admin: any, organizationId: string) {
+  try {
+    const { data, error } = await admin
+      .from("company_profiles")
+      .select("name")
+      .eq("organization_id", organizationId)
+      .maybeSingle();
+    if (error) return "";
+    return typeof data?.name === "string" ? data.name : "";
+  } catch {
+    return "";
+  }
+}
 
 function redactSecrets(text: string): string {
   if (!text) return text;
@@ -22,65 +92,112 @@ function redactSecrets(text: string): string {
   return redacted;
 }
 
-export const handler = async (event: any) => {
-  if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: "Method Not Allowed" };
-  }
+export function createAllySupportHandler(
+  overrides: Partial<HandlerDependencies> = {},
+) {
+  const deps = { ...defaultDependencies(), ...overrides };
 
-  const start = Date.now();
-  try {
-    const { messages, context, errors, userInfo, sessionId } = JSON.parse(event.body);
-    const organization_id = userInfo?.orgId;
+  return async (event: any) => {
+    if (event.httpMethod !== "POST") {
+      return json(405, { error: "Method not allowed." });
+    }
 
-    // Log the conversation for analysis and improvement
-    console.log(`[ally-support] Conversation log for user ${userInfo?.email || 'unknown'} (org: ${organization_id || 'unknown'}):`, JSON.stringify(messages));
-
-    // Save to Netlify Blobs for analysis and improvement
+    let admin: any;
     try {
-      const store = getStore("ally-conversations");
-      const conversationId = `${userInfo?.orgId || 'no-org'}_${userInfo?.userId || 'anon'}_${sessionId || 'no-session'}`;
+      admin = deps.createAdminClient();
+    } catch {
+      return json(503, { error: "Ally is temporarily unavailable." });
+    }
+
+    const authHeader = event.headers?.authorization ?? event.headers?.Authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return json(401, { error: "You must be signed in to use Ally." });
+    }
+    const accessToken = authHeader.slice("Bearer ".length);
+    let userResponse;
+    let userError;
+    try {
+      const authResult = await admin.auth.getUser(accessToken);
+      userResponse = authResult.data;
+      userError = authResult.error;
+    } catch {
+      return json(503, { error: "Ally could not verify your session." });
+    }
+    if (userError || !userResponse?.user) {
+      return json(401, { error: "Your session has expired. Please sign in again." });
+    }
+    const user = userResponse.user;
+
+    let requestBody;
+    try {
+      requestBody = parseAllySupportBody(event.body ?? "");
+    } catch (error: any) {
+      return json(error.status ?? 400, { error: error.message });
+    }
+    const {
+      organizationId: organization_id,
+      messages,
+      context,
+      errors,
+      sessionId,
+    } = requestBody;
+
+    let membership;
+    try {
+      membership = await getMembership(admin, organization_id, user.id);
+    } catch {
+      return json(503, { error: "Organization access could not be verified." });
+    }
+    if (!membership) {
+      return json(403, { error: "You don't have access to this organization." });
+    }
+
+    let aiConfig;
+    try {
+      aiConfig = await loadOrganizationAiConfig(
+        admin,
+        organization_id,
+        deps.platformApiKey,
+        DEFAULT_MODEL,
+      );
+    } catch {
+      return json(503, { error: "Ally's AI settings are temporarily unavailable." });
+    }
+
+    const company = await getCompanyName(admin, organization_id);
+    const userInfo = {
+      email: user.email ?? null,
+      company,
+      role: membership.role,
+      userId: user.id,
+      orgId: organization_id,
+    };
+    const start = Date.now();
+
+    try {
+      const store = deps.getConversationStore();
+      const conversationId = `${organization_id}_${user.id}_${sessionId}`;
       await store.setJSON(conversationId, {
         messages,
         context,
         errors,
         userInfo,
-        timestamp: new Date().toISOString()
+        timestamp: deps.now().toISOString(),
       });
-      console.log(`[ally-support] Saved conversation to blob: ${conversationId}`);
-    } catch (blobErr) {
-      console.error("[ally-support] Failed to save conversation to blob:", blobErr);
+    } catch {
+      console.error("[ally-support] Failed to save conversation.");
     }
 
-    let activeModel = "gemini-2.5-flash"; // Default fallback
-    if (organization_id) {
-      const { data: settings } = await admin
-        .from("organization_ai_settings")
-        .select("model")
-        .eq("organization_id", organization_id)
-        .maybeSingle();
-      
-      if (settings?.model) {
-        activeModel = settings.model;
-      }
-    }
+    const activeModel = aiConfig.model;
+    const ai = deps.createAIClient(aiConfig.resolvedApiKey);
 
-    if (!messages || !Array.isArray(messages)) {
-      return { statusCode: 400, body: "Missing or invalid messages array" };
-    }
-
-    if (!apiKey) {
-      return { statusCode: 500, body: "GEMINI_API_KEY is not configured" };
-    }
-
-    const ai = new GoogleGenAI({ apiKey: apiKey });
+    try {
     
     // Attempt to load documentation
     let docsContent = "";
     try {
       const possiblePaths = [
         path.join(process.cwd(), "Docs v1.1.0", "USER_MANUAL.md"),
-        path.join(__dirname, "Docs v1.1.0", "USER_MANUAL.md"),
-        path.join(__dirname, "..", "Docs v1.1.0", "USER_MANUAL.md"),
       ];
 
       for (const p of possiblePaths) {
@@ -89,8 +206,8 @@ export const handler = async (event: any) => {
           break;
         }
       }
-    } catch (err) {
-      console.error("[ally-support] Error reading docs:", err);
+    } catch {
+      console.error("[ally-support] Could not load support documentation.");
     }
 
     const systemInstruction = `
@@ -127,14 +244,17 @@ export const handler = async (event: any) => {
       parts: [{ text: m.text }]
     }));
 
-    const response = await ai.models.generateContent({
-      model: activeModel,
-      contents: contents,
-      config: {
-        systemInstruction: systemInstruction,
-        maxOutputTokens: 1000,
-      }
-    });
+    const response = await withAIRequestFence(
+      ai.models.generateContent({
+        model: activeModel,
+        contents,
+        config: {
+          systemInstruction,
+          maxOutputTokens: 1000,
+        },
+      }),
+      "ally_support",
+    );
 
     let text = response.text ?? "";
 
@@ -144,81 +264,81 @@ export const handler = async (event: any) => {
       const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
 
       await admin.from("ai_usage_log").insert({
-        organization_id: userInfo?.orgId || null,
-        user_id: userInfo?.userId || null,
-        user_email: userInfo?.email || null,
+        organization_id,
+        user_id: user.id,
+        user_email: user.email ?? null,
         action: "ally_assistant",
         provider: "gemini",
         model: activeModel,
         input_tokens: inputTokens,
         output_tokens: outputTokens,
         duration_ms: Date.now() - start,
-        success: true
+        success: true,
+        quota_type: aiConfig.quotaType,
       });
-    } catch (logErr) {
-      console.error("[ally-support] Failed to log usage:", logErr);
+    } catch {
+      console.error("[ally-support] Failed to log usage.");
     }
 
     // Check for email trigger
-    if (text.includes("[SEND_EMAIL]") && resendKey) {
-      console.log("[ally-support] Trigger detected. Sending email via Resend...");
-      
+    if (text.includes("[SEND_EMAIL]") && deps.resendKey) {
       // Extract the last few messages for context
       const lastUserMessage = messages.filter((m: any) => m.role === 'user').pop()?.text || "N/A";
+      const safeConversation = messages
+        .map((m: any) => `<li><strong>${escapeHtml(m.role)}:</strong> ${escapeHtml(redactSecrets(m.text))}</li>`)
+        .join("");
       
       const emailBody = {
-        from: `Ally Assistant <${fromEmail}>`,
+        from: `Ally Assistant <${deps.fromEmail}>`,
         to: ["Support@aeternumally.com"],
         subject: `Support Request / Feedback from Ally Assistant`,
         html: `
           <h3>Support Request / Feedback</h3>
-          <p><strong>User Email:</strong> ${userInfo?.email || "N/A"}</p>
-          <p><strong>Company:</strong> ${userInfo?.company || "N/A"}</p>
-          <p><strong>Role:</strong> ${userInfo?.role || "N/A"}</p>
-          <p><strong>Latest User Input:</strong> ${redactSecrets(lastUserMessage)}</p>
-          <p><strong>Context:</strong> ${context || "N/A"}</p>
-          <p><strong>Captured Errors:</strong> ${errors || "None"}</p>
+          <p><strong>User Email:</strong> ${escapeHtml(userInfo.email || "N/A")}</p>
+          <p><strong>Company:</strong> ${escapeHtml(userInfo.company || "N/A")}</p>
+          <p><strong>Role:</strong> ${escapeHtml(userInfo.role || "N/A")}</p>
+          <p><strong>Latest User Input:</strong> ${escapeHtml(redactSecrets(lastUserMessage))}</p>
+          <p><strong>Context:</strong> ${escapeHtml(context || "N/A")}</p>
+          <p><strong>Captured Errors:</strong> ${escapeHtml(errors || "None")}</p>
           <hr/>
           <h4>Full Conversation History:</h4>
-          <ul>
-             ${messages.map((m: any) => `<li><strong>${m.role}:</strong> ${redactSecrets(m.text)}</li>`).join('')}
-          </ul>
+          <ul>${safeConversation}</ul>
         `,
       };
 
       try {
-        const resendResponse = await fetch("https://api.resend.com/emails", {
+        const resendResponse = await deps.fetchImpl("https://api.resend.com/emails", {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${resendKey}`,
+            "Authorization": `Bearer ${deps.resendKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify(emailBody),
         });
 
         if (!resendResponse.ok) {
-          const errData = await resendResponse.json();
-          console.error("[ally-support] Resend error:", errData);
+          console.error(`[ally-support] Support email failed status=${resendResponse.status}`);
         }
-      } catch (e) {
-        console.error("[ally-support] Failed to send email:", e);
+      } catch {
+        console.error("[ally-support] Failed to send support email.");
       }
 
       // Remove the tag from the text displayed to the user
       text = text.replace("[SEND_EMAIL]", "").trim();
     }
 
-    return {
-      statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ response: text }),
-    };
+    return json(200, { response: text });
 
   } catch (error: any) {
-    console.error("[ally-support] Error:", error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: error.message || "Internal Server Error" }),
-    };
-  }
-};
+    const timedOut = error?.isTimeout === true;
+    console.error(`[ally-support] Request failed${timedOut ? " after timeout" : ""}.`);
+    return json(timedOut ? 504 : 500, {
+      error: timedOut
+        ? "Ally took too long to respond. Please try again."
+        : "Ally is temporarily unavailable. Please try again.",
+    });
+    }
+  };
+}
+
+export const handler = createAllySupportHandler();
