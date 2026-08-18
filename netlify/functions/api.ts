@@ -1,5 +1,10 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
+import {
+  createInternalFunctionUrl,
+  createInternalJobHeaders,
+} from "./_shared/internalJobAuth.js";
+import { withAIRequestFence } from "./_shared/aiRequestFence.js";
 
 const apiKey = process.env.GEMINI_API_KEY;
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -153,30 +158,15 @@ const handler = async (event: any) => {
   let upstreamStatus: number | null = null;
   let userFacingMessage = "Something went wrong while contacting the AI service.";
 
-  // Internal fence at 9 s — Netlify kills the process at 10 s with no chance to log.
-  // Rejecting one second early lets the catch block write to ai_usage_log + error_log
-  // before the hard deadline hits.
-  const FENCE_MS = 9_000;
-  let fenceId: ReturnType<typeof setTimeout>;
-  const fencePromise = new Promise<never>((_, reject) => {
-    fenceId = setTimeout(() => {
-      const err = new Error(`Action '${action}' exceeded the ${FENCE_MS / 1000}s timeout`);
-      (err as any).isTimeout = true;
-      reject(err);
-    }, FENCE_MS);
-  });
-
   try {
-    const outcome = await Promise.race([
+    const outcome = await withAIRequestFence(
       runAction(ai, model, action, params, event, organization_id, user),
-      fencePromise,
-    ]);
-    clearTimeout(fenceId!);
+      action,
+    );
     result = outcome.result;
     inputTokens = outcome.inputTokens;
     outputTokens = outcome.outputTokens;
   } catch (error: any) {
-    clearTimeout(fenceId!);
     console.error("API Error:", error);
     success = false;
     rawAiResponse = error?.rawAiResponse ?? null;
@@ -194,7 +184,7 @@ const handler = async (event: any) => {
         ? "The AI service is temporarily overloaded. Please try again in a moment."
         : upstreamStatus === 429
         ? "AI rate limit reached. Please wait a minute and try again."
-        : errorMessage || userFacingMessage;
+        : userFacingMessage;
   }
 
   const durationMs = Date.now() - start;
@@ -288,13 +278,13 @@ async function runAction(
     case "generateKPISuggestions":
       return generateKPISuggestions(ai, model, params);
     case "triggerReportGeneration":
-      return triggerReportGeneration(event, { organization_id, user_id: user.id, user_email: user.email ?? null, ...params });
+      return triggerReportGeneration(event, { ...params, organization_id, user_id: user.id, user_email: user.email ?? null });
     case "triggerDMAAnalysis":
-      return triggerDMAAnalysis(event, { organization_id, user_id: user.id, user_email: user.email ?? null, ...params });
+      return triggerDMAAnalysis(event, { ...params, organization_id, user_id: user.id, user_email: user.email ?? null });
     case "triggerAssessmentAutofill":
-      return triggerAssessmentAutofill(event, { organization_id, user_id: user.id, user_email: user.email ?? null, ...params });
+      return triggerAssessmentAutofill(event, { ...params, organization_id, user_id: user.id, user_email: user.email ?? null });
     case "triggerAssessmentScoring":
-      return triggerAssessmentScoring(event, { organization_id, user_id: user.id, user_email: user.email ?? null, ...params });
+      return triggerAssessmentScoring(event, { ...params, organization_id, user_id: user.id, user_email: user.email ?? null });
     case "analyzeTopicQuality":
       return analyzeTopicQuality(ai, model, params);
     case "analyzeDMASynthesis":
@@ -829,9 +819,8 @@ Return ONLY valid JSON, no markdown:
 }
 
 async function triggerReportGeneration(event: any, { organization_id, profile, materialAssessments, user_id, user_email }: any) {
-  const host = event.headers.host || event.headers.Host;
-  const protocol = host.startsWith('localhost') ? 'http' : 'https';
-  const url = `${protocol}://${host}/.netlify/functions/report-background`;
+  const url = createInternalFunctionUrl(event, "report-background");
+  const internalJobHeaders = createInternalJobHeaders();
   
   console.log(`[api] Triggering background report at ${url}`);
   
@@ -843,7 +832,7 @@ async function triggerReportGeneration(event: any, { organization_id, profile, m
   try {
     const resp = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: internalJobHeaders,
       body: JSON.stringify({ organization_id, profile, materialAssessments, user_id, user_email }),
     });
     console.log(`[api] Background function trigger status: ${resp.status}`);
@@ -859,9 +848,8 @@ async function triggerReportGeneration(event: any, { organization_id, profile, m
 }
 
 async function triggerDMAAnalysis(event: any, { organization_id, profile, assessments, bmcData, swotData, user_id, user_email }: any) {
-  const host = event.headers.host || event.headers.Host;
-  const protocol = host.startsWith('localhost') ? 'http' : 'https';
-  const url = `${protocol}://${host}/.netlify/functions/dma-background`;
+  const url = createInternalFunctionUrl(event, "dma-background");
+  const internalJobHeaders = createInternalJobHeaders();
   
   console.log(`[api] Triggering background DMA analysis at ${url}`);
 
@@ -873,7 +861,7 @@ async function triggerDMAAnalysis(event: any, { organization_id, profile, assess
   try {
     const resp = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: internalJobHeaders,
       body: JSON.stringify({ organization_id, profile, assessments, bmcData, swotData, user_id, user_email }),
     });
     console.log(`[api] Background function trigger status: ${resp.status}`);
@@ -889,9 +877,8 @@ async function triggerDMAAnalysis(event: any, { organization_id, profile, assess
 }
 
 async function triggerAssessmentAutofill(event: any, { organization_id, assessment_id, topic, profile, qualityCheckContext, user_id, user_email }: any) {
-  const host = event.headers.host || event.headers.Host;
-  const protocol = host.startsWith('localhost') ? 'http' : 'https';
-  const url = `${protocol}://${host}/.netlify/functions/assessment-background`;
+  const url = createInternalFunctionUrl(event, "assessment-background");
+  const internalJobHeaders = createInternalJobHeaders();
   
   console.log(`[api] Triggering background assessment autofill at ${url}`);
 
@@ -903,7 +890,7 @@ async function triggerAssessmentAutofill(event: any, { organization_id, assessme
   try {
     fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: internalJobHeaders,
       body: JSON.stringify({ organization_id, assessment_id, action: 'autofill', topic, profile, qualityCheckContext, user_id, user_email }),
     }).then(resp => console.log(`[api] Background function trigger status: ${resp.status}`))
       .catch(e => console.error("[api] Failed to trigger background function:", e));
@@ -919,9 +906,8 @@ async function triggerAssessmentAutofill(event: any, { organization_id, assessme
 }
 
 async function triggerAssessmentScoring(event: any, { organization_id, assessment_id, topic, profile, bmcData, swotData, impactDescription, financialDescription, user_id, user_email }: any) {
-  const host = event.headers.host || event.headers.Host;
-  const protocol = host.startsWith('localhost') ? 'http' : 'https';
-  const url = `${protocol}://${host}/.netlify/functions/assessment-background`;
+  const url = createInternalFunctionUrl(event, "assessment-background");
+  const internalJobHeaders = createInternalJobHeaders();
   
   console.log(`[api] Triggering background assessment scoring at ${url}`);
 
@@ -933,7 +919,7 @@ async function triggerAssessmentScoring(event: any, { organization_id, assessmen
   try {
     fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: internalJobHeaders,
       body: JSON.stringify({ organization_id, assessment_id, action: 'scoring', topic, profile, bmcData, swotData, impactDescription, financialDescription, user_id, user_email }),
     }).then(resp => console.log(`[api] Background function trigger status: ${resp.status}`))
       .catch(e => console.error("[api] Failed to trigger background function:", e));
