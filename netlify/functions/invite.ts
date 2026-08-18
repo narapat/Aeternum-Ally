@@ -1,4 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
+import type { Context } from "@netlify/functions";
+import {
+  claimPendingInviteResend,
+  GENERIC_INVITE_RESEND_BODY,
+} from "./_shared/inviteResendSecurity.js";
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -120,7 +125,35 @@ async function sendInviteEmail(
   return { link: null };
 }
 
-const handler = async (event: any) => {
+async function deliverClaimedInviteResend(
+  admin: any,
+  invite: { id: string; email: string; organization_id: string },
+) {
+  try {
+    const { data: profile } = await admin
+      .from("company_profiles")
+      .select("name")
+      .eq("organization_id", invite.organization_id)
+      .maybeSingle();
+    const companyName = profile?.name ?? "your team";
+    const { link } = await sendInviteEmail(
+      admin,
+      invite.email,
+      invite.id,
+      companyName,
+      invite.organization_id,
+      null,
+    );
+    void link;
+  } catch {
+    console.error("[invite] resend delivery failed");
+  }
+}
+
+const handleInviteRequest = async (
+  event: any,
+  waitUntil?: (promise: Promise<unknown>) => void,
+) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
@@ -145,36 +178,25 @@ const handler = async (event: any) => {
 
   // ── REQUEST_RESEND (unauthenticated) ──────────────────────────────────────
   // Called from the sign-in page when a user's invite link has expired.
-  // Looks up any pending invite for the email and fires a fresh link.
-  // Always returns 200 (no email enumeration).
+  // Atomically claims an eligible invite, then sends after the response.
+  // Always returns the same 200 response (no email enumeration).
   if (action === "request_resend") {
-    if (!email) return json(400, { error: "Missing email." });
-
-    const { data: invite } = await admin
-      .from("organization_invites")
-      .select("id, email, organization_id")
-      .eq("email", email.trim().toLowerCase())
-      .gt("expires_at", new Date().toISOString())
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (invite) {
-      const { data: profile } = await admin
-        .from("company_profiles")
-        .select("name")
-        .eq("organization_id", invite.organization_id)
-        .maybeSingle();
-      const companyName = profile?.name ?? "your team";
-      const { link } = await sendInviteEmail(admin, invite.email, invite.id, companyName, invite.organization_id, null);
-      void link;
+    try {
+      const invite = await claimPendingInviteResend(admin, email);
+      if (invite) {
+        const delivery = deliverClaimedInviteResend(admin, invite);
+        if (waitUntil) {
+          waitUntil(delivery);
+        } else {
+          // Direct unit calls do not have a Netlify request context.
+          await delivery;
+        }
+      }
+    } catch {
+      console.error("[invite] resend claim failed");
     }
 
-    // Always return the same message to prevent email enumeration.
-    return json(200, {
-      success: true,
-      message: "If a pending invitation exists for this email, a new link has been sent. Check your inbox.",
-    });
+    return json(200, GENERIC_INVITE_RESEND_BODY);
   }
 
   // All other actions require authentication.
@@ -315,4 +337,31 @@ const handler = async (event: any) => {
   });
 };
 
-export { handler };
+export default async (request: Request, context: Context) => {
+  const legacyResponse = await handleInviteRequest({
+    httpMethod: request.method,
+    headers: Object.fromEntries(request.headers.entries()),
+    body: request.method === "GET" || request.method === "HEAD"
+      ? null
+      : await request.text(),
+  }, promise => context.waitUntil(promise));
+
+  const headers = new Headers();
+  const legacyHeaders = "headers" in legacyResponse ? legacyResponse.headers : {};
+  for (const [name, value] of Object.entries(legacyHeaders)) {
+    headers.set(name, String(value));
+  }
+  return new Response(legacyResponse.body ?? "", {
+    status: legacyResponse.statusCode,
+    headers,
+  });
+};
+
+export const config = {
+  path: "/.netlify/functions/invite",
+  rateLimit: {
+    windowLimit: 10,
+    windowSize: 60,
+    aggregateBy: ["ip", "domain"],
+  },
+} as const;

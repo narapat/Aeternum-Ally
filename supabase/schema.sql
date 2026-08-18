@@ -40,8 +40,41 @@ CREATE TABLE organization_invites (
                   CHECK (role IN ('Admin', 'Manager', 'Consultant')),
   invited_by      uuid NOT NULL REFERENCES auth.users(id),
   expires_at      timestamptz NOT NULL DEFAULT (now() + interval '7 days'),
-  created_at      timestamptz NOT NULL DEFAULT now()
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  last_email_sent_at timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE INDEX idx_organization_invites_resend_lookup
+  ON organization_invites (email, expires_at DESC, created_at DESC);
+
+CREATE OR REPLACE FUNCTION claim_pending_invite_resend(p_email text)
+RETURNS TABLE (id uuid, email text, organization_id uuid)
+LANGUAGE sql
+VOLATILE
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $function$
+  WITH candidate AS (
+    SELECT invite.id
+    FROM public.organization_invites AS invite
+    WHERE invite.email = lower(btrim(p_email))
+      AND invite.expires_at > now()
+      AND invite.last_email_sent_at <= now() - interval '5 minutes'
+    ORDER BY invite.created_at DESC
+    LIMIT 1
+    FOR UPDATE SKIP LOCKED
+  )
+  UPDATE public.organization_invites AS invite
+  SET last_email_sent_at = now()
+  FROM candidate
+  WHERE invite.id = candidate.id
+  RETURNING invite.id, invite.email, invite.organization_id;
+$function$;
+
+REVOKE ALL ON FUNCTION claim_pending_invite_resend(text)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION claim_pending_invite_resend(text)
+  TO service_role;
 
 -- ============================================================
 -- COMPANY PROFILES  (1 per org)
