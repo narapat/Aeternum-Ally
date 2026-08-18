@@ -22,7 +22,6 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip,
   ResponsiveContainer, BarChart, Bar, Legend, Cell,
 } from 'recharts';
-import * as XLSX from 'xlsx';
 import { EmissionSource, EmissionEntry } from '../types';
 import {
   fetchEmissionSources,
@@ -33,6 +32,7 @@ import {
   calculateEmissions,
   deleteEmissionSource,
 } from '../services/emissionFactorService';
+import { downloadSpreadsheet, parseSpreadsheetFile } from '../services/spreadsheetService';
 import EvidenceBadge from './EvidenceBadge';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -791,9 +791,11 @@ const BulkUploadModal: React.FC<{
   const fileRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<BulkRow[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [parsingFile, setParsingFile] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
   const [result, setResult] = useState<{ success: number; failed: number } | null>(null);
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
     const headers = [
       'Source Name',
       'Source ID',
@@ -822,49 +824,62 @@ const BulkUploadModal: React.FC<{
       ''
     ]);
     
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
-    ws['!cols'] = [{ wch: 25 }, { wch: 36 }, { wch: 8 }, { wch: 8 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 16 }, { wch: 30 }];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Emissions');
-    XLSX.writeFile(wb, `carbon-bulk-template-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    try {
+      await downloadSpreadsheet(
+        `carbon-bulk-template-${new Date().toISOString().slice(0, 10)}.xlsx`,
+        [{
+          name: 'Emissions',
+          rows: [headers, ...data],
+          columnWidths: [25, 36, 8, 8, 20, 20, 20, 22, 22, 16, 30],
+        }],
+      );
+    } catch (e: any) {
+      setImportError(e?.message ?? 'Could not create the spreadsheet template.');
+    }
   };
 
   const handleFile = async (file: File) => {
-    const buf = await file.arrayBuffer();
-    let rawRows: Record<string, any>[];
-    const wb = XLSX.read(buf, { type: 'array' });
-    rawRows = XLSX.utils.sheet_to_json<Record<string, any>>(wb.Sheets[wb.SheetNames[0]]);
+    setParsingFile(true);
+    setImportError(null);
+    setPreview([]);
+    try {
+      const rawRows = await parseSpreadsheetFile(file);
 
-    const sourceById = Object.fromEntries(sources.map(s => [s.id, s]));
-    const sourceByName = Object.fromEntries(sources.map(s => [s.source_name.toLowerCase(), s]));
+      const sourceById = Object.fromEntries(sources.map(s => [s.id, s]));
+      const sourceByName = Object.fromEntries(sources.map(s => [s.source_name.toLowerCase(), s]));
 
-    const rows: BulkRow[] = rawRows.map(r => {
-      const srcId = String(r['Source ID'] ?? '').trim();
-      const srcName = String(r['Source Name'] ?? '').trim();
+      const rows: BulkRow[] = rawRows.map(r => {
+        const srcId = String(r['Source ID'] ?? '').trim();
+        const srcName = String(r['Source Name'] ?? '').trim();
       
-      let src;
-      if (srcId) {
-        src = sourceById[srcId];
-        if (!src) return { source_id: '', source_name: srcName, period_start: '', period_end: '', activity_data: 0, calculated_emissions_kgco2e: 0, notes: '', error: `Source with ID "${srcId}" not found` };
-      } else if (srcName) {
-        src = sourceByName[srcName.toLowerCase()];
-        if (!src) return { source_id: '', source_name: srcName, period_start: '', period_end: '', activity_data: 0, calculated_emissions_kgco2e: 0, notes: '', error: `Source with name "${srcName}" not found` };
-      } else {
-        return { source_id: '', source_name: '', period_start: '', period_end: '', activity_data: 0, calculated_emissions_kgco2e: 0, notes: '', error: 'Either Source ID or Source Name is required' };
-      }
+        let src;
+        if (srcId) {
+          src = sourceById[srcId];
+          if (!src) return { source_id: '', source_name: srcName, period_start: '', period_end: '', activity_data: 0, calculated_emissions_kgco2e: 0, notes: '', error: `Source with ID "${srcId}" not found` };
+        } else if (srcName) {
+          src = sourceByName[srcName.toLowerCase()];
+          if (!src) return { source_id: '', source_name: srcName, period_start: '', period_end: '', activity_data: 0, calculated_emissions_kgco2e: 0, notes: '', error: `Source with name "${srcName}" not found` };
+        } else {
+          return { source_id: '', source_name: '', period_start: '', period_end: '', activity_data: 0, calculated_emissions_kgco2e: 0, notes: '', error: 'Either Source ID or Source Name is required' };
+        }
 
-      const start = String(r['Period Start (YYYY-MM-DD)'] ?? '').trim();
-      const end   = String(r['Period End (YYYY-MM-DD)'] ?? '').trim();
-      const act   = Number(r['Activity Data'] ?? 0);
+        const start = String(r['Period Start (YYYY-MM-DD)'] ?? '').trim();
+        const end   = String(r['Period End (YYYY-MM-DD)'] ?? '').trim();
+        const act   = Number(r['Activity Data'] ?? 0);
 
-      if (!start || !end) return { source_id: src.id, source_name: src.source_name, period_start: start, period_end: end, activity_data: act, calculated_emissions_kgco2e: 0, notes: '', error: 'Period Start and Period End are required' };
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) return { source_id: src.id, source_name: src.source_name, period_start: start, period_end: end, activity_data: act, calculated_emissions_kgco2e: 0, notes: '', error: 'Date format must be YYYY-MM-DD' };
-      if (!act || act <= 0) return { source_id: src.id, source_name: src.source_name, period_start: start, period_end: end, activity_data: act, calculated_emissions_kgco2e: 0, notes: '', error: 'Activity Data must be a positive number' };
+        if (!start || !end) return { source_id: src.id, source_name: src.source_name, period_start: start, period_end: end, activity_data: act, calculated_emissions_kgco2e: 0, notes: '', error: 'Period Start and Period End are required' };
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) return { source_id: src.id, source_name: src.source_name, period_start: start, period_end: end, activity_data: act, calculated_emissions_kgco2e: 0, notes: '', error: 'Date format must be YYYY-MM-DD' };
+        if (!act || act <= 0) return { source_id: src.id, source_name: src.source_name, period_start: start, period_end: end, activity_data: act, calculated_emissions_kgco2e: 0, notes: '', error: 'Activity Data must be a positive number' };
 
-      const kgco2e = calculateEmissions(act, src.emission_factor_value ?? 0);
-      return { source_id: src.id, source_name: src.source_name, period_start: start, period_end: end, activity_data: act, calculated_emissions_kgco2e: kgco2e, notes: String(r['Notes'] ?? '').trim() };
-    });
-    setPreview(rows);
+        const kgco2e = calculateEmissions(act, src.emission_factor_value ?? 0);
+        return { source_id: src.id, source_name: src.source_name, period_start: start, period_end: end, activity_data: act, calculated_emissions_kgco2e: kgco2e, notes: String(r['Notes'] ?? '').trim() };
+      });
+      setPreview(rows);
+    } catch (e: any) {
+      setImportError(e?.message ?? 'Could not parse the spreadsheet.');
+    } finally {
+      setParsingFile(false);
+    }
   };
 
   const handleUpload = async () => {
@@ -912,17 +927,35 @@ const BulkUploadModal: React.FC<{
               <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700">
                 <Download className="w-5 h-5 text-indigo-500 flex-shrink-0" />
                 <div className="flex-1 text-sm text-slate-600 dark:text-slate-300">Download the template with your sources pre-filled.</div>
-                <button onClick={downloadTemplate} className="flex-shrink-0 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors">Download Template</button>
+                <button onClick={() => void downloadTemplate()} className="flex-shrink-0 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors">Download Template</button>
               </div>
 
+              {importError && (
+                <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  <span>{importError}</span>
+                </div>
+              )}
+
               <div
-                className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-8 text-center cursor-pointer hover:border-indigo-400 transition-colors"
-                onClick={() => fileRef.current?.click()}
+                className={`border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-8 text-center transition-colors ${parsingFile ? 'cursor-wait opacity-60' : 'cursor-pointer hover:border-indigo-400'}`}
+                onClick={() => !parsingFile && fileRef.current?.click()}
               >
-                <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                <p className="text-sm text-slate-600 dark:text-slate-300 font-medium">Click to upload Excel or CSV</p>
-                <p className="text-xs text-slate-400 mt-1">.xlsx or .csv</p>
-                <input ref={fileRef} type="file" accept=".xlsx,.csv" className="hidden" onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+                {parsingFile ? <Loader2 className="w-8 h-8 text-indigo-500 mx-auto mb-2 animate-spin" /> : <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />}
+                <p className="text-sm text-slate-600 dark:text-slate-300 font-medium">{parsingFile ? 'Checking spreadsheet…' : 'Click to upload Excel or CSV'}</p>
+                <p className="text-xs text-slate-400 mt-1">.xlsx or .csv · maximum 2 MB and 1,000 rows</p>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".xlsx,.csv"
+                  className="hidden"
+                  disabled={parsingFile}
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (file) void handleFile(file);
+                  }}
+                />
               </div>
 
               {preview.length > 0 && (

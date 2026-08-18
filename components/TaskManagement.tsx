@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import * as XLSX from 'xlsx';
 import {
   Task, SuggestedTask, TaskType, TaskStatus, TaskPriority,
   AssessmentData, KPI, SwotAnalysis, CompanyProfile, InsightHubResponse, OrgMember, QualityCheck,
@@ -10,6 +9,7 @@ import {
   restoreSuggestedTask, fetchDismissedSuggestedTasks,
 } from '../services/dbService';
 import { generateTasks } from '../services/geminiService';
+import { downloadSpreadsheet, parseSpreadsheetFile } from '../services/spreadsheetService';
 import EvidenceBadge from './EvidenceBadge';
 import {
   Sparkles, ListChecks, RefreshCw, CheckCircle2, Circle, Clock,
@@ -536,6 +536,7 @@ const ManagerTab: React.FC<ManagerProps> = ({
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   // Import/export
   const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -570,31 +571,29 @@ const ManagerTab: React.FC<ManagerProps> = ({
 
   // ── Export ──────────────────────────────────────────────────────────────────
 
-  const handleExport = () => {
-    const rows = tasks.map(t => ({
-      'Task ID': t.id,
-      'Title': t.title,
-      'Description': t.description ?? '',
-      'Type': t.type,
-      'Status': t.status,
-      'Priority': t.priority,
-      'Assignee Email': members.find(m => m.id === t.assignee_id)?.email ?? '',
-      'Due Date': t.due_date ?? '',
-      'ESRS Reference': t.esrs_ref ?? '',
-      'Source': t.source_type,
-      'Notes': t.notes ?? '',
-      'Created At': t.created_at.slice(0, 10),
-      'Completed At': t.completed_at?.slice(0, 10) ?? '',
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [
-      { wch: 36 }, { wch: 40 }, { wch: 60 }, { wch: 10 }, { wch: 12 },
-      { wch: 10 }, { wch: 28 }, { wch: 12 }, { wch: 15 }, { wch: 12 },
-      { wch: 40 }, { wch: 12 }, { wch: 12 },
+  const handleExport = async () => {
+    const headers = [
+      'Task ID', 'Title', 'Description', 'Type', 'Status', 'Priority',
+      'Assignee Email', 'Due Date', 'ESRS Reference', 'Source', 'Notes',
+      'Created At', 'Completed At',
     ];
+    const rows = tasks.map(t => [
+      t.id,
+      t.title,
+      t.description ?? '',
+      t.type,
+      t.status,
+      t.priority,
+      members.find(m => m.id === t.assignee_id)?.email ?? '',
+      t.due_date ?? '',
+      t.esrs_ref ?? '',
+      t.source_type,
+      t.notes ?? '',
+      t.created_at.slice(0, 10),
+      t.completed_at?.slice(0, 10) ?? '',
+    ]);
 
-    const instructions = XLSX.utils.aoa_to_sheet([
+    const instructions = [
       ['AeternumAlly — Task Export/Import'],
       [''],
       ['HOW TO UPDATE TASKS:'],
@@ -609,14 +608,28 @@ const ManagerTab: React.FC<ManagerProps> = ({
       ['- Rows with a blank Task ID are skipped'],
       ['- Invalid rows are skipped and listed in the results summary'],
       ['- Completed At is set automatically when Status = done'],
-    ]);
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Tasks');
-    XLSX.utils.book_append_sheet(wb, instructions, 'Instructions');
+    ];
 
     const date = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `aeternumally-tasks-${date}.xlsx`);
+    setExporting(true);
+    try {
+      await downloadSpreadsheet(`aeternumally-tasks-${date}.xlsx`, [
+        {
+          name: 'Tasks',
+          rows: [headers, ...rows],
+          columnWidths: [36, 40, 60, 10, 12, 10, 28, 12, 15, 12, 40, 12, 12],
+        },
+        { name: 'Instructions', rows: instructions, columnWidths: [80] },
+      ]);
+    } catch (err: any) {
+      setImportResult({
+        success: 0,
+        failed: 0,
+        errors: [{ row: 0, taskId: '', error: err?.message ?? 'Export failed' }],
+      });
+    } finally {
+      setExporting(false);
+    }
   };
 
   // ── Import ──────────────────────────────────────────────────────────────────
@@ -787,12 +800,13 @@ const ManagerTab: React.FC<ManagerProps> = ({
         </div>
         <div className="flex-1" />
         <button
-          onClick={handleExport}
-          disabled={tasks.length === 0}
+          onClick={() => void handleExport()}
+          disabled={tasks.length === 0 || exporting}
           className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 text-sm font-medium rounded-lg transition-colors"
           title="Export tasks to Excel"
         >
-          <Download className="w-4 h-4" />Export
+          {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+          Export
         </button>
         <button
           onClick={() => fileInputRef.current?.click()}
@@ -1029,30 +1043,7 @@ async function parseAndApplyImport(
   members: OrgMember[],
   orgId: string,
 ): Promise<ImportResult> {
-  const buffer = await file.arrayBuffer();
-  let rows: Record<string, any>[];
-
-  if (file.name.toLowerCase().endsWith('.csv')) {
-    const text = new TextDecoder().decode(buffer);
-    const lines = text.split(/\r?\n/).filter(l => l.trim());
-    if (lines.length < 2) throw new Error('CSV is empty');
-    const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim());
-    rows = lines.slice(1).map(line => {
-      // Simple CSV parse — handles quoted fields
-      const vals: string[] = [];
-      let cur = '', inQ = false;
-      for (const ch of line) {
-        if (ch === '"') { inQ = !inQ; }
-        else if (ch === ',' && !inQ) { vals.push(cur.trim()); cur = ''; }
-        else cur += ch;
-      }
-      vals.push(cur.trim());
-      return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
-    });
-  } else {
-    const wb = XLSX.read(buffer, { type: 'array' });
-    rows = XLSX.utils.sheet_to_json<Record<string, any>>(wb.Sheets[wb.SheetNames[0]]);
-  }
+  const rows = await parseSpreadsheetFile(file);
 
   const required = ['Task ID', 'Status'];
   const missing = required.filter(c => !Object.keys(rows[0] ?? {}).includes(c));
