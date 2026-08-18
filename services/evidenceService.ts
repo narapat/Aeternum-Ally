@@ -17,6 +17,10 @@ import {
   EvidenceLinkedToType,
   StorageType,
 } from '../types';
+import {
+  normalizeEvidenceUrl,
+  type ExternalEvidenceStorageType,
+} from './evidenceUrlSecurity';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DB ↔ TS mapping
@@ -108,8 +112,8 @@ export interface LinkEvidencePayload {
   file_name:      string;
   file_type?:     string;
   file_size_mb?:  number;
-  storage_type:   Exclude<StorageType, 'supabase_storage' | 's3'>;
-  external_url?:  string;
+  storage_type:   ExternalEvidenceStorageType;
+  external_url:   string;
   external_id?:   string;   // cloud provider file ID (Drive ID, OneDrive item ID…)
   linked_to_type: EvidenceLinkedToType;
   linked_to_id:   string;
@@ -122,6 +126,11 @@ export async function linkExternalEvidence(
   payload: LinkEvidencePayload,
   userId: string,
 ): Promise<EvidenceAttachment> {
+  const externalUrl = normalizeEvidenceUrl(
+    payload.external_url,
+    payload.storage_type,
+  );
+
   const { data, error } = await supabase
     .from('evidence_attachments')
     .insert({
@@ -130,7 +139,7 @@ export async function linkExternalEvidence(
       file_type:       payload.file_type    ?? null,
       file_size_mb:    payload.file_size_mb ?? null,
       storage_type:    payload.storage_type,
-      external_url:    payload.external_url ?? null,
+      external_url:    externalUrl,
       external_id:     payload.external_id  ?? null,
       storage_path:    null,
       linked_to_type:  payload.linked_to_type,

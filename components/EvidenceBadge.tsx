@@ -35,6 +35,12 @@ import {
   mimeToExtension,
   type DriveFile,
 } from '../services/googleDriveService';
+import {
+  canAutoLoadEvidencePreview,
+  getSafeEvidenceUrl,
+  normalizeEvidenceUrl,
+  type ExternalEvidenceStorageType,
+} from '../services/evidenceUrlSecurity';
 import { supabase } from '../lib/supabaseClient';
 import { EvidenceAttachment, EvidenceLinkedToType, StorageType } from '../types';
 
@@ -477,7 +483,31 @@ const EvidenceItem: React.FC<{
   const ext = (item.file_type ?? '').toLowerCase();
   const isImage = IMAGE_EXTS.has(ext);
   const isPdf   = ext === 'pdf';
-  const previewUrl = item.external_url ?? null;
+  const isExternal = !['supabase_storage', 's3'].includes(item.storage_type);
+  const safeExternalUrl = isExternal
+    ? getSafeEvidenceUrl(
+        item.external_url,
+        item.storage_type as ExternalEvidenceStorageType,
+      )
+    : null;
+  const previewUrl = safeExternalUrl
+    && canAutoLoadEvidencePreview(item.storage_type as ExternalEvidenceStorageType)
+    ? safeExternalUrl
+    : null;
+  const openUrl = safeExternalUrl
+    ?? (item.storage_path ? `/.netlify/functions/evidence/download/${item.id}` : null);
+  const blockedExternalUrl = Boolean(item.external_url) && !safeExternalUrl;
+
+  const handleOpen = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.stopPropagation();
+    if (
+      item.storage_type === 'url'
+      && safeExternalUrl
+      && !window.confirm(`Open external website ${new URL(safeExternalUrl).hostname}?`)
+    ) {
+      event.preventDefault();
+    }
+  };
 
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 overflow-hidden group">
@@ -503,7 +533,7 @@ const EvidenceItem: React.FC<{
             target="_blank"
             rel="noopener noreferrer"
             className="ml-auto text-xs text-red-500 hover:underline"
-            onClick={e => e.stopPropagation()}
+            onClick={handleOpen}
           >
             Open ↗
           </a>
@@ -527,17 +557,22 @@ const EvidenceItem: React.FC<{
           {item.notes && (
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2 italic">{item.notes}</p>
           )}
+          {blockedExternalUrl && (
+            <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+              Unsafe or invalid external link blocked
+            </p>
+          )}
           <p className="text-xs text-slate-400 mt-0.5">Added {fmtDate(item.uploaded_at)}</p>
         </div>
         <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          {(item.external_url || item.storage_path) && (
+          {openUrl && (
             <a
-              href={item.external_url ?? `/.netlify/functions/evidence/download/${item.id}`}
+              href={openUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500 transition-colors"
               title="Open file"
-              onClick={e => e.stopPropagation()}
+              onClick={handleOpen}
             >
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
@@ -599,16 +634,30 @@ const URLForm: React.FC<{
   const [fileType, setFileType] = useState('');
   const [notes,    setNotes]    = useState('');
   const [saving,   setSaving]   = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
+
+  const validateUrl = (): string | null => {
+    try {
+      const normalized = normalizeEvidenceUrl(url, 'url');
+      setUrlError(null);
+      return normalized;
+    } catch (e: any) {
+      setUrlError(e?.message ?? 'Enter a valid HTTPS URL.');
+      return null;
+    }
+  };
 
   const handleSave = async () => {
     if (!url.trim() || !name.trim()) return;
+    const normalizedUrl = validateUrl();
+    if (!normalizedUrl) return;
     setSaving(true);
     try {
       await linkExternalEvidence(orgId, {
         file_name:      name.trim(),
         file_type:      fileType.trim() || undefined,
         storage_type:   'url',
-        external_url:   url.trim(),
+        external_url:   normalizedUrl,
         linked_to_type: linkedToType,
         linked_to_id:   linkedToId,
         notes:          notes.trim() || undefined,
@@ -627,10 +676,18 @@ const URLForm: React.FC<{
         <input
           type="url"
           value={url}
-          onChange={e => setUrl(e.target.value)}
+          onChange={e => { setUrl(e.target.value); setUrlError(null); }}
+          onBlur={() => { if (url.trim()) validateUrl(); }}
           placeholder="https://docs.google.com/…"
+          aria-invalid={urlError ? 'true' : 'false'}
+          aria-describedby={urlError ? 'evidence-url-error' : undefined}
           className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
+        {urlError && (
+          <p id="evidence-url-error" className="mt-1 text-xs text-red-600 dark:text-red-400">
+            {urlError}
+          </p>
+        )}
       </FormField>
       <FormField label="File / Link name *">
         <input
@@ -659,7 +716,7 @@ const URLForm: React.FC<{
       </FormField>
       <button
         onClick={handleSave}
-        disabled={!url.trim() || !name.trim() || saving}
+        disabled={!url.trim() || !name.trim() || Boolean(urlError) || saving}
         className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
       >
         {saving && <Loader2 className="w-4 h-4 animate-spin" />}

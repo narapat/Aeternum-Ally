@@ -579,7 +579,17 @@ CREATE TABLE evidence_attachments (
                       'google_drive', 'onedrive', 'dropbox', 'url',
                       'supabase_storage', 's3'
                     )),
-  external_url    text,
+  external_url    text
+                    CONSTRAINT evidence_external_url_https CHECK (
+                      external_url IS NULL
+                      OR (
+                        char_length(external_url) BETWEEN 1 AND 2048
+                        AND external_url = btrim(external_url)
+                        AND external_url ~* '^https://[^/?#[:space:]]+'
+                        AND external_url !~ '[[:space:][:cntrl:]]'
+                        AND external_url !~* '^https://[^/?#]*@'
+                      )
+                    ),
   external_id     text,
   storage_path    text,
   linked_to_type  text NOT NULL
