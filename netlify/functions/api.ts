@@ -165,7 +165,7 @@ const handler = async (event: any) => {
   let outputTokens = 0;
   let success = true;
   let errorMessage: string | null = null;
-  let rawAiResponse: string | null = null;
+  let aiResponseChars: number | null = null;
   let upstreamStatus: number | null = null;
   let userFacingMessage = "Something went wrong while contacting the AI service.";
 
@@ -178,15 +178,20 @@ const handler = async (event: any) => {
     inputTokens = outcome.inputTokens;
     outputTokens = outcome.outputTokens;
   } catch (error: any) {
-    console.error("API Error:", error);
     success = false;
-    rawAiResponse = error?.rawAiResponse ?? null;
+    aiResponseChars = Number.isSafeInteger(error?.aiResponseChars)
+      ? error.aiResponseChars
+      : null;
     upstreamStatus =
       error?.isTimeout
         ? 504
         : (typeof error?.status === "number" && error.status) ||
           (typeof error?.error?.code === "number" && error.error.code) ||
           null;
+    const errorType = error instanceof Error ? error.name : "UnknownError";
+    console.error(
+      `[api] AI request failed action=${action} status=${upstreamStatus ?? "unknown"} type=${errorType}`,
+    );
     errorMessage = error?.error?.message || (error instanceof Error ? error.message : String(error));
     userFacingMessage =
       error?.isTimeout
@@ -242,7 +247,7 @@ const handler = async (event: any) => {
         metadata: {
           model,
           duration_ms: durationMs,
-          raw_ai_response: rawAiResponse,
+          response_chars: aiResponseChars,
         },
       });
     } catch (logErr) {
@@ -341,7 +346,9 @@ function parseAIJson<T>(text: string | undefined, fallback: T): T {
   // 3. Extract first [...] or {...} block as last resort
   const block = text.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
   if (block) try { return JSON.parse(block[0]) as T; } catch {}
-  console.warn("parseAIJson: could not parse response, returning fallback. text:", text.slice(0, 200));
+  console.warn(
+    `parseAIJson: could not parse response; returning fallback (chars=${text.length}).`,
+  );
   return fallback;
 }
 
@@ -822,9 +829,9 @@ Return ONLY valid JSON, no markdown:
     return { result: safe, ...extractTokens(response) };
 
   } catch (err: any) {
-    // Re-throw with the raw AI response attached so the handler can write it to error_log
+    // Preserve response size for diagnostics without retaining tenant content.
     const enriched = new Error(err instanceof Error ? err.message : String(err)) as any;
-    enriched.rawAiResponse = rawText.slice(0, 3000);
+    enriched.aiResponseChars = rawText.length;
     throw enriched;
   }
 }

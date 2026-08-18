@@ -190,7 +190,7 @@ const handler = async (event: any) => {
 
         const modelCfg = MODEL_REGISTRY[activeModel];
         if (text.length > modelCfg.maxAllowedOutputChars) {
-          console.warn("[dma-background] oversized output tail", text.slice(-1000));
+          console.warn(`[dma-background] oversized output chars=${text.length}`);
           throw new Error(`AI output too large: ${text.length} chars`);
         }
 
@@ -276,8 +276,6 @@ const handler = async (event: any) => {
       },
     });
 
-    console.log(`[dma-background] Synthesis raw response:`, synthesisResponse.text);
-
     let insight_result;
     try {
       const text = synthesisResponse.text ?? "";
@@ -297,7 +295,7 @@ const handler = async (event: any) => {
 
       const modelCfg = MODEL_REGISTRY[activeModel];
       if (text.length > modelCfg.maxAllowedOutputChars) {
-        console.warn("[dma-background] oversized synthesis output tail", text.slice(-1000));
+        console.warn(`[dma-background] oversized synthesis output chars=${text.length}`);
         throw new Error(`AI output too large: ${text.length} chars`);
       }
 
@@ -341,7 +339,9 @@ const handler = async (event: any) => {
     console.log(`[dma-background] Successfully completed and saved to DB for org=${organization_id}`);
 
   } catch (error: any) {
-    console.error("[dma-background] Failed:", error);
+    console.error(
+      `[dma-background] Failed type=${error instanceof Error ? error.name : "UnknownError"}`,
+    );
     let friendlyError = error.message || String(error);
     if (friendlyError.includes("fetch failed") || friendlyError.includes("Timeout")) {
       friendlyError = "The AI Model service timed out or failed to respond. This can happen with Gemini Pro on large tasks. Please try again or use Gemini Flash for faster results.";

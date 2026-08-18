@@ -60,9 +60,10 @@ const handler = async (event: any) => {
     try {
       const cleaned = text.replace(/^```json\s*/, "").replace(/\s*```$/, "");
       return JSON.parse(cleaned);
-    } catch (e: any) {
-      console.warn("[report-background] Failed to parse AI JSON. Length:", text.length, "Error:", e.message);
-      console.warn("[report-background] Snippet of end:", text.slice(-100));
+    } catch (error: any) {
+      console.warn(
+        `[report-background] Failed to parse AI JSON chars=${text.length} type=${error instanceof Error ? error.name : "UnknownError"}`,
+      );
       return fallback;
     }
   }

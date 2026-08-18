@@ -354,7 +354,9 @@ Return ONLY valid JSON, no markdown:
         },
       });
 
-      console.log(`[assessment-background] Scoring raw response:`, response.text);
+      console.info(
+        `[assessment-background] Scoring output chars=${response.text?.length ?? 0} finishReason=${response.candidates?.[0]?.finishReason ?? "unknown"}`,
+      );
 
       totalInputTokens += Number(response.usageMetadata?.promptTokenCount ?? 0);
       totalOutputTokens += Number(response.usageMetadata?.candidatesTokenCount ?? 0);
@@ -434,7 +436,9 @@ Return ONLY valid JSON, no markdown:
     });
 
   } catch (error: any) {
-    console.error(`[assessment-background] Failed for ${action}:`, error);
+    console.error(
+      `[assessment-background] Failed action=${action} type=${error instanceof Error ? error.name : "UnknownError"}`,
+    );
     const failData: any = { updated_at: new Date().toISOString() };
     if (action === "autofill") {
       failData.autofill_status = "failed";
