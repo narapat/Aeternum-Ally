@@ -24,11 +24,12 @@ export async function logError({
     const httpStatus: number | null = (error as any)?.status ?? null;
 
     const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
     await supabase.from("error_log").insert({
       organization_id: organizationId ?? null,
-      user_id: user?.id ?? null,
-      user_email: user?.email ?? null,
+      user_id: user.id,
+      user_email: user.email ?? null,
       source: "client",
       context,
       action: action ?? null,
