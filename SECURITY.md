@@ -1,4 +1,4 @@
-<!-- Version: 1.0.0 — Last updated: 2026-05-01 -->
+<!-- Version: 1.1.0 - Last updated: 2026-08-18 -->
 
 # Security Policy
 
@@ -7,9 +7,9 @@
 | Version | Supported |
 |---|---|
 | Latest `main` | Yes |
-| Older tags | No — please upgrade to the latest commit on `main` |
+| Older tags | No - upgrade to the latest commit on `main` |
 
-Aeternum Ally does not yet use semantic versioning. The production-ready code is always on `main`. Security fixes are applied there and deployed immediately.
+Security fixes are applied to `main` through reviewed pull requests and are published after preview verification.
 
 ---
 
@@ -31,34 +31,49 @@ We ask that you give us reasonable time to investigate and patch before any publ
 
 ---
 
-## Known open issues
+## Current risk status
 
-The following gaps are documented openly. They are tracked and prioritized for remediation — they are not unknown. If you are self-hosting in production, review the [production hardening checklist](./docs/DEPLOYMENT.md#production-hardening-checklist) before going live.
+The 2026 security-remediation program closed the confirmed background-job authentication, admin magic-link, BYOK, Google Drive token, spreadsheet parsing, evidence URL, invite resend, Ally support, error-log RLS, and AI log-content findings.
 
-| Gap | Risk level | Location |
+The detailed evidence, issue/PR links, patches, and regression tests are maintained in [Known Issues - Security Review](./Docs%20v1.1.0/known%20issue%20-%20security%20review.md).
+
+### Open or deferred
+
+| Item | Priority | Current control |
 |---|---|---|
-| No CORS headers on Netlify Functions | Medium | `netlify/functions/*.ts` |
-| No rate limit on `request_resend` (invite) | Medium | `netlify/functions/invite.ts` |
-| No server-side AI model allowlist | Low | `netlify/functions/api.ts` |
-| No prompt-injection sanitisation on user input fed to Gemini | Low | `netlify/functions/api.ts` |
-| Tailwind CSS loaded via CDN (no SRI hash) | Low | `index.html` |
-| No HTTP-method guard on `invite.ts` | Low | `netlify/functions/invite.ts` |
+| `extract-zip` symlink traversal advisory in Netlify development tooling ([#152](https://github.com/narapat/Aeternum-Ally/issues/152)) | High upstream advisory; reduced application exposure | Development-only transitive path, no application import, zero production audit findings, dependency regression test; waiting for an upstream patch |
+| Prompt-injection resilience is not systematic across all AI prompt templates | Medium hardening | AI actions require authenticated tenant membership; users review generated content before saving; raw AI content is not logged |
+| Tailwind is loaded from `cdn.tailwindcss.com` at runtime | Low hardening | HTTPS only; move Tailwind to the build and enforce CSP before handling higher-sensitivity production tenants |
+| Netlify functions do not yet share one centralized origin/CORS policy | Low hardening | Sensitive newer routes enforce same-origin checks; Bearer auth, role checks, RLS, and internal-job authentication remain the authorization boundaries |
+| AI model validation is enforced by the database `CHECK`, but is not repeated at the function boundary | Low defense in depth | `organization_ai_settings.model` accepts only the configured Gemini model IDs |
 
-Full details and planned mitigations: [docs/TECH_STACK.md — Known gaps](./docs/TECH_STACK.md#known-gaps--hardening-backlog).
+Do not treat CORS as an authorization control. Every function must still authenticate the caller and verify organization membership/role.
 
 ---
 
 ## Security design
 
-For a full description of the security architecture (RLS, key isolation, invite token lifecycle, tenant isolation), see [docs/ARCHITECTURE.md — Security Boundaries](./docs/ARCHITECTURE.md#5-security-boundaries).
+For a full description of the security architecture, see [Architecture - Security Boundaries](./Docs%20v1.1.0/ARCHITECTURE.md#5-security-boundaries).
 
 ### Key points
 
-- The Gemini API key and Supabase service-role key never reach the browser. All privileged operations go through Netlify Functions (server-side).
-- Tenant isolation is enforced by Postgres Row-Level Security, independently of application code.
+- The service-role key, Gemini key, organization BYOK keys, Google OAuth tokens, admin credentials, and internal-job secret are server-only and never use a `VITE_` prefix.
+- Tenant isolation is enforced by Postgres Row-Level Security and function-level membership/role checks, independently of UI visibility.
+- Background AI functions require `INTERNAL_JOB_SECRET` before request-body parsing.
+- Organization BYOK credentials and Google OAuth tokens are stored in service-role-only tables; raw values are never returned to the browser.
 - Invite tokens are UUID v4, single-use, and expire after 7 days.
-- Authentication is email magic-link via Supabase Auth. No passwords are stored.
-- The anon key (exposed to the browser) is safe to expose — RLS prevents it from being used to access other tenants' data.
+- Public invite resends return a generic response, are rate-limited, and enforce an email cooldown.
+- Spreadsheet imports are bounded and XLSX parsing runs in a Web Worker with a timeout.
+- AI logs contain diagnostic metadata rather than prompts, raw responses, report snippets, OAuth tokens, or API keys.
+- The anon key is intentionally public; its safety depends on RLS remaining enabled and tested on every tenant-scoped table.
+
+## Operator responsibilities
+
+- Apply every required Supabase migration to each environment before publishing dependent code.
+- Configure server secrets in Netlify and redeploy after changes.
+- Rotate exposed or suspected credentials immediately.
+- Run `npm run test:security`, `npx tsc --noEmit`, `npm run build`, and `npm audit --omit=dev` before security releases.
+- Review the [production hardening checklist](./Docs%20v1.1.0/DEPLOYMENT.md#production-hardening-checklist).
 
 ---
 

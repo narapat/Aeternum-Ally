@@ -1,4 +1,4 @@
-<!-- Version: 1.1.0 — Last updated: 2026-05-09 -->
+<!-- Version: 1.1.0 - Last updated: 2026-08-18 -->
 
 # Configuration Reference
 
@@ -12,13 +12,25 @@ Set these in **Netlify Dashboard → Site settings → Environment variables**. 
 
 | Variable | Scope | Required | Description |
 |---|---|---|---|
-| `VITE_SUPABASE_URL` | Public (browser + functions) | Yes | Your Supabase project URL (e.g. `https://xxxxx.supabase.co`) |
-| `VITE_SUPABASE_ANON_KEY` | Public (browser) | Yes | Supabase anon/public key. Safe to expose — RLS protects the data. |
-| `VITE_APP_URL` | Public (browser + functions) | Yes | Base URL of your deployment, no trailing slash (e.g. `https://app.yourcompany.com`). Used as the redirect target in magic-link and invite emails. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-only (functions) | Yes | Supabase service-role key. Bypasses RLS. **Never prefix with `VITE_`**. |
-| `GEMINI_API_KEY` | Server-only (functions) | Yes | Google Gemini API key from Google AI Studio. **Never prefix with `VITE_`**. |
+| `VITE_SUPABASE_URL` | Public (browser + functions) | Yes | Supabase project URL, for example `https://xxxxx.supabase.co` |
+| `VITE_SUPABASE_ANON_KEY` | Public (browser) | Yes | Supabase anon/public key. Its exposure is intentional; RLS must protect every data path. |
+| `VITE_APP_URL` | Public (browser + functions) | Yes | Deployment base URL with no trailing slash. Used for redirects and provider callbacks. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only | Yes | Privileged Supabase key that bypasses RLS. Every function using it must perform its own authorization. |
+| `GEMINI_API_KEY` | Server-only | Yes for platform AI | Platform Gemini credential. Organizations using BYOK store their key separately in Supabase. |
+| `INTERNAL_JOB_SECRET` | Server-only | Yes for background AI | At least 32 random characters shared by `api.ts` and background functions. Generate with `openssl rand -hex 32`. |
+| `INTERNAL_FUNCTION_BASE_URL` | Server-only | No | Trusted HTTPS base URL for non-Netlify/self-hosted internal dispatch. Netlify deploy URLs are detected automatically. |
+| `GOOGLE_CLIENT_ID` | Server-only | Yes for Google Drive | Google OAuth Web application client ID. |
+| `GOOGLE_CLIENT_SECRET` | Server-only | Yes for Google Drive | Google OAuth client secret. |
+| `PLATFORM_ADMIN_EMAIL` | Server-only | Bootstrap only | Initial platform-admin identity, used only while `platform_admins` is empty. |
+| `PLATFORM_ADMIN_PASSWORD` | Server-only | Bootstrap only | Initial platform-admin password. Password bootstrap is rejected after an admin row exists. |
+| `PLATFORM_ADMIN_JWT_SECRET` | Server-only | No | Optional explicit signing key for eight-hour platform-admin tokens. Otherwise derived from the service-role key. |
+| `RESEND_API_KEY` | Server-only | Yes for production admin magic links | Resend API key. Production admin magic-link delivery fails closed when unavailable. |
+| `RESEND_FROM_EMAIL` | Server-only | Yes when Resend is used | Sender on a verified Resend domain. |
+| `ALLOW_DEV_ADMIN_MAGIC_LINKS` | Server-only | Local development only | Keep `false` in hosted environments. A link is returned only when this is `true`, Netlify Dev is detected, and the request host is loopback. |
 
-> `VITE_APP_URL` must also be added to Supabase Auth → URL Configuration → Redirect URLs. Without this, magic-link and invite redirects will be blocked.
+Never prefix a server-only variable with `VITE_`; Vite would embed it in the browser bundle. Scope sensitive variables to every Netlify deploy context that needs the feature, including Deploy Previews used for testing.
+
+`VITE_APP_URL` must be allowed in Supabase Auth URL Configuration. Google Drive also requires an exact callback URI: `<deployment-base-url>/.netlify/functions/google-callback`.
 
 ---
 
@@ -37,7 +49,20 @@ These values are defined in source code. Changing them requires a code edit and 
 | Constant | Current value | Effect |
 |---|---|---|
 | `DEFAULT_MODEL` | `"gemini-2.5-flash"` | The Gemini model used when an org has no `organization_ai_settings` row. Change to a cheaper model (`gemini-2.5-flash-lite`) to reduce costs, or to a more capable one (`gemini-2.5-pro`) for higher quality output. |
-| `PRICING` map | See source | Approximate USD/1M-token rates used to estimate costs in `ai_usage_log`. Update if Google changes pricing. |
+| `MODEL_REGISTRY` | See source | Allowed operational model metadata and approximate USD/1M-token rates used for cost estimates. The database also has a `CHECK` allowlist. |
+
+### Security limits
+
+| Source | Setting | Current value |
+|---|---|---|
+| `services/spreadsheetPolicy.ts` | Spreadsheet size | 2 MiB |
+| `services/spreadsheetPolicy.ts` | Workbook shape | 2 sheets, 1,000 data rows per sheet, 50 columns |
+| `services/spreadsheetPolicy.ts` | Cell and parser bounds | 10,000 characters per cell; 8-second worker timeout |
+| `services/evidenceUrlSecurity.ts` | External evidence URL | 2,048 characters; public HTTPS only; provider hostname allowlists where applicable |
+| `_shared/inviteResendSecurity.js` | Public resend request limit | 10 requests per client per 60 seconds |
+| `_shared/inviteResendSecurity.js` | Invitation delivery cooldown | 5 minutes |
+| `_shared/allySupportSecurity.js` | Ally request limits | 64 KiB request, 30 messages, 4,000 characters per message, 30,000 total message characters |
+| `_shared/aiRequestFence.js` | Synchronous AI request fence | 50 seconds within the 60-second synchronous function limit |
 
 ### `supabase/schema.sql`
 
@@ -49,14 +74,18 @@ These values are defined in source code. Changing them requires a code edit and 
 
 ## 3. Per-organization AI settings
 
-Each organization can override the default Gemini model. This is stored in the `organization_ai_settings` table (one row per org) and managed from the AI Usage Panel in the app.
+Each organization can select a Gemini model and optionally use its own credential. Safe settings are stored in `organization_ai_settings`; raw credentials are stored separately in the service-role-only `organization_ai_secrets` table.
 
 | Column | Type | Default | Description |
 |---|---|---|---|
 | `model` | `text` | `"gemini-2.5-flash"` | Gemini model to use for this org's AI calls |
-| `monthly_budget_usd` | `numeric` | `null` | Optional soft budget cap (informational only — not enforced server-side in current build) |
+| `use_byok` | `boolean` | `false` | Whether the server should use the organization's stored key |
+| `byok_provider` | `text` | `null` | Credential provider; currently only `gemini` is accepted by the function |
+| `soft_quota_monthly` | `integer` | `null` | Optional monthly call allowance override; the current quota is a soft warning, not a hard block |
 
-> **Security note:** The server currently does not validate the `model` value against an allowlist before forwarding it to Gemini. An Owner/Admin can set any string. This is a known gap — see [docs/TECH_STACK.md](./TECH_STACK.md#known-gaps--hardening-backlog).
+`organization_ai_secrets.byok_api_key` is not selectable by browser roles. The settings endpoint returns `has_byok_key`, never the key. Owners and Admins can configure/rotate it; other members can use AI according to organization settings without reading the credential.
+
+The database `CHECK` restricts `model` values. Repeating the allowlist at the function boundary remains defense-in-depth work; see [TECH_STACK.md](./TECH_STACK.md#known-gaps--hardening-backlog).
 
 ---
 
@@ -74,7 +103,20 @@ Configure these in **Supabase Dashboard → Authentication → Settings**.
 
 ---
 
-## 5. Netlify build settings
+## 5. Google Drive OAuth
+
+Create a Google OAuth 2.0 **Web application** client and configure:
+
+- Authorized JavaScript origin: the deployment base URL when required by Google Cloud
+- Authorized redirect URI: `<deployment-base-url>/.netlify/functions/google-callback`
+- Scope: `https://www.googleapis.com/auth/drive.readonly`
+- OAuth consent users: add test users while the consent screen remains in Testing mode
+
+The redirect URI must match exactly, including scheme, hostname, path, and Deploy Preview hostname when testing a preview. Add a separate URI for each stable environment. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the matching Netlify deploy context, then redeploy.
+
+The connection belongs to the Aeternum Ally organization, not to an email domain. An Owner or Admin connects one Google account on behalf of the organization; members may have Gmail, Workspace, or unrelated email domains. Managers and Consultants can select allowed Drive evidence files after the organization is connected, but cannot connect, disconnect, or read OAuth tokens.
+
+## 6. Netlify build settings
 
 Defined in `netlify.toml`. These rarely need changing.
 
@@ -88,7 +130,7 @@ Defined in `netlify.toml`. These rarely need changing.
 
 ---
 
-## 6. Gemini models reference
+## 7. Gemini models reference
 
 Available models at time of writing. Check [Google AI pricing](https://ai.google.dev/pricing) for the latest.
 
@@ -102,12 +144,13 @@ The default model (`gemini-2.5-flash`) balances quality and cost well for SME-sc
 
 ---
 
-## 7. Changing a configuration value
+## 8. Changing a configuration value
 
 ### To change a constant in `constants.ts` or `api.ts`
 1. Edit the value in source
-2. Run `npm run build` and verify
-3. Push to `main` — Netlify auto-deploys
+2. Run `npm run test:security`, `npx tsc --noEmit`, and `npm run build`
+3. Open a pull request from a feature branch and verify the Deploy Preview
+4. Merge only after review; publish the resulting deploy through the normal release flow
 
 ### To change the invite expiry
 1. Edit the DEFAULT expression in `supabase/schema.sql` and write a migration:
@@ -119,4 +162,5 @@ The default model (`gemini-2.5-flash`) balances quality and cost well for SME-sc
 
 ### To change environment variables
 1. Update the value in Netlify Dashboard → Site settings → Environment variables
-2. Trigger a redeploy: **Deploys → Trigger deploy → Clear cache and deploy site**
+2. Confirm the variable has a value in every required deploy context; a variable name with zero values is not configured
+3. Trigger a redeploy: **Deploys → Trigger deploy → Clear cache and deploy site**
