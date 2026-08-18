@@ -466,3 +466,15 @@ test("Settings provides role-aware Drive management through the proxy", async ()
   assert.doesNotMatch(settingsSource, /GOOGLE_CLIENT_SECRET|VITE_GOOGLE_API_KEY/);
   assert.doesNotMatch(settingsSource, /getGoogleDriveAccessToken|openGooglePicker/);
 });
+
+test("Evidence picker distinguishes a status failure from missing server configuration", async () => {
+  const evidenceSource = await readFile(
+    new URL("../../components/EvidenceBadge.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(evidenceSource, /driveStatusError/);
+  assert.match(evidenceSource, /Could not check the Google Drive connection/);
+  assert.match(evidenceSource, /Retry Google Drive status/);
+  assert.doesNotMatch(evidenceSource, /\.catch\(\(\) => \{\}\)/);
+});

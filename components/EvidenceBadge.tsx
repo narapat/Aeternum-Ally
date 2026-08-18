@@ -19,7 +19,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, DragEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { Paperclip, ExternalLink, Trash2, Plus, X, Link, Loader2, FileText, Image, File, AlertCircle, ChevronLeft, UploadCloud, Zap, Search, FolderOpen } from 'lucide-react';
+import { Paperclip, ExternalLink, Trash2, Plus, X, Link, Loader2, FileText, Image, File, AlertCircle, ChevronLeft, UploadCloud, Zap, Search, FolderOpen, RefreshCw } from 'lucide-react';
 import {
   fetchEvidence,
   countEvidence,
@@ -146,10 +146,11 @@ const EvidenceModal: React.FC<ModalProps> = ({
   const [error, setError]             = useState<string | null>(null);
 
   // Google Drive state
-  const [driveConfigured, setDriveConfigured] = useState(false);
-  const [driveConnected, setDriveConnected] = useState(false);
+  const [driveConfigured, setDriveConfigured] = useState<boolean | null>(null);
+  const [driveConnected, setDriveConnected] = useState<boolean | null>(null);
   const [driveCanManage, setDriveCanManage] = useState(false);
   const [driveCheckDone, setDriveCheckDone] = useState(false);
+  const [driveStatusError, setDriveStatusError] = useState<string | null>(null);
 
   // Storage quota (fetched lazily when upload view is first opened)
   const [quota, setQuota]             = useState<{ used_mb: number; total_mb: number; available_mb: number } | null>(null);
@@ -172,20 +173,30 @@ const EvidenceModal: React.FC<ModalProps> = ({
   useEffect(() => { loadItems(); }, [loadItems]);
 
   // ── Check Google Drive connection status ─────────────────────────────────
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+  const loadDriveStatus = useCallback(async () => {
+    setDriveCheckDone(false);
+    setDriveStatusError(null);
+    try {
+      const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
-      if (!token) { setDriveCheckDone(true); return; }
-      getGoogleDriveStatus(orgId, token)
-        .then(status => {
-          setDriveConfigured(status.configured);
-          setDriveConnected(status.connected);
-          setDriveCanManage(status.canManage);
-        })
-        .catch(() => {})
-        .finally(() => setDriveCheckDone(true));
-    });
+      if (!token) throw new Error('Please sign in again.');
+      const status = await getGoogleDriveStatus(orgId, token);
+      setDriveConfigured(status.configured);
+      setDriveConnected(status.connected);
+      setDriveCanManage(status.canManage);
+    } catch (e: any) {
+      setDriveConfigured(null);
+      setDriveConnected(null);
+      setDriveCanManage(false);
+      setDriveStatusError(e?.message ?? 'Could not check Google Drive connection.');
+    } finally {
+      setDriveCheckDone(true);
+    }
   }, [orgId]);
+
+  useEffect(() => {
+    void loadDriveStatus();
+  }, [loadDriveStatus]);
 
   // ── Delete an item ────────────────────────────────────────────────────────
   const handleDelete = async (item: EvidenceAttachment) => {
@@ -327,6 +338,8 @@ const EvidenceModal: React.FC<ModalProps> = ({
                 subtitle={
                   !driveCheckDone
                     ? 'Checking connection…'
+                    : driveStatusError
+                    ? 'Could not check the Google Drive connection'
                     : !driveConfigured
                     ? 'Google Drive not configured on this server'
                     : driveConnected
@@ -335,9 +348,24 @@ const EvidenceModal: React.FC<ModalProps> = ({
                     ? 'Connect Drive to select a file'
                     : 'Ask an Owner or Admin to connect Drive'
                 }
-                disabled={!driveConfigured || !driveConnected}
+                disabled={Boolean(driveStatusError) || driveConfigured !== true || driveConnected !== true}
                 onClick={() => setView('browse_drive')}
               />
+
+              {driveCheckDone && driveStatusError && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  <span className="flex-1">{driveStatusError}</span>
+                  <button
+                    type="button"
+                    onClick={() => void loadDriveStatus()}
+                    title="Retry Google Drive status"
+                    className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded text-amber-700 hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-900/40"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
 
               {driveCheckDone && driveConfigured && !driveConnected && driveCanManage && (
                 <button
