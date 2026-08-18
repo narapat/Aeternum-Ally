@@ -205,6 +205,25 @@ test("no organization role can receive a raw OAuth token", async () => {
   }
 });
 
+test("status returns safe connection metadata and server-derived management permission", async () => {
+  const admin = createAdminMock({ role: "Manager" });
+  const response = await createHandler(admin)(apiRequest(
+    `?action=status&organization_id=${ORG_ID}`,
+    { headers: { Authorization: "Bearer manager-token" } },
+  ));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(body, {
+    configured: true,
+    connected: true,
+    can_manage: false,
+  });
+  assert.equal("access_token" in body, false);
+  assert.equal("refresh_token" in body, false);
+  assert.doesNotMatch(JSON.stringify(body), new RegExp(GOOGLE_ACCESS_TOKEN));
+});
+
 test("cross-tenant requests are rejected before integration credentials are read", async () => {
   const admin = createAdminMock({ role: null });
   const response = await createHandler(admin)(apiRequest(
@@ -430,4 +449,20 @@ test("platform-admin company export excludes the OAuth credential table", async 
 
   assert.ok(tableList);
   assert.doesNotMatch(tableList[1], /organization_integrations/);
+});
+
+test("Settings provides role-aware Drive management through the proxy", async () => {
+  const settingsSource = await readFile(
+    new URL("../../components/SettingsDashboard.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(settingsSource, /id: 'integrations'/);
+  assert.match(settingsSource, /getGoogleDriveStatus\(organizationId, token\)/);
+  assert.match(settingsSource, /connectGoogleDrive\(organizationId, token\)/);
+  assert.match(settingsSource, /disconnectGoogleDrive\(organizationId, token\)/);
+  assert.match(settingsSource, /roleCanManage[\s\S]+Owner[\s\S]+Admin/);
+  assert.match(settingsSource, /driveStatus\?\.canManage === true/);
+  assert.doesNotMatch(settingsSource, /GOOGLE_CLIENT_SECRET|VITE_GOOGLE_API_KEY/);
+  assert.doesNotMatch(settingsSource, /getGoogleDriveAccessToken|openGooglePicker/);
 });
