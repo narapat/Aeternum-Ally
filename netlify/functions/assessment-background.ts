@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
 import { requireInternalJobAuth } from "./_shared/internalJobAuth.js";
+import { loadOrganizationAiConfig } from "./_shared/organizationAiConfig.js";
 
 const apiKey = process.env.GEMINI_API_KEY;
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -90,17 +91,23 @@ const handler = async (event: any) => {
 
   const admin = createClient(supabaseUrl!, serviceKey!);
 
-  // Look up the org's chosen model + BYOK settings
-  const { data: settings } = await admin
-    .from("organization_ai_settings")
-    .select("model, use_byok, byok_provider, byok_api_key")
-    .eq("organization_id", organization_id)
-    .maybeSingle();
-
-  const activeModel = settings?.model ?? DEFAULT_MODEL;
-  const useBYOK = settings?.use_byok === true && !!settings?.byok_api_key;
-  const resolvedApiKey = useBYOK ? settings!.byok_api_key! : apiKey!;
-  const quotaType = useBYOK ? "byok" : "platform_free";
+  let aiConfig;
+  try {
+    aiConfig = await loadOrganizationAiConfig(
+      admin,
+      organization_id,
+      apiKey!,
+      DEFAULT_MODEL,
+    );
+  } catch {
+    console.error(`[assessment-background] AI configuration unavailable org=${organization_id}`);
+    return { statusCode: 503, body: "AI settings are temporarily unavailable" };
+  }
+  const {
+    model: activeModel,
+    resolvedApiKey,
+    quotaType,
+  } = aiConfig;
 
   console.log(`[assessment-background] Using model=${activeModel}, quotaType=${quotaType}`);
 
