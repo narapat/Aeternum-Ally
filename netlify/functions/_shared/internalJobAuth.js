@@ -99,7 +99,11 @@ export function createInternalJobHeaders(
 export function createInternalFunctionUrl(
   event,
   functionName,
-  configuredBaseUrl = process.env.INTERNAL_FUNCTION_BASE_URL || process.env.URL,
+  configuredBaseUrl =
+    process.env.INTERNAL_FUNCTION_BASE_URL ||
+    process.env.DEPLOY_PRIME_URL ||
+    process.env.DEPLOY_URL ||
+    process.env.URL,
 ) {
   if (!/^[a-z0-9-]+$/.test(functionName)) {
     console.error("[security] Invalid internal function name.");

@@ -69,6 +69,33 @@ test("internal function URLs use the trusted deployment URL instead of Host", ()
   );
 });
 
+test("internal function URLs prefer the current Netlify deploy over production", () => {
+  const previous = {
+    INTERNAL_FUNCTION_BASE_URL: process.env.INTERNAL_FUNCTION_BASE_URL,
+    DEPLOY_PRIME_URL: process.env.DEPLOY_PRIME_URL,
+    DEPLOY_URL: process.env.DEPLOY_URL,
+    URL: process.env.URL,
+  };
+
+  try {
+    delete process.env.INTERNAL_FUNCTION_BASE_URL;
+    process.env.DEPLOY_PRIME_URL =
+      "https://deploy-preview-158--example.netlify.app";
+    process.env.DEPLOY_URL = "https://deploy-id--example.netlify.app";
+    process.env.URL = "https://production.example.com";
+
+    assert.equal(
+      createInternalFunctionUrl({ headers: {} }, "report-background"),
+      "https://deploy-preview-158--example.netlify.app/.netlify/functions/report-background",
+    );
+  } finally {
+    for (const [name, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
 test("internal function URLs allow only loopback Host fallback", () => {
   assert.equal(
     createInternalFunctionUrl(
