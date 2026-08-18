@@ -16,7 +16,6 @@ const AdminLoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
   const [stage, setStage]         = useState<Stage>('input');
   const [errorMsg, setError]      = useState('');
   const [devLink, setDevLink]     = useState<string | null>(null);
-  const [emailErr, setEmailErr]   = useState<string | null>(null);
 
   // ── Password login (bootstrap: table must be empty) ──────────────────────
   const handlePasswordLogin = async (e: React.FormEvent) => {
@@ -62,18 +61,17 @@ const AdminLoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
     setStage('submitting');
 
     try {
-      const res = await fetch('/.netlify/functions/admin', {
+      const res = await fetch('/.netlify/functions/admin-magic-link', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ action: 'request_admin_magic_link', email: email.trim() }),
+        body:    JSON.stringify({ email: email.trim() }),
       });
 
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'Failed to send link');
 
-      // dev_link is returned when Resend is not set OR when email sending fails
+      // dev_link is available only in explicitly enabled local development.
       if (json.dev_link) setDevLink(json.dev_link);
-      if (json.email_error) setEmailErr(json.email_error);
 
       setStage('sent');
     } catch (err: any) {
@@ -82,7 +80,7 @@ const AdminLoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
     }
   };
 
-  const handleReset = () => { setStage('input'); setError(''); setDevLink(null); setEmailErr(null); };
+  const handleReset = () => { setStage('input'); setError(''); setDevLink(null); };
 
   const switchMode = (m: Mode) => { setMode(m); handleReset(); };
 
@@ -110,12 +108,10 @@ const AdminLoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
             {devLink && (
               <div className="bg-amber-950/40 border border-amber-700/50 rounded-lg p-3 space-y-2">
                 <p className="text-xs font-semibold text-amber-400 uppercase tracking-wide">
-                  ⚠️ {emailErr ? 'Email delivery failed' : 'Dev mode — no RESEND_API_KEY set'}
+                  Local development link
                 </p>
                 <p className="text-xs text-amber-300/70">
-                  {emailErr
-                    ? `Email could not be sent (${emailErr}). Use the link below to sign in:`
-                    : 'No email was sent. Use the link below to sign in:'}
+                  No email was sent. Use the link below to sign in:
                 </p>
                 <a
                   href={devLink}

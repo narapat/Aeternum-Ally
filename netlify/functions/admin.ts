@@ -9,9 +9,8 @@
  *   On success: seeds first admin row + returns a signed admin JWT (8 h).
  *
  * Normal     (platform_admins table has rows):
- *   POST { action: 'request_admin_magic_link', email }
- *   Server generates a Supabase magic link (server-side, bypasses redirect allowlist)
- *   and sends a custom admin-branded email via Resend.
+ *   POST /.netlify/functions/admin-magic-link { email }
+ *   The dedicated rate-limited function generates and emails the sign-in link.
  *   POST { action: 'verify_admin' } with Bearer <supabase-token>
  *   After the magic link is clicked, AdminApp exchanges the Supabase session
  *   for a signed admin JWT by calling this action.
@@ -22,7 +21,7 @@
  * SUPABASE_SERVICE_ROLE_KEY if the secret is not set — no extra env var needed).
  */
 
-import { Handler } from '@netlify/functions';
+import type { Handler } from '@netlify/functions';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
@@ -148,55 +147,6 @@ async function handleAdminLogin(body: any): Promise<object> {
   console.info('[admin] Bootstrap: first platform admin seeded:', email);
 
   return { token: signAdminToken(email), email };
-}
-
-// ---------------------------------------------------------------------------
-// Pre-auth: request_admin_magic_link  (normal mode — table has rows)
-// ---------------------------------------------------------------------------
-async function handleRequestAdminMagicLink(body: any): Promise<object> {
-  const email = (body.email ?? '').trim().toLowerCase();
-  if (!email) throw Object.assign(new Error('email is required'), { status: 400 });
-
-  const sb = getAdminClient();
-
-  // Check email is an active platform admin (silent success if not — don't leak)
-  const { data: adminRow } = await sb
-    .from('platform_admins').select('id, is_active').eq('email', email).maybeSingle();
-
-  if (!adminRow?.is_active) {
-    console.info('[admin] magic-link requested for non-admin email:', email);
-    return { sent: true };   // silent — don't reveal whether this is an admin
-  }
-
-  // Generate magic link server-side — bypasses Supabase redirect-URL allowlist
-  const { data: linkData, error: linkError } = await sb.auth.admin.generateLink({
-    type: 'magiclink',
-    email,
-    options: { redirectTo: `${appUrl}/admin` },
-  });
-
-  if (linkError || !linkData?.properties?.action_link) {
-    console.error('[admin] generateLink failed:', linkError?.message);
-    throw Object.assign(new Error('Failed to generate sign-in link'), { status: 500 });
-  }
-
-  const magicLink = linkData.properties.action_link;
-
-  if (!resendApiKey) {
-    // Dev mode — return link directly (shown in UI)
-    console.info(`\n[admin] ✉️  MAGIC LINK (dev — no RESEND_API_KEY):\n${magicLink}\n`);
-    return { sent: true, dev_link: magicLink };
-  }
-
-  try {
-    await sendAdminMagicLinkEmail(email, magicLink);
-    return { sent: true };
-  } catch (emailErr: any) {
-    // Email sending failed (e.g. domain not verified in Resend).
-    // Fall back to returning the link directly so the admin is never locked out.
-    console.error('[admin] Resend failed, returning dev_link fallback:', emailErr?.message);
-    return { sent: true, dev_link: magicLink, email_error: emailErr?.message };
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -706,7 +656,7 @@ async function handleCreateCompany(body: any): Promise<object> {
           devLink = magicLink;
         }
       } else {
-        console.info(`\n[admin] ✉️  OWNER INVITE LINK (dev):\n${magicLink}\n`);
+        console.info('[admin] Owner invite generated without email delivery');
         devLink = magicLink;
       }
     }
@@ -907,7 +857,7 @@ async function handleAddAdmin(body: any, actorEmail: string): Promise<object> {
       adminDevLink = magicLink;
     }
   } else if (magicLink) {
-    console.info(`\n[admin] ✉️  ADMIN INVITE LINK (dev — no RESEND_API_KEY):\n${magicLink}\n`);
+    console.info('[admin] Admin invite generated without email delivery');
     adminDevLink = magicLink;
   }
 
@@ -1048,64 +998,6 @@ async function sendAdminInviteEmail(toEmail: string, magicLink: string, invitedB
 }
 
 // ---------------------------------------------------------------------------
-// Email helper — custom admin-branded HTML via Resend
-// ---------------------------------------------------------------------------
-async function sendAdminMagicLinkEmail(toEmail: string, magicLink: string): Promise<void> {
-  const html = `<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><title>Aeternum Ally Admin Access</title></head>
-<body style="margin:0;padding:0;background:#020617;font-family:Inter,'Helvetica Neue',Arial,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#020617;padding:48px 16px;">
-<tr><td align="center">
-<table width="100%" style="max-width:480px;background:#0f172a;border:1px solid #1e293b;border-radius:16px;overflow:hidden;">
-  <tr><td style="background:#14532d;padding:24px 32px;text-align:center;">
-    <span style="color:#fff;font-size:18px;font-weight:700;">🛡️ Aeternum Ally</span><br/>
-    <span style="color:#86efac;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Platform Admin Portal</span>
-  </td></tr>
-  <tr><td style="padding:32px;">
-    <p style="margin:0 0 8px;color:#94a3b8;font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Secure Sign-In Link</p>
-    <h1 style="margin:0 0 16px;color:#f1f5f9;font-size:20px;font-weight:700;">Your admin access link</h1>
-    <p style="margin:0 0 24px;color:#94a3b8;font-size:15px;line-height:1.6;">
-      Click below to sign in to the <strong style="color:#e2e8f0;">Platform Admin Portal</strong>.
-      Valid for <strong style="color:#e2e8f0;">60 minutes</strong>, single use.
-    </p>
-    <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
-      <tr><td style="background:#16a34a;border-radius:10px;">
-        <a href="${magicLink}" style="display:inline-block;padding:14px 28px;color:#fff;font-size:15px;font-weight:600;text-decoration:none;">Sign in to Admin Portal →</a>
-      </td></tr>
-    </table>
-    <table cellpadding="0" cellspacing="0" style="background:#1e293b;border:1px solid #334155;border-radius:10px;width:100%;">
-      <tr><td style="padding:16px 20px;">
-        <p style="margin:0 0 4px;color:#fbbf24;font-size:12px;font-weight:600;text-transform:uppercase;">⚠️ Security Notice</p>
-        <p style="margin:0;color:#94a3b8;font-size:13px;line-height:1.5;">
-          This link grants <strong style="color:#e2e8f0;">platform-level access</strong> to all companies and data.
-          If you did not request this, ignore this email — it expires automatically.
-        </p>
-      </td></tr>
-    </table>
-  </td></tr>
-  <tr><td style="padding:0 32px 24px;"><p style="margin:0;color:#475569;font-size:11px;word-break:break-all;font-family:monospace;">${magicLink}</p></td></tr>
-  <tr><td style="padding:16px 32px;border-top:1px solid #1e293b;text-align:center;">
-    <p style="margin:0;color:#334155;font-size:12px;">Aeternum Ally · Platform Administration · Do not reply</p>
-  </td></tr>
-</table>
-</td></tr></table>
-</body></html>`;
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resendApiKey}` },
-    body: JSON.stringify({
-      from:    `Aeternum Ally Admin <${fromEmail}>`,
-      to:      [toEmail],
-      subject: '🛡️ Your Aeternum Ally Admin Access Link',
-      html,
-    }),
-  });
-
-  if (!res.ok) throw new Error(`Resend error ${res.status}: ${await res.text()}`);
-}
-
-// ---------------------------------------------------------------------------
 // Post-auth: list_emission_factors
 // ---------------------------------------------------------------------------
 async function handleListEmissionFactors(): Promise<object> {
@@ -1208,9 +1100,6 @@ export const handler: Handler = async (event) => {
     // ── Pre-auth actions (no token required) ───────────────────────────────
     if (action === 'admin_login') {
       result = await handleAdminLogin(body);
-
-    } else if (action === 'request_admin_magic_link') {
-      result = await handleRequestAdminMagicLink(body);
 
     } else if (action === 'verify_admin') {
       result = await handleVerifyAdmin(authHeader);
