@@ -529,7 +529,6 @@ const ORG_SCOPED_TABLES = [
   'organization_members',
   'organization_invites',
   'organization_ai_settings',
-  'organization_integrations',
   'ai_usage_log',
 ] as const;
 
