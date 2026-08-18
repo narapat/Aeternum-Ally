@@ -1,6 +1,6 @@
-# Aeternum Ally - Claude Code Context
+# Aeternum Ally - Codex Context
 
-`AGENTS.md` is the canonical project context for AI-assisted development in this repository. Claude Code must read and follow it before making changes. If this compatibility summary conflicts with `AGENTS.md`, `AGENTS.md` wins.
+This is the canonical project context for AI-assisted development in this repository. Keep it tracked and update it whenever architecture, security controls, or delivery workflow changes. `CLAUDE.md` should remain consistent with this file.
 
 ---
 
@@ -115,7 +115,14 @@ Singleton tables (profile, canvas, SWOT) use `useOrgData` which auto-saves on st
 - Never log prompts, raw AI responses, report snippets, invite tokens, OAuth tokens, or API keys.
 - Never use `npm run dev` when testing functions — use `npm run dev:netlify`.
 
-The complete delivery workflow and security review requirements are maintained in `AGENTS.md`.
+## Delivery workflow
+
+1. Start from an up-to-date `main` and create a `codex/*` feature branch.
+2. Make small, reviewable changes. Do not mix unrelated refactors.
+3. Run `npm run test:security`, `npx tsc --noEmit`, and `npm run build`.
+4. Run `npm audit --omit=dev` for dependency or release work.
+5. Test database migrations and Deploy Previews before merge.
+6. Open a pull request. Do not push directly to `main` and do not deploy automatically.
 
 ---
 
@@ -146,12 +153,74 @@ The complete delivery workflow and security review requirements are maintained i
 
 ---
 
+## Current security controls
+
+- Background AI functions require `INTERNAL_JOB_SECRET` before body parsing.
+- Admin development magic links require explicit Netlify Dev + loopback mode; production email delivery fails closed.
+- BYOK and Google OAuth credentials are stored in service-role-only tables.
+- Google Drive operations are proxied and return only safe file metadata.
+- External evidence URLs require public HTTPS and provider-aware validation.
+- Spreadsheet imports enforce content, size, shape, and timeout limits in a Web Worker.
+- Public invite resend is generic, centrally rate-limited, and has a delivery cooldown.
+- Ally support authenticates the user and verifies organization membership before side effects.
+- Client error logs bind user and tenant identity in RLS; AI handlers do not log tenant output content.
+
 ## Known gaps (track; do not introduce workarounds)
 
-See [TECH_STACK.md - Known gaps](./Docs%20v1.1.0/TECH_STACK.md#known-gaps--hardening-backlog), [Known Issues - Security Review](./Docs%20v1.1.0/known%20issue%20-%20security%20review.md), and the canonical list in `AGENTS.md`.
+See [TECH_STACK.md - Known gaps](./Docs%20v1.1.0/TECH_STACK.md#known-gaps--hardening-backlog) and [Known Issues - Security Review](./Docs%20v1.1.0/known%20issue%20-%20security%20review.md).
 
 - Dependabot alert `#112` for `extract-zip` remains in Netlify development tooling with no upstream patch; track under GitHub issue `#152`.
 - Prompt-injection trust boundaries and structured output validation are not yet systematic across every AI action.
 - Tailwind is still loaded from the CDN; build-time Tailwind and a restrictive CSP remain pending.
 - Netlify Functions do not yet share one centralized origin/CORS policy. CORS is not authorization.
 - The database constrains AI model IDs, but `api.ts` does not repeat the allowlist at the function boundary.
+
+## Project intent
+
+Aeternum Ally is both a hosted multi-tenant SaaS product and a self-hostable project. Netlify is the first hosted runtime, but privileged server behavior should stay portable to other Node/serverless platforms. Preserve tenant boundaries, explicit secret handling, and provider abstraction when adding features.
+
+---
+
+## Security review priorities
+
+When reviewing code, prioritize:
+
+1. Authentication and authorization issues
+2. Broken access control between users, organizations, tenants, or workspaces
+3. Insecure API routes
+4. Exposure of API keys, tokens, secrets, or environment variables
+5. Unsafe use of AI-generated content
+6. Prompt injection risks
+7. Server-side request forgery
+8. SQL / NoSQL injection
+9. Cross-site scripting
+10. Insecure file upload or file parsing
+11. Insecure direct object references
+12. Missing input validation
+13. Unsafe logging of sensitive data
+14. Weak error handling that exposes internals
+15. Dependency vulnerabilities
+
+## Security Review style
+
+For every issue, provide:
+
+- Severity: Critical / High / Medium / Low
+- File and function
+- Why it is risky
+- Exploit scenario
+- Recommended fix
+- Safer code example where possible
+
+Do not make cosmetic comments.
+Do not rewrite large sections unless needed.
+Focus on real security impact.
+
+## Security Review guideline
+1. Pay special attention to multi-tenant data access. Check whether one organization can read or modify another organization's data through guessed IDs, API parameters, report IDs, assessment IDs, or file IDs.
+2. Review all API routes for broken access control, missing authentication, missing organization ownership checks, unsafe request validation, and sensitive data exposure.
+3. Review how environment variables, API keys, tokens, and service credentials are handled. Check for client-side exposure, unsafe logging, hardcoded secrets, and weak deployment assumptions.
+4. Review file upload, document parsing, image upload, and report export code for security risks. Check file type validation, file size limits, storage permissions, path traversal, malware risk, and public URL exposure.
+5. Review database queries and data models for tenant isolation problems. Check whether every read, update, delete, and export operation verifies the authenticated user and organization ownership.
+6. Create a security checklist specific to this codebase. Base it only on the actual files, routes, libraries, and architecture you see. Group the checklist by authentication, authorization, database, AI, file handling, deployment, and dependencies.
+7. Track every confirmed finding in a GitHub issue. Do not put undisclosed vulnerability details in a public issue; follow `SECURITY.md` for private reporting.
