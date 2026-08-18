@@ -1,7 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import * as fs from 'fs';
 import * as path from 'path';
-import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { getStore } from "@netlify/blobs";
 import {
@@ -12,7 +11,6 @@ import { withAIRequestFence } from "./_shared/aiRequestFence.js";
 import { loadOrganizationAiConfig } from "./_shared/organizationAiConfig.js";
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
-const FUNCTION_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 type HandlerDependencies = {
   createAdminClient: () => any;
@@ -200,8 +198,6 @@ export function createAllySupportHandler(
     try {
       const possiblePaths = [
         path.join(process.cwd(), "Docs v1.1.0", "USER_MANUAL.md"),
-        path.join(FUNCTION_DIR, "Docs v1.1.0", "USER_MANUAL.md"),
-        path.join(FUNCTION_DIR, "..", "Docs v1.1.0", "USER_MANUAL.md"),
       ];
 
       for (const p of possiblePaths) {

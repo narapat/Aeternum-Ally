@@ -214,4 +214,6 @@ test("frontend sends bearer auth and server console does not log conversations",
   assert.match(clientSource, /organization_id: orgId/);
   assert.doesNotMatch(clientSource, /userInfo:/);
   assert.doesNotMatch(handlerSource, /Conversation log|JSON\.stringify\(messages\)/);
+  assert.doesNotMatch(handlerSource, /import\.meta\.url|__dirname/);
+  assert.match(handlerSource, /path\.join\(process\.cwd\(\), "Docs v1\.1\.0"/);
 });
