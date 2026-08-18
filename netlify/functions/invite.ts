@@ -3,6 +3,7 @@ import type { Context } from "@netlify/functions";
 import {
   claimPendingInviteResend,
   GENERIC_INVITE_RESEND_BODY,
+  hashInviteResendClient,
 } from "./_shared/inviteResendSecurity.js";
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -152,7 +153,7 @@ async function deliverClaimedInviteResend(
 
 const handleInviteRequest = async (
   event: any,
-  waitUntil?: (promise: Promise<unknown>) => void,
+  requestContext?: Pick<Context, "ip" | "waitUntil">,
 ) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
@@ -182,15 +183,11 @@ const handleInviteRequest = async (
   // Always returns the same 200 response (no email enumeration).
   if (action === "request_resend") {
     try {
-      const invite = await claimPendingInviteResend(admin, email);
-      if (invite) {
+      const clientHash = hashInviteResendClient(requestContext?.ip, serviceKey);
+      const invite = await claimPendingInviteResend(admin, email, clientHash);
+      if (invite && requestContext) {
         const delivery = deliverClaimedInviteResend(admin, invite);
-        if (waitUntil) {
-          waitUntil(delivery);
-        } else {
-          // Direct unit calls do not have a Netlify request context.
-          await delivery;
-        }
+        requestContext.waitUntil(delivery);
       }
     } catch {
       console.error("[invite] resend claim failed");
@@ -344,7 +341,7 @@ export default async (request: Request, context: Context) => {
     body: request.method === "GET" || request.method === "HEAD"
       ? null
       : await request.text(),
-  }, promise => context.waitUntil(promise));
+  }, context);
 
   const headers = new Headers();
   const legacyHeaders = "headers" in legacyResponse ? legacyResponse.headers : {};
@@ -359,9 +356,4 @@ export default async (request: Request, context: Context) => {
 
 export const config = {
   path: "/.netlify/functions/invite",
-  rateLimit: {
-    windowLimit: 10,
-    windowSize: 60,
-    aggregateBy: ["ip", "domain"],
-  },
 } as const;
