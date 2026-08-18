@@ -145,22 +145,14 @@ export const generateSwotInternal = async (
   profile: CompanyProfile,
   bmcData: SustainabilityBusinessModel
 ): Promise<{ strengths: string[]; weaknesses: string[] }> => {
-  try {
-    return await callApi("generateSwotInternal", { profile, bmcData });
-  } catch {
-    return { strengths: [], weaknesses: [] };
-  }
+  return await callApi("generateSwotInternal", { profile, bmcData });
 };
 
 export const generateSwotExternal = async (
   profile: CompanyProfile,
   type: "OPPORTUNITIES" | "THREATS"
 ): Promise<string[]> => {
-  try {
-    return await callApi("generateSwotExternal", { profile, type });
-  } catch {
-    return [];
-  }
+  return await callApi("generateSwotExternal", { profile, type });
 };
 
 export const generateKPISuggestions = async (

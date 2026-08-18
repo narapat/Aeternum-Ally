@@ -86,22 +86,46 @@ const ArrayFieldEditor: React.FC<ArrayFieldEditorProps> = ({
 const SwotAnalysisWizard: React.FC<Props> = ({ data, onChange, profile, bmcData, saveStatus, isDirty, onSave, saveError }) => {
   const [step, setStep] = useState<number>(0);
   const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});
+  const [aiErrorMap, setAiErrorMap] = useState<Record<string, string | null>>({});
+
+  const setAiError = (field: string, error: unknown) => {
+    const message = error instanceof Error
+      ? error.message
+      : 'AI suggestion failed. Please try again.';
+    setAiErrorMap(current => ({ ...current, [field]: message }));
+  };
 
   const handleGenerateInternalField = async (field: 'strengths' | 'weaknesses') => {
     setLoadingMap(m => ({ ...m, [field]: true }));
-    const result = await generateSwotInternal(profile, bmcData);
-    if (field === 'strengths' && result.strengths.length > 0)
-      onChange({ ...data, strengths: result.strengths });
-    else if (field === 'weaknesses' && result.weaknesses.length > 0)
-      onChange({ ...data, weaknesses: result.weaknesses });
-    setLoadingMap(m => ({ ...m, [field]: false }));
+    setAiErrorMap(current => ({ ...current, [field]: null }));
+    try {
+      const result = await generateSwotInternal(profile, bmcData);
+      const suggestions = result[field];
+      if (suggestions.length === 0) {
+        throw new Error('The AI did not return any suggestions. Please try again.');
+      }
+      onChange({ ...data, [field]: suggestions });
+    } catch (error) {
+      setAiError(field, error);
+    } finally {
+      setLoadingMap(m => ({ ...m, [field]: false }));
+    }
   };
 
   const handleGenerateExternal = async (field: 'opportunities' | 'threats') => {
     setLoadingMap(m => ({ ...m, [field]: true }));
-    const result = await generateSwotExternal(profile, field === 'opportunities' ? 'OPPORTUNITIES' : 'THREATS');
-    onChange({ ...data, [field]: result });
-    setLoadingMap(m => ({ ...m, [field]: false }));
+    setAiErrorMap(current => ({ ...current, [field]: null }));
+    try {
+      const result = await generateSwotExternal(profile, field === 'opportunities' ? 'OPPORTUNITIES' : 'THREATS');
+      if (result.length === 0) {
+        throw new Error('The AI did not return any suggestions. Please try again.');
+      }
+      onChange({ ...data, [field]: result });
+    } catch (error) {
+      setAiError(field, error);
+    } finally {
+      setLoadingMap(m => ({ ...m, [field]: false }));
+    }
   };
 
   const renderStepInternal = () => (
@@ -133,6 +157,7 @@ const SwotAnalysisWizard: React.FC<Props> = ({ data, onChange, profile, bmcData,
             placeholder="e.g. Strong proprietary technology"
             focusRingColor="focus:ring-emerald-500"
           />
+          {aiErrorMap.strengths && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{aiErrorMap.strengths}</p>}
         </div>
 
         {/* Weaknesses */}
@@ -156,6 +181,7 @@ const SwotAnalysisWizard: React.FC<Props> = ({ data, onChange, profile, bmcData,
             placeholder="e.g. High dependency on single supplier"
             focusRingColor="focus:ring-amber-500"
           />
+          {aiErrorMap.weaknesses && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{aiErrorMap.weaknesses}</p>}
         </div>
       </div>
     </div>
@@ -190,6 +216,7 @@ const SwotAnalysisWizard: React.FC<Props> = ({ data, onChange, profile, bmcData,
             placeholder="e.g. Growing demand for sustainable products"
             focusRingColor="focus:ring-blue-500"
           />
+          {aiErrorMap.opportunities && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{aiErrorMap.opportunities}</p>}
           <p className="text-xs text-slate-400 dark:text-slate-500">AI searches for: Market trends, new regulations, competitor shifts.</p>
         </div>
 
@@ -214,6 +241,7 @@ const SwotAnalysisWizard: React.FC<Props> = ({ data, onChange, profile, bmcData,
             placeholder="e.g. Supply chain disruptions"
             focusRingColor="focus:ring-red-500"
           />
+          {aiErrorMap.threats && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{aiErrorMap.threats}</p>}
           <p className="text-xs text-slate-400 dark:text-slate-500">AI searches for: Economic downturns, geopolitical risks, resource scarcity.</p>
         </div>
       </div>

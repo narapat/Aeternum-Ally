@@ -4,6 +4,7 @@ import {
   createInternalFunctionUrl,
   createInternalJobHeaders,
 } from "./_shared/internalJobAuth.js";
+import { withAIRequestFence } from "./_shared/aiRequestFence.js";
 
 const apiKey = process.env.GEMINI_API_KEY;
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -157,30 +158,15 @@ const handler = async (event: any) => {
   let upstreamStatus: number | null = null;
   let userFacingMessage = "Something went wrong while contacting the AI service.";
 
-  // Internal fence at 9 s — Netlify kills the process at 10 s with no chance to log.
-  // Rejecting one second early lets the catch block write to ai_usage_log + error_log
-  // before the hard deadline hits.
-  const FENCE_MS = 9_000;
-  let fenceId: ReturnType<typeof setTimeout>;
-  const fencePromise = new Promise<never>((_, reject) => {
-    fenceId = setTimeout(() => {
-      const err = new Error(`Action '${action}' exceeded the ${FENCE_MS / 1000}s timeout`);
-      (err as any).isTimeout = true;
-      reject(err);
-    }, FENCE_MS);
-  });
-
   try {
-    const outcome = await Promise.race([
+    const outcome = await withAIRequestFence(
       runAction(ai, model, action, params, event, organization_id, user),
-      fencePromise,
-    ]);
-    clearTimeout(fenceId!);
+      action,
+    );
     result = outcome.result;
     inputTokens = outcome.inputTokens;
     outputTokens = outcome.outputTokens;
   } catch (error: any) {
-    clearTimeout(fenceId!);
     console.error("API Error:", error);
     success = false;
     rawAiResponse = error?.rawAiResponse ?? null;
@@ -198,7 +184,7 @@ const handler = async (event: any) => {
         ? "The AI service is temporarily overloaded. Please try again in a moment."
         : upstreamStatus === 429
         ? "AI rate limit reached. Please wait a minute and try again."
-        : errorMessage || userFacingMessage;
+        : userFacingMessage;
   }
 
   const durationMs = Date.now() - start;
