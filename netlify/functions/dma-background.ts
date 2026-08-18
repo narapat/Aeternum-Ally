@@ -162,7 +162,7 @@ const handler = async (event: any) => {
       totalOutputTokens += response.usageMetadata?.candidatesTokenCount ?? 0;
 
       try {
-        const text = typeof response.text === "function" ? response.text() : response.text;
+        const text = response.text ?? "";
         const finishReason = response.candidates?.[0]?.finishReason;
 
         console.info("[dma-background] model", activeModel);
@@ -269,7 +269,7 @@ const handler = async (event: any) => {
 
     let insight_result;
     try {
-      const text = typeof synthesisResponse.text === "function" ? synthesisResponse.text() : synthesisResponse.text;
+      const text = synthesisResponse.text ?? "";
       const finishReason = synthesisResponse.candidates?.[0]?.finishReason;
 
       console.info("[dma-background] synthesis model", activeModel);

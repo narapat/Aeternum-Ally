@@ -136,7 +136,7 @@ export const handler = async (event: any) => {
       }
     });
 
-    let text = typeof response.text === "function" ? response.text() : response.text;
+    let text = response.text ?? "";
 
     // Log usage to ai_usage_log
     try {

@@ -14,7 +14,11 @@ import {
   XCircle,
   Zap,
 } from "lucide-react";
-import { triggerDMAAnalysis, getDMAAnalysisStatus } from "../services/geminiService";
+import {
+  analyzeDMASynthesis,
+  getDMAAnalysisStatus,
+  triggerDMAAnalysis,
+} from "../services/geminiService";
 import type {
   AssessmentData,
   CompanyProfile,
@@ -151,7 +155,7 @@ const DMAInsightHub: React.FC<Props> = ({
       const data = await getDMAAnalysisStatus();
       if (data) {
         if (data.status === 'completed' && data.insight_result) {
-          const map = new Map(topicStates);
+          const map = new Map<string, TopicPhase>(topicStates);
           (data.quality_result || []).forEach((c: any) => {
             map.set(c.topicCode, { phase: "done", check: c });
           });
@@ -160,7 +164,7 @@ const DMAInsightHub: React.FC<Props> = ({
           setIsInitializing(false);
           return;
         } else if (data.status === 'processing') {
-          const map = new Map(topicStates);
+          const map = new Map<string, TopicPhase>(topicStates);
           (data.quality_result || []).forEach((c: any) => {
             map.set(c.topicCode, { phase: "done", check: c });
           });
@@ -192,7 +196,7 @@ const DMAInsightHub: React.FC<Props> = ({
         const data = await getDMAAnalysisStatus();
         if (data) {
           // Update topics progressively
-          const map = new Map(topicStates);
+          const map = new Map<string, TopicPhase>(topicStates);
           let updated = false;
           (data.quality_result || []).forEach((c: any) => {
             const current = map.get(c.topicCode);
