@@ -161,24 +161,48 @@ export interface AiSettings {
   soft_quota_monthly: number | null;
 }
 
+const BYOK_SETTINGS_ENDPOINT = "/.netlify/functions/byok-settings";
+
+async function requestByokSettings(
+  orgId: string,
+  method: "GET" | "PUT",
+  settings?: {
+    use_byok: boolean;
+    byok_provider: string | null;
+    byok_api_key?: string | null;
+  }
+): Promise<AiSettings> {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (sessionError || !accessToken) {
+    throw new Error("You must be signed in to manage BYOK settings.");
+  }
+
+  const url = method === "GET"
+    ? `${BYOK_SETTINGS_ENDPOINT}?organization_id=${encodeURIComponent(orgId)}`
+    : BYOK_SETTINGS_ENDPOINT;
+  const response = await fetch(url, {
+    method,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(method === "PUT" ? { "Content-Type": "application/json" } : {}),
+    },
+    body: method === "PUT"
+      ? JSON.stringify({ organization_id: orgId, ...settings })
+      : undefined,
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(payload?.error ?? "BYOK settings are temporarily unavailable.");
+  }
+  return payload as AiSettings;
+}
+
 export async function fetchAiSettings(
   orgId: string
 ): Promise<AiSettings | null> {
-  const { data, error } = await supabase
-    .from("organization_ai_settings")
-    .select("model, use_byok, byok_provider, byok_api_key, soft_quota_monthly")
-    .eq("organization_id", orgId)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  return {
-    model: data.model ?? "gemini-2.5-flash",
-    use_byok: data.use_byok ?? false,
-    byok_provider: data.byok_provider ?? null,
-    // Never expose the raw key to the browser — just whether one is stored
-    has_byok_key: !!data.byok_api_key,
-    soft_quota_monthly: data.soft_quota_monthly ?? null,
-  };
+  return requestByokSettings(orgId, "GET");
 }
 
 /** Upserts the AI model choice (always safe to call). */
@@ -198,19 +222,7 @@ export async function upsertByokSettings(
     byok_api_key?: string | null; // omit to leave unchanged
   }
 ): Promise<void> {
-  const payload: Record<string, unknown> = {
-    organization_id: orgId,
-    use_byok: settings.use_byok,
-    byok_provider: settings.byok_provider,
-  };
-  // Only include the key field when explicitly provided
-  if ("byok_api_key" in settings) {
-    payload.byok_api_key = settings.byok_api_key ?? null;
-  }
-  const { error } = await supabase
-    .from("organization_ai_settings")
-    .upsert(payload, { onConflict: "organization_id" });
-  if (error) throw error;
+  await requestByokSettings(orgId, "PUT", settings);
 }
 
 /** Returns the number of successful AI calls made by this org this calendar month. */

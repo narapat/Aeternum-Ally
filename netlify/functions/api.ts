@@ -5,6 +5,7 @@ import {
   createInternalJobHeaders,
 } from "./_shared/internalJobAuth.js";
 import { withAIRequestFence } from "./_shared/aiRequestFence.js";
+import { loadOrganizationAiConfig } from "./_shared/organizationAiConfig.js";
 
 const apiKey = process.env.GEMINI_API_KEY;
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -105,23 +106,33 @@ const handler = async (event: any) => {
   // ------------------------------------------------------------------
   // 4. Look up the org's chosen model + BYOK settings
   // ------------------------------------------------------------------
-  const { data: settings } = await admin
-    .from("organization_ai_settings")
-    .select("model, use_byok, byok_provider, byok_api_key, soft_quota_monthly")
-    .eq("organization_id", organization_id)
-    .maybeSingle();
-  const model = settings?.model ?? DEFAULT_MODEL;
-
-  // Determine which API key to use and record the quota type
-  const useBYOK = settings?.use_byok === true && !!settings?.byok_api_key;
-  const resolvedApiKey = useBYOK ? settings!.byok_api_key! : apiKey!;
-  const quotaType: string = useBYOK ? "byok" : "platform_free";
+  let aiConfig;
+  try {
+    aiConfig = await loadOrganizationAiConfig(
+      admin,
+      organization_id,
+      apiKey,
+      DEFAULT_MODEL,
+    );
+  } catch {
+    console.error(`[api] AI configuration unavailable org=${organization_id}`);
+    return json(503, {
+      error: "AI settings are temporarily unavailable. Please try again later.",
+    });
+  }
+  const {
+    model,
+    useBYOK,
+    resolvedApiKey,
+    quotaType,
+    softQuotaMonthly,
+  } = aiConfig;
 
   // ------------------------------------------------------------------
   // 4a. Soft quota check (platform calls only, BYOK bypasses)
   // ------------------------------------------------------------------
   if (!useBYOK) {
-    const PLATFORM_SOFT_LIMIT = settings?.soft_quota_monthly ?? 100;
+    const PLATFORM_SOFT_LIMIT = softQuotaMonthly ?? 100;
     const monthStart = new Date();
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
