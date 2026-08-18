@@ -440,6 +440,27 @@ test("migration denies browser roles access to organization AI secrets", async (
   assert.match(migration, /INSERT INTO organization_ai_secrets[\s\S]+FROM organization_ai_settings/i);
 });
 
+test("contract migration preserves rotated secrets before dropping the legacy column", async () => {
+  const migration = await readFile(
+    new URL("../../supabase/migrations/021_contract_legacy_byok_key.sql", import.meta.url),
+    "utf8",
+  );
+  const backfillIndex = migration.indexOf("INSERT INTO organization_ai_secrets");
+  const guardIndex = migration.indexOf("IF EXISTS");
+  const dropIndex = migration.indexOf("DROP COLUMN IF EXISTS byok_api_key");
+
+  assert.ok(backfillIndex >= 0);
+  assert.ok(guardIndex > backfillIndex);
+  assert.ok(dropIndex > guardIndex);
+  assert.match(migration, /ON CONFLICT \(organization_id\) DO NOTHING/i);
+  assert.doesNotMatch(migration, /ON CONFLICT[\s\S]+DO UPDATE/i);
+  assert.match(
+    migration,
+    /WHERE settings\.use_byok = true[\s\S]+secrets\.organization_id IS NULL/i,
+  );
+  assert.match(migration, /BEGIN;[\s\S]+COMMIT;/i);
+});
+
 test("browser data service uses the authenticated endpoint instead of raw table access", async () => {
   const source = await readFile(
     new URL("../../services/dbService.ts", import.meta.url),
