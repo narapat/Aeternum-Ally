@@ -422,8 +422,22 @@ CREATE POLICY "admins_read_errors" ON error_log
     organization_id IS NOT NULL
     AND user_org_role(organization_id) IN ('Owner', 'Admin')
   );
+
+REVOKE INSERT ON error_log FROM PUBLIC, anon;
+GRANT INSERT ON error_log TO authenticated;
+
 CREATE POLICY "users_insert_errors" ON error_log
-  FOR INSERT WITH CHECK (user_id = auth.uid() OR user_id IS NULL);
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    auth.uid() IS NOT NULL
+    AND user_id = auth.uid()
+    AND source = 'client'
+    AND (
+      organization_id IS NULL
+      OR is_org_member(organization_id)
+    )
+  );
 
 -- ============================================================
 -- ATOMIC ORG CREATION RPC
