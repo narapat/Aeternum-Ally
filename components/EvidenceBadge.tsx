@@ -19,7 +19,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, DragEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { Paperclip, ExternalLink, Trash2, Plus, X, Link, Loader2, FileText, Image, File, AlertCircle, ChevronLeft, UploadCloud, Zap } from 'lucide-react';
+import { Paperclip, ExternalLink, Trash2, Plus, X, Link, Loader2, FileText, Image, File, AlertCircle, ChevronLeft, UploadCloud, Zap, Search, FolderOpen, RefreshCw } from 'lucide-react';
 import {
   fetchEvidence,
   countEvidence,
@@ -29,12 +29,11 @@ import {
   getStorageQuota,
 } from '../services/evidenceService';
 import {
-  isGoogleDriveConfigured,
   getGoogleDriveStatus,
-  getGoogleDriveAccessToken,
   connectGoogleDrive,
-  openGooglePicker,
+  listGoogleDriveFiles,
   mimeToExtension,
+  type DriveFile,
 } from '../services/googleDriveService';
 import { supabase } from '../lib/supabaseClient';
 import { EvidenceAttachment, EvidenceLinkedToType, StorageType } from '../types';
@@ -53,7 +52,7 @@ interface Props {
 }
 
 type AddMethod = 'url' | 'google_drive' | 'onedrive';
-type ModalView = 'list' | 'add_method' | 'add_url' | 'add_drive' | 'add_upload';
+type ModalView = 'list' | 'add_method' | 'add_url' | 'browse_drive' | 'add_drive' | 'add_upload';
 
 const STORAGE_ICONS: Record<StorageType, React.ReactNode> = {
   google_drive:     <span className="text-blue-500">▲</span>,
@@ -147,9 +146,11 @@ const EvidenceModal: React.FC<ModalProps> = ({
   const [error, setError]             = useState<string | null>(null);
 
   // Google Drive state
-  const [driveConfigured]             = useState(isGoogleDriveConfigured);
-  const [driveConnected, setDriveConnected] = useState(false);
+  const [driveConfigured, setDriveConfigured] = useState<boolean | null>(null);
+  const [driveConnected, setDriveConnected] = useState<boolean | null>(null);
+  const [driveCanManage, setDriveCanManage] = useState(false);
   const [driveCheckDone, setDriveCheckDone] = useState(false);
+  const [driveStatusError, setDriveStatusError] = useState<string | null>(null);
 
   // Storage quota (fetched lazily when upload view is first opened)
   const [quota, setQuota]             = useState<{ used_mb: number; total_mb: number; available_mb: number } | null>(null);
@@ -172,17 +173,30 @@ const EvidenceModal: React.FC<ModalProps> = ({
   useEffect(() => { loadItems(); }, [loadItems]);
 
   // ── Check Google Drive connection status ─────────────────────────────────
-  useEffect(() => {
-    if (!driveConfigured) { setDriveCheckDone(true); return; }
-    supabase.auth.getSession().then(({ data }) => {
+  const loadDriveStatus = useCallback(async () => {
+    setDriveCheckDone(false);
+    setDriveStatusError(null);
+    try {
+      const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
-      if (!token) { setDriveCheckDone(true); return; }
-      getGoogleDriveStatus(orgId, token)
-        .then(setDriveConnected)
-        .catch(() => {})
-        .finally(() => setDriveCheckDone(true));
-    });
-  }, [orgId, driveConfigured]);
+      if (!token) throw new Error('Please sign in again.');
+      const status = await getGoogleDriveStatus(orgId, token);
+      setDriveConfigured(status.configured);
+      setDriveConnected(status.connected);
+      setDriveCanManage(status.canManage);
+    } catch (e: any) {
+      setDriveConfigured(null);
+      setDriveConnected(null);
+      setDriveCanManage(false);
+      setDriveStatusError(e?.message ?? 'Could not check Google Drive connection.');
+    } finally {
+      setDriveCheckDone(true);
+    }
+  }, [orgId]);
+
+  useEffect(() => {
+    void loadDriveStatus();
+  }, [loadDriveStatus]);
 
   // ── Delete an item ────────────────────────────────────────────────────────
   const handleDelete = async (item: EvidenceAttachment) => {
@@ -200,29 +214,22 @@ const EvidenceModal: React.FC<ModalProps> = ({
     }
   };
 
-  // ── Google Drive picker ───────────────────────────────────────────────────
-  const handlePickFromDrive = async () => {
+  const handleConnectDrive = async () => {
     setBusy(true);
     setError(null);
     try {
       const { data } = await supabase.auth.getSession();
-      const supaToken = data.session?.access_token ?? '';
-      const driveToken = await getGoogleDriveAccessToken(orgId, supaToken);
-      const file = await openGooglePicker(driveToken);
-      if (!file) { setBusy(false); return; }
-      // Pre-fill and show the link form so user can add notes
-      setDriveFile(file);
-      setView('add_drive');
+      const token = data.session?.access_token;
+      if (!token) throw new Error('Please sign in again.');
+      await connectGoogleDrive(orgId, token);
     } catch (e: any) {
-      setError(e?.message ?? 'Could not open Google Drive picker.');
+      setError(e?.message ?? 'Could not connect Google Drive.');
     } finally {
       setBusy(false);
     }
   };
 
-  const [driveFile, setDriveFile] = useState<{
-    id: string; name: string; url: string; mimeType: string; sizeBytes: number | null;
-  } | null>(null);
+  const [driveFile, setDriveFile] = useState<DriveFile | null>(null);
 
   // ── Load storage quota (lazy, on upload view open) ────────────────────────
   const loadQuota = useCallback(async () => {
@@ -329,27 +336,48 @@ const EvidenceModal: React.FC<ModalProps> = ({
                 icon="📁"
                 title="Link from Google Drive"
                 subtitle={
-                  !driveConfigured
-                    ? 'Google Drive not configured on this server'
-                    : !driveCheckDone
+                  !driveCheckDone
                     ? 'Checking connection…'
+                    : driveStatusError
+                    ? 'Could not check the Google Drive connection'
+                    : !driveConfigured
+                    ? 'Google Drive not configured on this server'
                     : driveConnected
-                    ? 'Your Drive is connected'
-                    : 'Connect Drive first'
+                    ? 'Browse files through the secure Drive connection'
+                    : driveCanManage
+                    ? 'Connect Drive to select a file'
+                    : 'Ask an Owner or Admin to connect Drive'
                 }
-                disabled={!driveConfigured || !driveConnected}
-                badge={!driveConfigured || !driveConnected ? (
-                  driveConfigured && !driveConnected ? (
-                    <button
-                      className="text-xs text-blue-500 hover:underline"
-                      onClick={() => connectGoogleDrive(orgId, currentUserId)}
-                    >
-                      Connect
-                    </button>
-                  ) : undefined
-                ) : undefined}
-                onClick={handlePickFromDrive}
+                disabled={Boolean(driveStatusError) || driveConfigured !== true || driveConnected !== true}
+                onClick={() => setView('browse_drive')}
               />
+
+              {driveCheckDone && driveStatusError && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  <span className="flex-1">{driveStatusError}</span>
+                  <button
+                    type="button"
+                    onClick={() => void loadDriveStatus()}
+                    title="Retry Google Drive status"
+                    className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded text-amber-700 hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-900/40"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+
+              {driveCheckDone && driveConfigured && !driveConnected && driveCanManage && (
+                <button
+                  type="button"
+                  onClick={handleConnectDrive}
+                  disabled={busy}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-blue-300 dark:border-blue-700 text-sm font-medium text-blue-600 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50"
+                >
+                  {busy && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Connect Google Drive
+                </button>
+              )}
 
               <MethodCard
                 icon="🔗"
@@ -376,6 +404,18 @@ const EvidenceModal: React.FC<ModalProps> = ({
               orgId={orgId}
               userId={currentUserId}
               onSaved={() => { back(); loadItems(); }}
+              onError={setError}
+            />
+          )}
+
+          {/* GOOGLE DRIVE FILE BROWSER */}
+          {view === 'browse_drive' && (
+            <DriveFilePicker
+              orgId={orgId}
+              onSelect={file => {
+                setDriveFile(file);
+                setView('add_drive');
+              }}
               onError={setError}
             />
           )}
@@ -630,11 +670,128 @@ const URLForm: React.FC<{
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Google Drive Confirm Form (pre-fills from picker selection)
+// Google Drive file browser
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DriveFilePicker: React.FC<{
+  orgId: string;
+  onSelect: (file: DriveFile) => void;
+  onError: (msg: string) => void;
+}> = ({ orgId, onSelect, onError }) => {
+  const [files, setFiles] = useState<DriveFile[]>([]);
+  const [search, setSearch] = useState('');
+  const [activeSearch, setActiveSearch] = useState('');
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const loadPage = useCallback(async (
+    pageToken: string | null,
+    replace: boolean,
+    query: string,
+  ) => {
+    setLoading(true);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error('Please sign in again.');
+      const page = await listGoogleDriveFiles(orgId, token, {
+        search: query || undefined,
+        pageToken,
+      });
+      setFiles(current => replace ? page.files : [...current, ...page.files]);
+      setNextPageToken(page.nextPageToken);
+    } catch (e: any) {
+      onError(e?.message ?? 'Could not load Google Drive files.');
+    } finally {
+      setLoading(false);
+    }
+  }, [orgId, onError]);
+
+  useEffect(() => {
+    void loadPage(null, true, '');
+  }, [loadPage]);
+
+  const submitSearch = (event: React.FormEvent) => {
+    event.preventDefault();
+    const query = search.trim();
+    setActiveSearch(query);
+    void loadPage(null, true, query);
+  };
+
+  return (
+    <div className="space-y-3">
+      <form onSubmit={submitSearch} className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="search"
+            value={search}
+            onChange={event => setSearch(event.target.value)}
+            maxLength={100}
+            placeholder="Search Drive files"
+            className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={loading}
+          title="Search Google Drive"
+          className="w-10 h-10 flex items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+        </button>
+      </form>
+
+      {!loading && files.length === 0 ? (
+        <div className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+          <FolderOpen className="w-9 h-9 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
+          {activeSearch ? 'No matching Drive files found.' : 'No Drive files are available.'}
+        </div>
+      ) : (
+        <div className="divide-y divide-slate-200 dark:divide-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+          {files.map(file => (
+            <button
+              type="button"
+              key={file.id}
+              onClick={() => onSelect(file)}
+              className="w-full min-h-14 flex items-center gap-3 px-3 py-2 text-left bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+            >
+              {fileIcon(mimeToExtension(file.mimeType))}
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-medium text-slate-800 dark:text-white truncate">
+                  {file.name}
+                </span>
+                <span className="block text-xs text-slate-400 truncate">
+                  {mimeToExtension(file.mimeType).toUpperCase() || 'FILE'}
+                  {file.modifiedTime ? ` · ${fmtDate(file.modifiedTime)}` : ''}
+                </span>
+              </span>
+              <ChevronLeft className="w-4 h-4 rotate-180 text-slate-400" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {nextPageToken && (
+        <button
+          type="button"
+          onClick={() => void loadPage(nextPageToken, false, activeSearch)}
+          disabled={loading}
+          className="w-full py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
+        >
+          {loading ? 'Loading…' : 'Load more'}
+        </button>
+      )}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Google Drive Confirm Form (pre-fills from server-proxied selection)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DriveConfirmForm: React.FC<{
-  driveFile:    { id: string; name: string; url: string; mimeType: string; sizeBytes: number | null };
+  driveFile:    DriveFile;
   linkedToType: EvidenceLinkedToType;
   linkedToId:   string;
   orgId:        string;
