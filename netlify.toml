@@ -3,6 +3,11 @@
   publish = "dist"
   functions = "netlify/functions"
 
+[build.environment]
+  # Historical drafts contain public localhost/example URLs that can match
+  # frontend environment values. Keep secret scanning enabled everywhere else.
+  SECRETS_SCAN_OMIT_PATHS = "Archived/docs/phase-2-planning-2026-05/**"
+
 [functions]
   included_files = ["Docs v1.1.0/**"]
 
