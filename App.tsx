@@ -15,6 +15,7 @@ import SettingsDashboard from './components/SettingsDashboard';
 import UserProfilePage from './components/UserProfilePage';
 import PerformanceDashboard from './components/PerformanceDashboard';
 import SustainabilityStatement from './components/SustainabilityStatement';
+import CompanyStrategicReport from './components/CompanyStrategicReport';
 import MaterialTopicsList from './components/MaterialTopicsList';
 import StartHere from './components/StartHere';
 import type { StartHerePathId } from './components/StartHere';
@@ -98,7 +99,7 @@ const App: React.FC = () => {
   }, [organization?.id]);
 
   // UI state
-  const [view, setView] = useState<'start_here' | 'start_here_esg' | 'start_here_carbon' | 'start_here_stakeholder' | 'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'insight_hub' | 'tasks' | 'carbon_wizard' | 'carbon_dashboard' | 'settings' | 'user_profile'>('start_here');
+  const [view, setView] = useState<'start_here' | 'start_here_esg' | 'start_here_carbon' | 'start_here_stakeholder' | 'overview' | 'profile' | 'dm_dashboard' | 'canvas' | 'swot' | 'kpi' | 'assess' | 'report' | 'company_report' | 'insight_hub' | 'tasks' | 'carbon_wizard' | 'carbon_dashboard' | 'settings' | 'user_profile'>('start_here');
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -323,7 +324,8 @@ const App: React.FC = () => {
             </NavSection>
 
             <div className="space-y-1">
-              <NavItem active={view === 'report'} collapsed={isSidebarCollapsed} onClick={() => setView('report')} icon={<FileText />} label="Reports" />
+              <NavItem active={view === 'company_report'} collapsed={isSidebarCollapsed} onClick={() => setView('company_report')} icon={<Building2 />} label="Company Report" />
+              <NavItem active={view === 'report'} collapsed={isSidebarCollapsed} onClick={() => setView('report')} icon={<FileText />} label="Sustainability Report" />
             </div>
 
           </nav>
@@ -356,6 +358,7 @@ const App: React.FC = () => {
                   {view === 'overview' && 'Overview'}
                   {(view === 'profile' || view === 'canvas' || view === 'swot' || view === 'kpi') && 'My Business'}
                   {(view === 'dm_dashboard' || view === 'assess' || view === 'report' || view === 'insight_hub') && 'Double Materiality'}
+                  {view === 'company_report' && 'My Business'}
                   {view === 'tasks' && 'Action Plan'}
                   {(view === 'carbon_wizard' || view === 'carbon_dashboard') && 'Carbon Accounting'}
                   {view === 'settings' && 'Workspace'}
@@ -375,6 +378,7 @@ const App: React.FC = () => {
                   {view === 'dm_dashboard' && 'Materiality Dashboard'}
                   {view === 'assess' && 'Materiality Assessments'}
                   {view === 'report' && 'Sustainability Statement'}
+                  {view === 'company_report' && 'Company Strategic Profile'}
                   {view === 'insight_hub' && 'DMA Insight Hub'}
                   {view === 'tasks' && 'Task Management'}
                   {view === 'carbon_wizard' && 'Carbon Quest Wizard'}
@@ -643,6 +647,15 @@ const App: React.FC = () => {
 
                 {view === 'report' && (
                   <SustainabilityStatement profile={profile.data} assessments={assessments} canvas={canvas.data} organizationId={organization.id} />
+                )}
+
+                {view === 'company_report' && (
+                  <CompanyStrategicReport
+                    profile={profile.data}
+                    bmcData={canvas.data}
+                    swotData={swot.data}
+                    organizationId={organization.id}
+                  />
                 )}
 
                 {view === 'insight_hub' && (

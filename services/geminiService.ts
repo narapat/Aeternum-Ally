@@ -1,4 +1,4 @@
-import { ESRSTopic, SustainabilityBusinessModel, SwotAnalysis, BSCPerspective, AssessmentData, CompanyProfile, AssessmentScoring, InsightHubResponse, QualityCheck, StrategicInsight, RecommendedAction, KPI, SuggestedTask } from "../types";
+import { ESRSTopic, SustainabilityBusinessModel, SwotAnalysis, BSCPerspective, AssessmentData, CompanyProfile, AssessmentScoring, InsightHubResponse, QualityCheck, StrategicInsight, RecommendedAction, KPI, SuggestedTask, CompanyStrategicReport } from "../types";
 import { supabase } from "../lib/supabaseClient";
 
 const API_ENDPOINT = "/.netlify/functions/api";
@@ -132,10 +132,11 @@ export const getAssessmentJobStatus = async (assessmentId: string): Promise<any>
 
 export const generateCanvasSuggestion = async (
   profile: CompanyProfile,
-  fieldLabel: string
+  fieldLabel: string,
+  bmcData?: SustainabilityBusinessModel,
 ): Promise<string[]> => {
   try {
-    return await callApi("generateCanvasSuggestion", { profile, fieldLabel });
+    return await callApi("generateCanvasSuggestion", { profile, fieldLabel, bmcData });
   } catch {
     return [];
   }
@@ -160,6 +161,14 @@ export const generateKPISuggestions = async (
   perspective: BSCPerspective
 ) => {
   return await callApi("generateKPISuggestions", { profile, perspective });
+};
+
+export const generateCompanyStrategicReport = async (
+  profile: CompanyProfile,
+  bmcData: SustainabilityBusinessModel,
+  swotData: SwotAnalysis,
+): Promise<CompanyStrategicReport> => {
+  return await callApi("generateCompanyStrategicReport", { profile, bmcData, swotData });
 };
 
 export interface GeneratedStatement {

@@ -138,6 +138,15 @@ export interface SwotAnalysis {
   threats: string[];
 }
 
+export interface CompanyStrategicReport {
+  profileSummary: string;
+  businessModelSummary: string;
+  swotAnalysis: string;
+  strategicCommentary: string;
+  dataGaps: string[];
+  recommendations: string[];
+}
+
 // --- Performance Management Types ---
 
 export enum BSCPerspective {
