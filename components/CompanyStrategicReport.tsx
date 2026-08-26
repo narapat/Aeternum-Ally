@@ -171,10 +171,11 @@ const CompanyStrategicReport: React.FC<Props> = ({ profile, bmcData, swotData, o
 
               <ListSection title="Data Gaps" items={report.dataGaps} />
               <ListSection title="Recommended Next Steps" items={report.recommendations} />
+              <RawInputSection profile={profile} bmcData={bmcData} swotData={swotData} />
             </>
           ) : (
             <div className="space-y-10">
-              <PreviewSection profile={profile} bmcData={bmcData} swotData={swotData} />
+              <RawInputSection profile={profile} bmcData={bmcData} swotData={swotData} />
             </div>
           )}
 
@@ -221,10 +222,10 @@ const ListSection: React.FC<{ title: string; items: string[] }> = ({ title, item
   </section>
 );
 
-const PreviewSection: React.FC<{ profile: CompanyProfile; bmcData: SustainabilityBusinessModel; swotData: SwotAnalysis }> = ({ profile, bmcData, swotData }) => (
-  <section className="space-y-8">
+const RawInputSection: React.FC<{ profile: CompanyProfile; bmcData: SustainabilityBusinessModel; swotData: SwotAnalysis }> = ({ profile, bmcData, swotData }) => (
+  <section className="space-y-8 break-before-page">
     <div>
-      <h3 className="text-lg font-bold text-slate-900 mb-4">Current Company Inputs</h3>
+      <h3 className="text-lg font-bold text-slate-900 mb-4">Raw Company Inputs</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700">
         <p><span className="font-semibold">Company:</span> {profile.name || 'Not provided'}</p>
         <p><span className="font-semibold">Industry:</span> {profile.industry || 'Not provided'}</p>
