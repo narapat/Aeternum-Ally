@@ -93,7 +93,7 @@ The app is available at `http://localhost:8888`.
 
 ### Environment variables
 
-Open `.env` and fill in all five values. See [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md#environment-variables) for what each variable does and where to find the values.
+Open `.env` and fill in all five values. See [docs/DEPLOYMENT.md](./Docs%20v1.1.0/DEPLOYMENT.md#environment-variables) for what each variable does and where to find the values.
 
 ### Database setup
 
@@ -341,7 +341,7 @@ See [SECURITY.md](./SECURITY.md) for our full security policy.
  
 **Want to help but don't know where to start?**
 - Look for issues labeled `good first issue`
-- Check the roadmap for upcoming features
+- Check the [roadmap](./ROADMAP.md) for upcoming features
 - Improve documentation — it's always appreciated!
  
 ---

@@ -79,7 +79,7 @@ Generates a report compliant with **ESRS 2 (General Disclosures)** and **Topical
 
 ## 🛠️ Quick start
 
-Prerequisites: **Node 20+**, **npm**, a **Supabase** project, a **Google Gemini API key**.
+Prerequisites: **Node 22+**, **npm**, a **Supabase** project, a **Google Gemini API key**.
 
 ```bash
 git clone <this-repo>
@@ -89,7 +89,7 @@ npm install
 npm run dev:netlify           # Vite + Netlify Functions on http://localhost:8888
 ```
 
-Full setup (Supabase project, schema, migrations, Netlify deploy) is in [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md).
+Full setup (Supabase project, schema, migrations, Netlify deploy) is in [`Docs v1.1.0/DEPLOYMENT.md`](./Docs%20v1.1.0/DEPLOYMENT.md).
 
 > ⚠️ Always use `npm run dev:netlify` (not `npm run dev`) when working on API code — the latter does not expose `/.netlify/functions/*`.
 
@@ -97,8 +97,9 @@ Full setup (Supabase project, schema, migrations, Netlify deploy) is in [`docs/D
 
 ## 📚 Documentation
 
-*   **[Tech Stack](./docs/TECH_STACK.md)** — Architecture, frontend/backend stack, database schema, RLS, security model
-*   **[Deployment](./docs/DEPLOYMENT.md)** — Setup, environment variables, deploy flow, schema migrations, local development, troubleshooting
+*   **[Tech Stack](./Docs%20v1.1.0/TECH_STACK.md)** — Architecture, frontend/backend stack, database schema, RLS, security model
+*   **[Deployment](./Docs%20v1.1.0/DEPLOYMENT.md)** — Setup, environment variables, deploy flow, schema migrations, local development, troubleshooting
+*   **[Roadmap](./ROADMAP.md)** — What is planned next, what is deliberately not planned, and the open questions behind both
 
 ---
 ## Live Demo
@@ -109,7 +110,7 @@ You can try the live version of AeternumAlly at: [demo.aeternumally.com](https:/
 ---
 ## ⚠️ Known Limitations
 - **AI Quota:** The live demo uses a shared API quota. During peak times, you may encounter rate limiting.
-- **Self-Hosting:** For heavy usage, we recommend self-hosting AeternumAlly and providing your own API keys (refer to [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md).).
+- **Self-Hosting:** For heavy usage, we recommend self-hosting AeternumAlly and providing your own API keys (refer to [`Docs v1.1.0/DEPLOYMENT.md`](./Docs%20v1.1.0/DEPLOYMENT.md).).
 
 ---
 
