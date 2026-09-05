@@ -351,6 +351,8 @@ const Mission1Phase: React.FC<{
         source_id: source.id,
         period_start: periodStart,
         period_end: periodEnd,
+        // Annualised from a typical period, not a measurement for this year.
+        basis: 'estimate',
         activity_data: annualKWh,
         calculated_emissions_kgco2e: kgco2e,
         notes: `Wizard entry: ${period === 'monthly' ? `${kWh} kWh/month × 12` : `${kWh} kWh/year`}`,
@@ -595,6 +597,8 @@ const Scope1SourceForm: React.FC<{
         source_id: dbSource.id,
         period_start: periodStart,
         period_end: periodEnd,
+        // Annualised from a typical period, not a measurement for this year.
+        basis: 'estimate',
         activity_data: annual,
         calculated_emissions_kgco2e: kgco2e,
         notes: `Wizard entry — ${source.label}`,
@@ -752,6 +756,8 @@ const Mission3Phase: React.FC<{
         source_id: source.id,
         period_start: periodStart,
         period_end: periodEnd,
+        // Annualised from a typical period, not a measurement for this year.
+        basis: 'estimate',
         activity_data: val,
         calculated_emissions_kgco2e: kgco2e,
         notes: 'Wizard entry — Scope 3',

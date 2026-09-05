@@ -24,6 +24,13 @@ import {
 } from 'recharts';
 import { EmissionSource, EmissionEntry } from '../types';
 import {
+  buildMonthlyTrend,
+  countableForYear,
+  entriesForYear,
+  overlappingEntries,
+  sourcesOnEstimate,
+} from '../services/carbonAggregation';
+import {
   fetchEmissionSources,
   fetchEmissionEntries,
   upsertEmissionSource,
@@ -58,45 +65,6 @@ function periodLabel(start: string): string {
 
 function startOfYear(year: number) { return `${year}-01-01`; }
 function endOfYear(year: number)   { return `${year}-12-31`; }
-
-function entriesForYear(entries: EmissionEntry[], year: number): EmissionEntry[] {
-  return entries.filter(e => new Date(e.period_start).getFullYear() === year);
-}
-
-function ytdSummary(entries: EmissionEntry[], year: number) {
-  const filtered = entriesForYear(entries, year);
-  const total    = filtered.reduce((s, e) => s + e.calculated_emissions_kgco2e, 0);
-  const scope: Record<string, number> = { '1': 0, '2': 0, '3': 0 };
-  // We need source scope — we'll join by sourceId below
-  return { total, byScope: scope, entries: filtered };
-}
-
-function buildMonthlyTrend(
-  entries: EmissionEntry[],
-  sources: EmissionSource[],
-  year: number,
-): { month: string; scope1: number; scope2: number; scope3: number; total: number }[] {
-  const scopeOf = Object.fromEntries(sources.map(s => [s.id, s.scope]));
-  const months = MONTH_LABELS.map((label, mi) => {
-    const monthEntries = entries.filter(e => {
-      const d = new Date(e.period_start);
-      return d.getFullYear() === year && d.getMonth() === mi;
-    });
-    const s: Record<string, number> = { '1': 0, '2': 0, '3': 0 };
-    for (const e of monthEntries) {
-      const scope = scopeOf[e.source_id] ?? '1';
-      s[scope] = (s[scope] ?? 0) + e.calculated_emissions_kgco2e / 1000;
-    }
-    return {
-      month: label,
-      scope1: Math.round(s['1'] * 100) / 100,
-      scope2: Math.round(s['2'] * 100) / 100,
-      scope3: Math.round(s['3'] * 100) / 100,
-      total:  Math.round((s['1'] + s['2'] + s['3']) * 100) / 100,
-    };
-  });
-  return months;
-}
 
 function lastEntry(entries: EmissionEntry[], sourceId: string): EmissionEntry | null {
   const es = entries.filter(e => e.source_id === sourceId).sort(
@@ -167,9 +135,12 @@ const CarbonDashboard: React.FC<Props> = ({ orgId, currentUserId, onRunWizard })
   // ── Derived data ────────────────────────────────────────────────────────
   const scopeOf = Object.fromEntries(sources.map(s => [s.id, s.scope]));
   const yearEntries = entriesForYear(entries, year);
+  const countableEntries = countableForYear(entries, year);
+  // Sources still carrying an annualised estimate rather than measurements.
+  const estimatedSources = sourcesOnEstimate(entries, year);
 
   const scopeTotals = { '1': 0, '2': 0, '3': 0 };
-  for (const e of yearEntries) {
+  for (const e of countableEntries) {
     const sc = scopeOf[e.source_id] ?? '1';
     scopeTotals[sc as keyof typeof scopeTotals] += e.calculated_emissions_kgco2e;
   }
@@ -179,9 +150,9 @@ const CarbonDashboard: React.FC<Props> = ({ orgId, currentUserId, onRunWizard })
   const hasData = yearEntries.length > 0;
 
   // YoY
-  const prevYearEntries = entriesForYear(entries, year - 1);
+  const prevYearEntries = countableForYear(entries, year - 1);
   const prevTotal = prevYearEntries.reduce((s, e) => s + e.calculated_emissions_kgco2e, 0);
-  const showYoY = prevYearEntries.length > 0 && yearEntries.length > 0;
+  const showYoY = prevYearEntries.length > 0 && countableEntries.length > 0;
   const yoyChange = showYoY && prevTotal > 0 ? ((grandTotal - prevTotal) / prevTotal) * 100 : 0;
 
   // Available years
@@ -247,6 +218,16 @@ const CarbonDashboard: React.FC<Props> = ({ orgId, currentUserId, onRunWizard })
           {/* ── Summary cards ── */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <ScopeCard label="Total" value={grandTotal} color="text-slate-800 dark:text-white" bg="bg-slate-50 dark:bg-slate-800" border="border-slate-200 dark:border-slate-700" />
+            {estimatedSources.size > 0 && (
+              <div className="sm:col-span-3 flex items-start gap-2 px-4 py-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-300">
+                <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                <span>
+                  {estimatedSources.size === 1 ? '1 source is' : `${estimatedSources.size} sources are`}{' '}
+                  still an annualised estimate from Carbon Quest. Record a month of actual
+                  usage and it replaces the estimate for that source — the total never counts both.
+                </span>
+              </div>
+            )}
             <ScopeCard label="Scope 1 – Direct" value={scopeTotals['1']} color="text-amber-700 dark:text-amber-300" bg="bg-amber-50 dark:bg-amber-900/20" border="border-amber-200 dark:border-amber-800" />
             <ScopeCard label="Scope 2 – Energy" value={scopeTotals['2']} color="text-indigo-700 dark:text-indigo-300" bg="bg-indigo-50 dark:bg-indigo-900/20" border="border-indigo-200 dark:border-indigo-800" />
             <ScopeCard label="Scope 3 – Other" value={scopeTotals['3']} color="text-emerald-700 dark:text-emerald-300" bg="bg-emerald-50 dark:bg-emerald-900/20" border="border-emerald-200 dark:border-emerald-800" />
@@ -385,6 +366,7 @@ const CarbonDashboard: React.FC<Props> = ({ orgId, currentUserId, onRunWizard })
       {addSource && createPortal(
         <QuickAddModal
           source={addSource}
+          existingEntries={entries}
           currentUserId={currentUserId}
           orgId={orgId}
           onClose={() => setAddSource(null)}
@@ -527,11 +509,12 @@ const EditSourceModal: React.FC<{
 
 const QuickAddModal: React.FC<{
   source: EmissionSource;
+  existingEntries: EmissionEntry[];
   orgId: string;
   currentUserId: string;
   onClose: () => void;
   onSaved: () => void;
-}> = ({ source, orgId, currentUserId, onClose, onSaved }) => {
+}> = ({ source, existingEntries, orgId, currentUserId, onClose, onSaved }) => {
   const now = new Date();
   const y = now.getFullYear(), m = now.getMonth();
   const defaultStart = `${y}-${String(m + 1).padStart(2, '0')}-01`;
@@ -542,14 +525,30 @@ const QuickAddModal: React.FC<{
   const [start, setStart] = useState(defaultStart);
   const [end, setEnd] = useState(defaultEnd);
   const [notes, setNotes] = useState('');
+  const [confirmedDuplicate, setConfirmedDuplicate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const factor = source.emission_factor_value ?? 0;
   const kgco2e = amount ? calculateEmissions(Number(amount), factor) : 0;
 
+  // A second entry for a period is allowed — corrections and adjustments are
+  // real — but it has to be deliberate and it has to say why.
+  const overlaps = overlappingEntries(existingEntries, source.id, 'actual', start, end);
+  const isDuplicate = overlaps.length > 0;
+  const noteRequired = isDuplicate && notes.trim() === '';
+  const blocked = isDuplicate && (!confirmedDuplicate || noteRequired);
+
   const handleSave = async () => {
     if (!amount || Number(amount) <= 0) { setError('Please enter a positive amount.'); return; }
+    if (isDuplicate && !confirmedDuplicate) {
+      setError('Another entry already covers this period. Confirm below to add this one as well.');
+      return;
+    }
+    if (noteRequired) {
+      setError('A note is required when more than one entry covers the same period.');
+      return;
+    }
     setSaving(true); setError('');
     try {
       await upsertEmissionEntry(orgId, {
@@ -614,18 +613,80 @@ const QuickAddModal: React.FC<{
             </div>
           )}
 
+          {isDuplicate && (
+            <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3 space-y-2">
+              <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold">
+                    {overlaps.length === 1
+                      ? 'An entry already covers this period'
+                      : `${overlaps.length} entries already cover this period`}
+                  </p>
+                  <ul className="mt-1 space-y-0.5">
+                    {overlaps.slice(0, 3).map(o => (
+                      <li key={o.id} className="font-mono">
+                        {o.period_start} → {o.period_end}: {o.activity_data.toLocaleString()} {source.unit}
+                        {o.notes ? ` — ${o.notes}` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1">
+                    Adding another is fine for a correction or adjustment — it will be
+                    counted in addition to the entries above, so only continue if that
+                    is what you intend.
+                  </p>
+                </div>
+              </div>
+              <label className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={confirmedDuplicate}
+                  onChange={e => { setConfirmedDuplicate(e.target.checked); setError(''); }}
+                  className="mt-0.5 accent-amber-600"
+                />
+                <span>Yes, add this as an additional entry for the period.</span>
+              </label>
+            </div>
+          )}
+
           <div>
-            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Notes (optional)</label>
-            <input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. Oct 2026 bill" className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+              {isDuplicate
+                ? <>Notes <span className="text-amber-600 dark:text-amber-400">(required — explain why)</span></>
+                : 'Notes (optional)'}
+            </label>
+            <input
+              type="text"
+              value={notes}
+              onChange={e => { setNotes(e.target.value); setError(''); }}
+              placeholder={isDuplicate ? 'e.g. correction to Feb reading, second invoice' : 'e.g. Oct 2026 bill'}
+              className={`w-full px-4 py-2 border rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 ${
+                noteRequired
+                  ? 'border-amber-400 dark:border-amber-600 focus:ring-amber-500'
+                  : 'border-slate-300 dark:border-slate-600 focus:ring-indigo-500'
+              }`}
+            />
           </div>
 
           {error && <p className="text-red-500 text-sm">{error}</p>}
 
           <div className="flex gap-3 pt-1">
             <button onClick={onClose} className="flex-1 py-2 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">Cancel</button>
-            <button onClick={handleSave} disabled={saving || !amount} className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-lg text-sm font-bold transition-colors">
+            <button
+              onClick={handleSave}
+              disabled={saving || !amount || blocked}
+              title={blocked
+                ? (noteRequired
+                    ? 'Add a note explaining this additional entry'
+                    : 'Confirm that this is an additional entry for the period')
+                : undefined}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 disabled:opacity-40 text-white rounded-lg text-sm font-bold transition-colors ${
+                isDuplicate ? 'bg-amber-600 hover:bg-amber-700' : 'bg-indigo-600 hover:bg-indigo-700'
+              }`}
+            >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-              {saving ? 'Saving…' : 'Save Entry'}
+              {saving ? 'Saving…' : isDuplicate ? 'Add Anyway' : 'Save Entry'}
             </button>
           </div>
         </div>

@@ -2,6 +2,7 @@
 # cannot be skipped by forgetting to run them locally.
 #
 #   npm run test:security   security regression suite
+#   npm run test:unit       calculation and aggregation rules
 #   npx tsc --noEmit        type check
 #   npm run build           production build
 #   npm audit --omit=dev    runtime dependency audit
@@ -47,6 +48,9 @@ jobs:
 
       - name: Security regression tests
         run: npm run test:security
+
+      - name: Unit tests
+        run: npm run test:unit
 
       - name: Type check
         run: npx tsc --noEmit

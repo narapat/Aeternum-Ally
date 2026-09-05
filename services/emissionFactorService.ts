@@ -11,7 +11,7 @@
  */
 
 import { supabase } from '../lib/supabaseClient';
-import { EmissionFactor, EmissionSource, EmissionEntry, EmissionScope } from '../types';
+import { EmissionFactor, EmissionSource, EmissionEntry, EmissionScope, EmissionBasis } from '../types';
 import { deleteEvidenceByEntity } from './evidenceService';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -195,6 +195,7 @@ const fromDbEntry = (row: any): EmissionEntry => ({
   source_id: row.source_id,
   period_start: row.period_start,
   period_end: row.period_end,
+  basis: (row.basis === 'estimate' ? 'estimate' : 'actual') as EmissionBasis,
   activity_data: Number(row.activity_data),
   calculated_emissions_kgco2e: Number(row.calculated_emissions_kgco2e),
   notes: row.notes ?? null,
@@ -223,6 +224,8 @@ export async function upsertEmissionEntry(
     source_id: entry.source_id,
     period_start: entry.period_start,
     period_end: entry.period_end,
+    // Default to a measurement; only Carbon Quest records estimates.
+    basis: entry.basis ?? 'actual',
     activity_data: entry.activity_data,
     calculated_emissions_kgco2e: entry.calculated_emissions_kgco2e,
     notes: entry.notes ?? null,

@@ -249,12 +249,20 @@ export interface EmissionSource {
   asset_number?: string | null;
 }
 
+/**
+ * How a figure was arrived at. An `estimate` is annualised from a typical
+ * period (what Carbon Quest produces); an `actual` is measured consumption for
+ * the period stated.
+ */
+export type EmissionBasis = 'estimate' | 'actual';
+
 export interface EmissionEntry {
   id: string;
   organization_id: string;
   source_id: string;
   period_start: string;
   period_end: string;
+  basis: EmissionBasis;
   activity_data: number;
   calculated_emissions_kgco2e: number;
   notes: string | null;
