@@ -265,6 +265,8 @@ const CONTEXT_GROUPS: {
   category: CompanyContextCategory;
   question: string;
   helper: string;
+  nameLabel: string;
+  roleLabel: string;
   namePlaceholder: string;
   rolePlaceholder: string;
 }[] = [
@@ -272,6 +274,8 @@ const CONTEXT_GROUPS: {
     category: 'business',
     question: 'What kind of business is this, and who are your main customers?',
     helper: 'For example: a subscription software product, sold to small manufacturers.',
+    nameLabel: 'Who you serve, or what kind of business',
+    roleLabel: 'What this is to you',
     namePlaceholder: 'e.g. Small manufacturers',
     rolePlaceholder: 'e.g. Main customer group',
   },
@@ -279,6 +283,8 @@ const CONTEXT_GROUPS: {
     category: 'operating',
     question: 'What work does your company need to do well to deliver what it sells?',
     helper: 'Only what you actually do today. If you do not have something yet, mark it "Not established".',
+    nameLabel: 'The work',
+    roleLabel: 'How it gets done',
     namePlaceholder: 'e.g. Software development',
     rolePlaceholder: 'e.g. Done in-house',
   },
@@ -286,6 +292,8 @@ const CONTEXT_GROUPS: {
     category: 'technology',
     question: 'Which tools, platforms, or services does your business run on?',
     helper: 'Say what each one is used for — running the product, building it, or internal work.',
+    nameLabel: 'Tool, platform, or service',
+    roleLabel: 'What you use it for',
     namePlaceholder: 'e.g. Netlify',
     rolePlaceholder: 'e.g. Application hosting',
   },
@@ -293,6 +301,8 @@ const CONTEXT_GROUPS: {
     category: 'commercial',
     question: 'How do customers pay you, and how do you reach them?',
     helper: 'For example: monthly subscription; introductions from existing customers.',
+    nameLabel: 'How you get paid, or how you reach people',
+    roleLabel: 'What this is',
     namePlaceholder: 'e.g. Monthly subscription',
     rolePlaceholder: 'e.g. How customers pay',
   },
@@ -300,6 +310,8 @@ const CONTEXT_GROUPS: {
     category: 'ecosystem',
     question: 'Which outside organizations does your business depend on or work with?',
     helper: 'Suppliers, resellers, consultants, or anyone you rely on. Not standards you follow — those go below.',
+    nameLabel: 'The organization',
+    roleLabel: 'What they do for you',
     namePlaceholder: 'e.g. Sustainability consultants',
     rolePlaceholder: 'e.g. Refer clients to us',
   },
@@ -307,6 +319,8 @@ const CONTEXT_GROUPS: {
     category: 'standards',
     question: 'Which sustainability standards or frameworks do you use or follow?',
     helper: 'Using a standard does not make its organization a partner — this is kept separate on purpose.',
+    nameLabel: 'Standard or framework',
+    roleLabel: 'How you use it',
     namePlaceholder: 'e.g. GHG Protocol',
     rolePlaceholder: 'e.g. Methodology we follow',
   },
@@ -326,6 +340,10 @@ const ContextGroup: React.FC<{
 }> = ({ group, items, onChange }) => {
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
+  // Chosen before the item exists. Creating everything as 'current' and asking
+  // the user to correct it afterwards records a plan as a present fact for as
+  // long as they do not notice — the failure this whole layer exists to stop.
+  const [status, setStatus] = useState<CompanyContextStatus>('current');
 
   const mine = items.filter(i => i.category === group.category);
   const others = items.filter(i => i.category !== group.category);
@@ -337,12 +355,13 @@ const ContextGroup: React.FC<{
       category: group.category,
       name: name.trim(),
       role: role.trim(),
-      status: 'current',
+      status,
       source: 'user',
       updatedAt: new Date().toISOString(),
     }]);
     setName('');
     setRole('');
+    setStatus('current');
   };
 
   const update = (id: string, patch: Partial<CompanyContextItem>) =>
@@ -389,25 +408,70 @@ const ContextGroup: React.FC<{
         </ul>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        <input
-          value={name}
-          onChange={e => setName(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
-          placeholder={group.namePlaceholder}
-          className="flex-1 min-w-[160px] px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
-        />
-        <input
-          value={role}
-          onChange={e => setRole(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
-          placeholder={group.rolePlaceholder}
-          className="flex-1 min-w-[160px] px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
-        />
+      {/* Two calm lines rather than one dense strip: labelled inputs, then the
+          status choice and Add. Six of these stack on one page, so the row has
+          to read as a question being answered, not a control panel. */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label
+            htmlFor={`${group.category}-name`}
+            className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1"
+          >
+            {group.nameLabel}
+          </label>
+          <input
+            id={`${group.category}-name`}
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+            placeholder={group.namePlaceholder}
+            className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+          />
+        </div>
+        <div>
+          <label
+            htmlFor={`${group.category}-role`}
+            className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1"
+          >
+            {group.roleLabel}{' '}
+            <span className="font-normal text-slate-400">(optional)</span>
+          </label>
+          <input
+            id={`${group.category}-role`}
+            value={role}
+            onChange={e => setRole(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+            placeholder={group.rolePlaceholder}
+            className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 mt-3">
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+          Is this happening now?
+        </span>
+        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Status for the item being added">
+          {STATUS_CHOICES.map(choice => (
+            <button
+              key={choice.value}
+              type="button"
+              aria-pressed={status === choice.value}
+              onClick={() => setStatus(choice.value)}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                status === choice.value
+                  ? 'bg-esg-600 text-white'
+                  : 'bg-white dark:bg-slate-950 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-600 hover:border-esg-400'
+              }`}
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
         <button
           onClick={add}
           disabled={!name.trim()}
-          className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-esg-600 hover:bg-esg-700 disabled:opacity-40 text-white"
+          className="ml-auto inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-esg-600 hover:bg-esg-700 disabled:opacity-40 text-white"
         >
           <Plus className="w-4 h-4" /> Add
         </button>
