@@ -155,6 +155,12 @@ CREATE TABLE company_profiles (
   mission          text NOT NULL DEFAULT '',
   vision           text NOT NULL DEFAULT '',
   products_services text NOT NULL DEFAULT '',
+  -- Migration 031: structured company facts shared by every AI feature.
+  -- Items are {id, category, name, role, status, source, updatedAt}; absence
+  -- means unknown, and status keeps plans from being read as current facts.
+  structured_context jsonb NOT NULL DEFAULT '[]'::jsonb
+    CONSTRAINT company_profiles_structured_context_is_array
+    CHECK (jsonb_typeof(structured_context) = 'array'),
   updated_at       timestamptz NOT NULL DEFAULT now()
 );
 

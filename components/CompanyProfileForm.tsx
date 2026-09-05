@@ -1,10 +1,15 @@
 
 import React, { useState } from 'react';
-import { CompanyProfile } from '../types';
+import {
+  CompanyProfile,
+  CompanyContextCategory,
+  CompanyContextItem,
+  CompanyContextStatus,
+} from '../types';
 import { INDUSTRY_SECTORS, ISIC_CODES_GROUPED, COUNTRIES } from '../constants';
 import {
   Building2, MapPin, Globe, Hash, Users, Wallet, Target, Layers, BookOpen,
-  Settings, Mail, Phone, AlertCircle, ArrowRight,
+  Settings, Mail, Phone, AlertCircle, ArrowRight, Workflow, Plus, X,
 } from 'lucide-react';
 import SaveIndicator from './SaveIndicator';
 import type { SaveStatus } from '../hooks/useOrgData';
@@ -23,7 +28,7 @@ interface Props {
 const CompanyProfileForm: React.FC<Props> = ({
   data, onChange, onSave, saveStatus, isDirty, saveError, onOpenSettings,
 }) => {
-  const [activeTab, setActiveTab] = useState<'general' | 'details' | 'strategy'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'details' | 'strategy' | 'context'>('general');
   const [emailError, setEmailError] = useState<string | null>(null);
 
   const handleChange = (field: keyof CompanyProfile, value: string) => {
@@ -66,6 +71,9 @@ const CompanyProfileForm: React.FC<Props> = ({
           <TabButton
             active={activeTab === 'strategy'} onClick={() => setActiveTab('strategy')}
             icon={<Target className="w-4 h-4 flex-shrink-0" />} label="Strategy & Mission" />
+          <TabButton
+            active={activeTab === 'context'} onClick={() => setActiveTab('context')}
+            icon={<Workflow className="w-4 h-4 flex-shrink-0" />} label="How We Work" />
           {/* Team & AI moved to Settings */}
           <button
             type="button"
@@ -201,6 +209,29 @@ const CompanyProfileForm: React.FC<Props> = ({
             </div>
           )}
 
+          {activeTab === 'context' && (
+            <div>
+              <div className="mb-2">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-white">How your business works</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                  Answer whatever you can — all of this is optional, and you can come back later.
+                  AeternumAlly only uses what you state here as fact, so leaving something out is
+                  better than guessing. Mark anything you are only considering as Planned or Exploring
+                  and it will not be treated as something you already do.
+                </p>
+              </div>
+
+              {CONTEXT_GROUPS.map(group => (
+                <ContextGroup
+                  key={group.category}
+                  group={group}
+                  items={data.structuredContext ?? []}
+                  onChange={items => onChange({ ...data, structuredContext: items })}
+                />
+              ))}
+            </div>
+          )}
+
           {activeTab === 'strategy' && (
             <div className="space-y-6">
               <div className="space-y-2">
@@ -223,6 +254,165 @@ const CompanyProfileForm: React.FC<Props> = ({
         </div>
       </div>
     </div>
+  );
+};
+
+/**
+ * The questions a user actually sees. The internal category never appears —
+ * "commercial model" and "ecosystem relationships" are our words, not theirs.
+ */
+const CONTEXT_GROUPS: {
+  category: CompanyContextCategory;
+  question: string;
+  helper: string;
+  namePlaceholder: string;
+  rolePlaceholder: string;
+}[] = [
+  {
+    category: 'business',
+    question: 'What kind of business is this, and who are your main customers?',
+    helper: 'For example: a subscription software product, sold to small manufacturers.',
+    namePlaceholder: 'e.g. Small manufacturers',
+    rolePlaceholder: 'e.g. Main customer group',
+  },
+  {
+    category: 'operating',
+    question: 'What work does your company need to do well to deliver what it sells?',
+    helper: 'Only what you actually do today. If you do not have something yet, mark it "Not established".',
+    namePlaceholder: 'e.g. Software development',
+    rolePlaceholder: 'e.g. Done in-house',
+  },
+  {
+    category: 'technology',
+    question: 'Which tools, platforms, or services does your business run on?',
+    helper: 'Say what each one is used for — running the product, building it, or internal work.',
+    namePlaceholder: 'e.g. Netlify',
+    rolePlaceholder: 'e.g. Application hosting',
+  },
+  {
+    category: 'commercial',
+    question: 'How do customers pay you, and how do you reach them?',
+    helper: 'For example: monthly subscription; introductions from existing customers.',
+    namePlaceholder: 'e.g. Monthly subscription',
+    rolePlaceholder: 'e.g. How customers pay',
+  },
+  {
+    category: 'ecosystem',
+    question: 'Which outside organizations does your business depend on or work with?',
+    helper: 'Suppliers, resellers, consultants, or anyone you rely on. Not standards you follow — those go below.',
+    namePlaceholder: 'e.g. Sustainability consultants',
+    rolePlaceholder: 'e.g. Refer clients to us',
+  },
+  {
+    category: 'standards',
+    question: 'Which sustainability standards or frameworks do you use or follow?',
+    helper: 'Using a standard does not make its organization a partner — this is kept separate on purpose.',
+    namePlaceholder: 'e.g. GHG Protocol',
+    rolePlaceholder: 'e.g. Methodology we follow',
+  },
+];
+
+const STATUS_CHOICES: { value: CompanyContextStatus; label: string }[] = [
+  { value: 'current', label: 'Now' },
+  { value: 'planned', label: 'Planned' },
+  { value: 'exploring', label: 'Exploring' },
+  { value: 'not_established', label: 'Not yet' },
+];
+
+const ContextGroup: React.FC<{
+  group: typeof CONTEXT_GROUPS[number];
+  items: CompanyContextItem[];
+  onChange: (items: CompanyContextItem[]) => void;
+}> = ({ group, items, onChange }) => {
+  const [name, setName] = useState('');
+  const [role, setRole] = useState('');
+
+  const mine = items.filter(i => i.category === group.category);
+  const others = items.filter(i => i.category !== group.category);
+
+  const add = () => {
+    if (!name.trim()) return;
+    onChange([...others, ...mine, {
+      id: crypto.randomUUID(),
+      category: group.category,
+      name: name.trim(),
+      role: role.trim(),
+      status: 'current',
+      source: 'user',
+      updatedAt: new Date().toISOString(),
+    }]);
+    setName('');
+    setRole('');
+  };
+
+  const update = (id: string, patch: Partial<CompanyContextItem>) =>
+    onChange([...others, ...mine.map(i =>
+      i.id === id ? { ...i, ...patch, updatedAt: new Date().toISOString() } : i)]);
+
+  const remove = (id: string) => onChange([...others, ...mine.filter(i => i.id !== id)]);
+
+  return (
+    <section className="py-5 border-b border-slate-100 dark:border-slate-700 last:border-0">
+      <h3 className="text-sm font-semibold text-slate-800 dark:text-white">{group.question}</h3>
+      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 mb-3">{group.helper}</p>
+
+      {mine.length > 0 && (
+        <ul className="space-y-2 mb-3">
+          {mine.map(item => (
+            <li key={item.id} className="flex flex-wrap items-center gap-2 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
+              <span className="font-medium text-sm text-slate-800 dark:text-white">{item.name}</span>
+              {item.role && <span className="text-xs text-slate-500 dark:text-slate-400">— {item.role}</span>}
+              <div className="flex gap-1 ml-auto">
+                {STATUS_CHOICES.map(choice => (
+                  <button
+                    key={choice.value}
+                    onClick={() => update(item.id, { status: choice.value })}
+                    className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                      item.status === choice.value
+                        ? 'bg-esg-600 text-white'
+                        : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600 hover:border-esg-400'
+                    }`}
+                  >
+                    {choice.label}
+                  </button>
+                ))}
+                <button
+                  onClick={() => remove(item.id)}
+                  aria-label={`Remove ${item.name}`}
+                  className="p-1 text-slate-400 hover:text-red-500"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <input
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          placeholder={group.namePlaceholder}
+          className="flex-1 min-w-[160px] px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+        />
+        <input
+          value={role}
+          onChange={e => setRole(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          placeholder={group.rolePlaceholder}
+          className="flex-1 min-w-[160px] px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+        />
+        <button
+          onClick={add}
+          disabled={!name.trim()}
+          className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-esg-600 hover:bg-esg-700 disabled:opacity-40 text-white"
+        >
+          <Plus className="w-4 h-4" /> Add
+        </button>
+      </div>
+    </section>
   );
 };
 
