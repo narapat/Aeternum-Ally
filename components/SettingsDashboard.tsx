@@ -44,7 +44,9 @@ type SettingsTab = 'team' | 'ai' | 'integrations' | 'usage' | 'activity';
 // ─────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────
-const PLATFORM_SOFT_LIMIT_DEFAULT = 100;
+// Shown only in the moment before settings load; the real ceiling is
+// resolved server-side and arrives as `monthly_call_limit`.
+const MONTHLY_LIMIT_FALLBACK = 100;
 
 const MODELS = [
   {
@@ -207,7 +209,7 @@ const SettingsDashboard: React.FC<Props> = ({
             <UsageSection
               usage={usage}
               monthlyCount={monthlyCount}
-              softQuotaMonthly={aiSettings?.soft_quota_monthly ?? null}
+              monthlyCallLimit={aiSettings?.monthly_call_limit ?? null}
               useBYOK={aiSettings?.use_byok ?? false}
               isLoading={aiLoading}
             />
@@ -1002,13 +1004,14 @@ const AISection: React.FC<AISectionProps> = ({
 interface UsageSectionProps {
   usage: AiUsageRow[];
   monthlyCount: number;
-  softQuotaMonthly: number | null;
+  /** Effective ceiling resolved server-side: tier default or override, plus active grants. */
+  monthlyCallLimit: number | null;
   useBYOK: boolean;
   isLoading: boolean;
 }
 
 const UsageSection: React.FC<UsageSectionProps> = ({
-  usage, monthlyCount, softQuotaMonthly, useBYOK, isLoading,
+  usage, monthlyCount, monthlyCallLimit, useBYOK, isLoading,
 }) => {
   const stats = useMemo(() => {
     const monthStart = new Date();
@@ -1045,7 +1048,7 @@ const UsageSection: React.FC<UsageSectionProps> = ({
 
   if (isLoading) return <LoadingSpinner label="Loading usage data…" />;
 
-  const limit = softQuotaMonthly ?? PLATFORM_SOFT_LIMIT_DEFAULT;
+  const limit = monthlyCallLimit ?? MONTHLY_LIMIT_FALLBACK;
 
   return (
     <div className="space-y-8">
@@ -1057,7 +1060,8 @@ const UsageSection: React.FC<UsageSectionProps> = ({
               <Hash className="w-4 h-4 text-esg-600" /> Monthly call quota
             </h3>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Platform quota resets on the 1st of each month. Enable BYOK (AI tab) to bypass it.
+              AI features pause when this is spent, and the allowance resets on the 1st.
+              Enable BYOK (AI tab) to bypass it entirely.
             </p>
           </header>
           <QuotaBar used={monthlyCount} limit={limit} />
@@ -1200,18 +1204,18 @@ const QuotaBar: React.FC<{ used: number; limit: number }> = ({ used, limit }) =>
           : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'}`}>
           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           {isOver
-            ? 'Soft quota exceeded. AI calls are still allowed — enable BYOK or contact support to raise the limit.'
-            : 'Approaching monthly quota. Consider enabling BYOK (AI tab) to avoid interruptions.'}
+            ? 'Monthly quota reached. AI features are paused until the allowance resets on the 1st. Enable BYOK (AI tab) to continue now, or contact support to raise the limit.'
+            : 'Approaching the monthly quota. Enable BYOK (AI tab), or contact support to raise the limit, before AI features pause.'}
         </div>
       )}
       <div className="flex justify-between items-center text-xs text-slate-600 dark:text-slate-400">
         <span>{used.toLocaleString()} calls used</span>
-        <span>{limit.toLocaleString()} soft limit</span>
+        <span>{limit.toLocaleString()} monthly limit</span>
       </div>
       <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
       </div>
-      <p className="text-xs text-slate-400">{pct}% of monthly soft limit used</p>
+      <p className="text-xs text-slate-400">{pct}% of the monthly limit used</p>
     </div>
   );
 };
