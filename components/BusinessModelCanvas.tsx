@@ -152,7 +152,7 @@ const BusinessModelCanvas: React.FC<Props> = ({ data, onChange, profile, saveSta
 
   const handleAiSuggest = async (field: CanvasField, label: string) => {
     setLoadingField(field);
-    const suggestion = await generateCanvasSuggestion(profile, label);
+    const suggestion = await generateCanvasSuggestion(profile, label, data);
     if (suggestion.length > 0) {
       const existing = data[field];
       const merged = [...existing, ...suggestion.filter(s => !existing.includes(s))];

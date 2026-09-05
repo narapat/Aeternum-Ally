@@ -293,6 +293,8 @@ async function runAction(
       return generateSwotExternal(ai, model, params);
     case "generateKPISuggestions":
       return generateKPISuggestions(ai, model, params);
+    case "generateCompanyStrategicReport":
+      return generateCompanyStrategicReport(ai, model, params);
     case "triggerReportGeneration":
       return triggerReportGeneration(event, { ...params, organization_id, user_id: user.id, user_email: user.email ?? null });
     case "triggerDMAAnalysis":
@@ -374,6 +376,224 @@ function buildCompanyContext(profile: any): string {
 // Join a BMC field (string[] after migration) for use in AI prompts.
 const joinField = (v: string | string[]): string =>
   Array.isArray(v) ? v.join(", ") : (v ?? "");
+
+const SBMC_BLOCKS = [
+  "Key Partners",
+  "Key Activities",
+  "Key Resources",
+  "Value Propositions",
+  "Customer Relationships",
+  "Channels",
+  "Customer Segments",
+  "Cost Structure",
+  "Revenue Streams",
+  "Eco-Social Costs",
+  "Eco-Social Benefits",
+] as const;
+
+type SBMCBlockLabel = typeof SBMC_BLOCKS[number];
+
+const SBMC_FIELD_BY_LABEL: Record<SBMCBlockLabel, string> = {
+  "Key Partners": "keyPartners",
+  "Key Activities": "keyActivities",
+  "Key Resources": "keyResources",
+  "Value Propositions": "valueProposition",
+  "Customer Relationships": "customerRelationships",
+  "Channels": "channels",
+  "Customer Segments": "customerSegments",
+  "Cost Structure": "costStructure",
+  "Revenue Streams": "revenueStreams",
+  "Eco-Social Costs": "ecoSocialCosts",
+  "Eco-Social Benefits": "ecoSocialBenefits",
+};
+
+const SBMC_BLOCK_DEFINITIONS: Record<SBMCBlockLabel, string> = {
+  "Key Partners": "External organizations or parties the company depends on or intentionally collaborates with to operate, deliver value, reduce risk, or scale. Do not treat standards bodies as partners merely because their standards are referenced.",
+  "Key Activities": "The most important internal activities the company must perform to create, deliver, sell, support, and improve its value proposition. Do not include external partners, customer groups, channels, or resources unless the activity itself is the point.",
+  "Key Resources": "The critical assets, capabilities, data, people, technology, intellectual property, financial resources, or physical resources the company needs to operate and deliver value. Do not list activities, partners, or customer-facing promises.",
+  "Value Propositions": "The specific products, services, outcomes, and differentiated value the company offers to customers or beneficiaries. Do not list customer segments, channels, internal activities, or unsupported impact claims.",
+  "Customer Relationships": "How the company acquires, supports, retains, and interacts with customers. Do not include partnerships, marketing channels, customer segments, or internal activities.",
+  "Channels": "The routes and touchpoints through which the company reaches customer segments for awareness, sales, delivery, service, or communication. Do not include relationship styles, customer types, or partner organizations unless they are explicitly a route to market.",
+  "Customer Segments": "The distinct groups of customers, users, beneficiaries, or buyers the company serves or intends to serve. Do not include channels, relationships, partners, or generic stakeholder categories without support from the company context.",
+  "Cost Structure": "The main economic cost drivers and operating expenses required to run the business model. Do not include environmental or social externalities here unless they are also explicit financial costs.",
+  "Revenue Streams": "The ways the company earns or could earn money from customers for delivered value, such as subscriptions, usage fees, licensing, services, or transactions. Do not invent monetization models unsupported by the company context.",
+  "Eco-Social Costs": "Credible actual or potential negative environmental or social externalities arising from the company's technology, activities, operations, or business relationships. Do not confuse ordinary operating expenses with eco-social externalities.",
+  "Eco-Social Benefits": "Positive environmental or social outcomes the company's products, services, or business model can support or enable. Do not guarantee outcomes, invent impacts, or imply unsupported causality.",
+};
+
+type NormalizedCanvas = Record<string, string[]>;
+
+function toPromptArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map(item => item.trim())
+    : [];
+}
+
+function normalizeCanvasContext(bmcData: any = {}): NormalizedCanvas {
+  return Object.fromEntries(
+    SBMC_BLOCKS.map(label => [SBMC_FIELD_BY_LABEL[label], toPromptArray(bmcData?.[SBMC_FIELD_BY_LABEL[label]])]),
+  );
+}
+
+function getSBMCBlockLabel(fieldLabel: unknown): SBMCBlockLabel {
+  if (typeof fieldLabel !== "string") {
+    throw new Error("Canvas suggestion requires a valid field label.");
+  }
+  const match = SBMC_BLOCKS.find(label => label.toLowerCase() === fieldLabel.trim().toLowerCase());
+  if (!match) {
+    throw new Error("Canvas suggestion requires a recognized SBMC block label.");
+  }
+  return match;
+}
+
+function buildCanvasContextBlock(bmcData: any = {}): string {
+  const normalized = normalizeCanvasContext(bmcData);
+  return SBMC_BLOCKS
+    .map(label => {
+      const items = normalized[SBMC_FIELD_BY_LABEL[label]];
+      return `- ${label}: ${items.length ? items.join("; ") : "(empty)"}`;
+    })
+    .join("\n");
+}
+
+function buildCanvasSuggestionPrompt(profile: any, fieldLabel: unknown, bmcData: any = {}): string {
+  const blockLabel = getSBMCBlockLabel(fieldLabel);
+  const blockDefinition = SBMC_BLOCK_DEFINITIONS[blockLabel];
+  const currentBlockItems = normalizeCanvasContext(bmcData)[SBMC_FIELD_BY_LABEL[blockLabel]];
+
+  return `
+    Act as a business strategy consultant specializing in Sustainable Business Model Canvas.
+
+    --- COMPANY CONTEXT ---
+    ${buildCompanyContext(profile)}
+    -----------------------
+
+    --- CURRENT SBMC CONTENT ---
+    ${buildCanvasContextBlock(bmcData)}
+    ----------------------------
+
+    Requested block: "${blockLabel}"
+    Requested block definition:
+    ${blockDefinition}
+
+    Existing items in the requested block:
+    ${currentBlockItems.length ? currentBlockItems.map(item => `- ${item}`).join("\n") : "- (empty)"}
+
+    Task:
+    Suggest concise content for the requested SBMC block only.
+
+    Grounding and classification rules:
+    - Treat only explicitly supplied company information and current canvas content as factual context.
+    - Do not assume common industry practices, partnerships, channels, capabilities, customers, revenue models, teams, certifications, or operational practices already exist.
+    - Strategic possibilities may be suggested, but they must not be worded as established facts when unsupported.
+    - Apply the requested SBMC block definition strictly.
+    - Do not suggest an item if it primarily belongs to another SBMC block.
+    - Avoid duplicate or semantically overlapping suggestions already present anywhere in the current canvas.
+    - Avoid contradictions with existing canvas content.
+    - Prefer company-specific strategic suggestions over generic SaaS or sustainability-business statements.
+    - Prefer fewer high-quality suggestions rather than filling the block artificially.
+
+    Sustainability claim guardrails:
+    - For Eco-Social Benefits, describe outcomes the company can support or enable.
+    - Do not guarantee environmental or social outcomes.
+    - Do not claim "significant" reductions or improvements without evidence.
+    - Do not invent biodiversity, climate, social, or governance impacts.
+    - Do not imply causality unsupported by the supplied information.
+    - Prefer wording such as "supports", "enables", "helps identify", "helps manage", or "may contribute to" when actual outcomes are unavailable.
+    - For Eco-Social Costs, focus on credible actual or potential negative environmental/social externalities from technology, activities, operations, or business relationships.
+    - Do not confuse ordinary operating expenses with eco-social externalities.
+
+    CRITICAL: Return ONLY a valid JSON array of strings.
+    Each string is one concise point under 15 words.
+    Return [] if no grounded, block-appropriate suggestions apply.
+    No markdown, no backticks, no explanation.
+  `;
+}
+
+function limitedItems(items: unknown, maxItems = 8): string[] {
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    .map(item => item.trim())
+    .slice(0, maxItems);
+}
+
+function buildCompanyStrategicBmcContext(bmcData: any = {}, maxItems = 8): string {
+  const normalized = normalizeCanvasContext(bmcData);
+  return SBMC_BLOCKS
+    .map(label => {
+      const items = limitedItems(normalized[SBMC_FIELD_BY_LABEL[label]], maxItems);
+      if (!items.length) return "";
+      return `- ${label}: ${items.join("; ")}`;
+    })
+    .filter(Boolean)
+    .join("\n") || "No SBMC content provided.";
+}
+
+function buildSwotContext(swotData: any = {}, maxItems = 8): string {
+  const sections = [
+    ["Strengths", limitedItems(swotData?.strengths, maxItems)],
+    ["Weaknesses", limitedItems(swotData?.weaknesses, maxItems)],
+    ["Opportunities", limitedItems(swotData?.opportunities, maxItems)],
+    ["Threats", limitedItems(swotData?.threats, maxItems)],
+  ];
+  return sections
+    .map(([label, items]) => {
+      const list = items as string[];
+      if (!list.length) return "";
+      return `- ${label}: ${list.join("; ")}`;
+    })
+    .filter(Boolean)
+    .join("\n") || "No SWOT content provided.";
+}
+
+function buildCompanyStrategicReportPrompt(profile: any, bmcData: any = {}, swotData: any = {}): string {
+  return `
+    You are a senior business and sustainability strategy consultant.
+    Create a concise company strategic profile report from user-supplied data.
+
+    --- COMPANY PROFILE ---
+    ${buildCompanyContext(profile)}
+    Website: ${profile?.website || "Not provided"}
+    Founding year: ${profile?.foundingYear || "Not provided"}
+    Address: ${[
+      profile?.addressStreet,
+      profile?.addressCity,
+      profile?.addressState,
+      profile?.addressPostalCode,
+      profile?.addressCountry,
+    ].filter(Boolean).join(", ") || "Not provided"}
+    Contact: ${[profile?.contactEmail, profile?.contactPhone].filter(Boolean).join(", ") || "Not provided"}
+    -----------------------
+
+    --- SUSTAINABLE BUSINESS MODEL CANVAS ---
+    ${buildCompanyStrategicBmcContext(bmcData)}
+    ------------------------------------------
+
+    --- SWOT ANALYSIS ---
+    ${buildSwotContext(swotData)}
+    ---------------------
+
+    Grounding rules:
+    - Treat only the supplied company profile, SBMC, and SWOT content as factual.
+    - Do not invent customers, products, partnerships, certifications, locations, revenue models, operational practices, or quantified impacts.
+    - If making an inference, phrase it as an interpretation, not an established fact.
+    - Prefer company-specific strategic analysis over generic sustainability language.
+    - Identify missing information instead of filling gaps with assumptions.
+    - Keep the report useful for internal strategy review, not as an ESRS disclosure statement.
+    - Avoid repeating the same point across sections.
+
+    Output requirements:
+    - Return ONLY valid JSON.
+    - profileSummary: 90-130 words summarizing company identity and offering.
+    - businessModelSummary: 120-170 words analyzing how the SBMC creates and captures value.
+    - swotAnalysis: 120-170 words synthesizing the SWOT into strategic implications.
+    - strategicCommentary: 120-170 words connecting profile, SBMC, and SWOT into a practical business analysis.
+    - dataGaps: 3-6 concise strings naming missing or weak inputs.
+    - recommendations: 3-6 concise strings with practical next steps.
+    - No markdown, no source citations, no extra keys.
+  `;
+}
 
 // =============================================================
 // Action implementations
@@ -510,21 +730,9 @@ ${(qualityCheckContext.issues as any[]).map((i: any) =>
 async function generateCanvasSuggestion(
   ai: GoogleGenAI,
   model: string,
-  { profile, fieldLabel }: any
+  { profile, fieldLabel, bmcData }: any
 ) {
-  const prompt = `
-    Act as a business strategy consultant specializing in Sustainable Business Model Canvas.
-
-    ${buildCompanyContext(profile)}
-
-    Task:
-    Suggest content for the "${fieldLabel}" block of the Business Model Canvas.
-    Each suggestion should be a short, distinct point specific to the company's industry and products/services.
-    If the field is "Eco-Social Costs" or "Eco-Social Benefits", focus strictly on environmental and social externalities.
-
-    CRITICAL: Return ONLY a valid JSON array of strings. Each string is one concise point (under 15 words).
-    No markdown, no backticks, no explanation.
-  `;
+  const prompt = buildCanvasSuggestionPrompt(profile, fieldLabel, bmcData);
 
   const response = await ai.models.generateContent({
     model,
@@ -535,6 +743,7 @@ async function generateCanvasSuggestion(
         type: Type.ARRAY,
         items: { type: Type.STRING },
       },
+      ...noThinkingConfig(model),
     },
   });
 
@@ -678,6 +887,63 @@ async function generateKPISuggestions(
 
   return {
     result: parseAIJson<object[]>(response.text, []),
+    ...extractTokens(response),
+  };
+}
+
+async function generateCompanyStrategicReport(
+  ai: GoogleGenAI,
+  model: string,
+  { profile, bmcData, swotData }: any
+) {
+  const fallback = {
+    profileSummary: "",
+    businessModelSummary: "",
+    swotAnalysis: "",
+    strategicCommentary: "",
+    dataGaps: [],
+    recommendations: [],
+  };
+
+  const response = await ai.models.generateContent({
+    model,
+    contents: buildCompanyStrategicReportPrompt(profile, bmcData, swotData),
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        required: [
+          "profileSummary",
+          "businessModelSummary",
+          "swotAnalysis",
+          "strategicCommentary",
+          "dataGaps",
+          "recommendations",
+        ],
+        properties: {
+          profileSummary: { type: Type.STRING },
+          businessModelSummary: { type: Type.STRING },
+          swotAnalysis: { type: Type.STRING },
+          strategicCommentary: { type: Type.STRING },
+          dataGaps: { type: Type.ARRAY, items: { type: Type.STRING } },
+          recommendations: { type: Type.ARRAY, items: { type: Type.STRING } },
+        },
+      },
+      ...noThinkingConfig(model),
+    },
+  });
+
+  const parsed = parseAIJson<any>(response.text, fallback);
+
+  return {
+    result: {
+      profileSummary: typeof parsed.profileSummary === "string" ? parsed.profileSummary : "",
+      businessModelSummary: typeof parsed.businessModelSummary === "string" ? parsed.businessModelSummary : "",
+      swotAnalysis: typeof parsed.swotAnalysis === "string" ? parsed.swotAnalysis : "",
+      strategicCommentary: typeof parsed.strategicCommentary === "string" ? parsed.strategicCommentary : "",
+      dataGaps: Array.isArray(parsed.dataGaps) ? parsed.dataGaps.filter((item: any) => typeof item === "string") : [],
+      recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations.filter((item: any) => typeof item === "string") : [],
+    },
     ...extractTokens(response),
   };
 }
@@ -1567,4 +1833,15 @@ Keep the total response short and precise. The explanation for all 3 topics comb
   return { result, inputTokens, outputTokens };
 }
 
-export { handler };
+export {
+  buildCanvasContextBlock,
+  buildCanvasSuggestionPrompt,
+  buildCompanyStrategicBmcContext,
+  buildCompanyStrategicReportPrompt,
+  getSBMCBlockLabel,
+  handler,
+  normalizeCanvasContext,
+  parseAIJson,
+  SBMC_BLOCK_DEFINITIONS,
+  SBMC_BLOCKS,
+};
