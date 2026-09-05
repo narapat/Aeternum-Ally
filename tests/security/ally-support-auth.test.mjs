@@ -69,6 +69,13 @@ function createHarness({
       if (table === "organizations") {
         return createQuery({ data: { tier }, error: null });
       }
+      if (table === "ai_quota_grants") {
+        return {
+          select: () => ({ eq: () => ({ gt: async () => ({ data: [], error: null }) }) }),
+          // The auto-burst attempt on a breach; "already used this month".
+          insert: async () => ({ error: { code: "23505" } }),
+        };
+      }
       if (table === "ai_usage_log") {
         const countQuery = {
           select: () => countQuery,

@@ -11,7 +11,7 @@ import { withAIRequestFence } from "./_shared/aiRequestFence.js";
 import { loadOrganizationAiConfig } from "./_shared/organizationAiConfig.js";
 import { loadOrganizationTier } from "./_shared/organizationTier.js";
 import {
-  checkMonthlyAiQuota,
+  authorizeAiCall,
   platformQuotaType,
   quotaExceededResponse,
 } from "./_shared/aiQuota.js";
@@ -177,7 +177,7 @@ export function createAllySupportHandler(
       const tier = await loadOrganizationTier(admin, organization_id);
       quotaType = platformQuotaType(tier);
 
-      const quota = await checkMonthlyAiQuota(
+      const quota = await authorizeAiCall(
         admin,
         organization_id,
         tier,

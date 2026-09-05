@@ -8,7 +8,7 @@ import { withAIRequestFence } from "./_shared/aiRequestFence.js";
 import { loadOrganizationAiConfig } from "./_shared/organizationAiConfig.js";
 import { loadOrganizationTier } from "./_shared/organizationTier.js";
 import {
-  checkMonthlyAiQuota,
+  authorizeAiCall,
   platformQuotaType,
   quotaExceededResponse,
 } from "./_shared/aiQuota.js";
@@ -145,7 +145,9 @@ const handler = async (event: any) => {
     const tier = await loadOrganizationTier(admin, organization_id);
     effectiveQuotaType = platformQuotaType(tier);
 
-    const quota = await checkMonthlyAiQuota(
+    // Refusing is the last resort: this also spends the org's one automatic
+    // burst for the month before giving up.
+    const quota = await authorizeAiCall(
       admin,
       organization_id,
       tier,

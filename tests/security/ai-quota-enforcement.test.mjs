@@ -12,25 +12,30 @@ import {
 } from "../../netlify/functions/_shared/aiQuota.js";
 import { ORGANIZATION_TIERS } from "../../netlify/functions/_shared/organizationTier.js";
 
-/** Stub for admin.from("ai_usage_log").select(...).eq().eq().gte() */
-function stubUsage(result) {
+/**
+ * Stub for the two reads the quota check makes:
+ *   ai_usage_log   .select(...).eq().eq().gte()   → this month's calls
+ *   ai_quota_grants.select(...).eq().gt()         → active top-ups
+ */
+function stubUsage(result, grants = []) {
   const filters = [];
   return {
     filters,
-    from() {
+    from(table) {
       const chain = {
         select: (columns, options) => {
-          filters.push({ columns, options });
+          if (table === "ai_usage_log") filters.push({ columns, options });
           return chain;
         },
         eq: (column, value) => {
-          filters.push({ column, value });
+          if (table === "ai_usage_log") filters.push({ column, value });
           return chain;
         },
         gte: async (column, value) => {
           filters.push({ column, value });
           return result;
         },
+        gt: async () => ({ data: grants, error: null }),
       };
       return chain;
     },
@@ -127,14 +132,18 @@ test("both AI entry points enforce the ceiling before calling the provider", asy
   ]);
 
   for (const [name, source] of [["api.ts", api], ["ally-support.ts", ally]]) {
-    assert.match(source, /checkMonthlyAiQuota\(/, `${name} must check the quota`);
+    // authorizeAiCall checks the ceiling and spends the monthly auto-burst
+    // before refusing, so entry points must go through it rather than the
+    // bare check.
+    assert.match(source, /authorizeAiCall\(/, `${name} must authorize the call`);
+    assert.doesNotMatch(source, /checkMonthlyAiQuota\(/, `${name} must not skip the auto-burst`);
     assert.match(source, /json\(429, quotaExceededResponse\(quota\)\)/, `${name} must return 429`);
     assert.match(source, /platformQuotaType\(tier\)/, `${name} must log the tier-aware quota type`);
 
     // The gate must precede the provider call in source order.
     assert.ok(
-      source.indexOf("checkMonthlyAiQuota(") < source.indexOf("generateContent"),
-      `${name} must check the quota before calling Gemini`,
+      source.indexOf("authorizeAiCall(") < source.indexOf("generateContent"),
+      `${name} must authorize before calling Gemini`,
     );
   }
 
