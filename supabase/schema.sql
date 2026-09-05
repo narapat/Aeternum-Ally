@@ -775,13 +775,13 @@ COMMENT ON TABLE notification_delivery_log IS 'Audit trail for all notification 
 
 ALTER TABLE ai_usage_log
   ADD COLUMN IF NOT EXISTS quota_type text
-    CHECK (quota_type IN ('platform_free', 'platform_pro', 'platform_enterprise', 'byok')),
+    CHECK (quota_type IN ('platform_free', 'platform_starter', 'platform_pro', 'platform_enterprise', 'byok')),
   ADD COLUMN IF NOT EXISTS metadata jsonb;
 
 CREATE INDEX IF NOT EXISTS idx_ai_usage_quota
   ON ai_usage_log (organization_id, quota_type, created_at);
 
-COMMENT ON COLUMN ai_usage_log.quota_type IS 'Track whether call used platform quota or user BYOK key';
+COMMENT ON COLUMN ai_usage_log.quota_type IS 'Allowance the call drew from: platform_<organizations.tier> or byok';
 COMMENT ON COLUMN ai_usage_log.metadata   IS 'Optional context: { linked_to_type, linked_to_id, prompt_version }';
 -- Migration 008: Persist DMA quality checks, strategic insights, and suggested tasks
 --
@@ -932,7 +932,7 @@ COMMENT ON COLUMN organization_ai_settings.byok_provider
 COMMENT ON COLUMN organization_ai_settings.byok_api_key
   IS 'User-supplied API key; stored encrypted. Never returned to the browser.';
 COMMENT ON COLUMN organization_ai_settings.soft_quota_monthly
-  IS 'Per-org monthly call soft limit override. NULL = server default (100 for free orgs).';
+  IS 'Enforced monthly platform AI call ceiling for this organization. NULL = tier default from netlify/functions/_shared/aiQuota.js. 0 suspends platform AI.';
 -- Migration 013: user_profiles table
 -- Stores per-user profile information (display name, phone, mobile, notes).
 -- Separate from auth.users so it can be extended without touching Supabase Auth.

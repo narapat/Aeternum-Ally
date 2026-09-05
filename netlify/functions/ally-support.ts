@@ -9,6 +9,12 @@ import {
 } from "./_shared/allySupportSecurity.js";
 import { withAIRequestFence } from "./_shared/aiRequestFence.js";
 import { loadOrganizationAiConfig } from "./_shared/organizationAiConfig.js";
+import { loadOrganizationTier } from "./_shared/organizationTier.js";
+import {
+  checkMonthlyAiQuota,
+  platformQuotaType,
+  quotaExceededResponse,
+} from "./_shared/aiQuota.js";
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
 
@@ -164,6 +170,28 @@ export function createAllySupportHandler(
       return json(503, { error: "Ally's AI settings are temporarily unavailable." });
     }
 
+    // Ally draws on the same monthly platform allowance as the rest of the app,
+    // so a long support conversation cannot bypass the tenant's ceiling.
+    let quotaType = aiConfig.quotaType;
+    if (!aiConfig.useBYOK) {
+      const tier = await loadOrganizationTier(admin, organization_id);
+      quotaType = platformQuotaType(tier);
+
+      const quota = await checkMonthlyAiQuota(
+        admin,
+        organization_id,
+        tier,
+        aiConfig.softQuotaMonthly,
+      );
+
+      if (!quota.allowed) {
+        console.warn(
+          `[quota] ally org=${organization_id} tier=${tier} used=${quota.used}/${quota.limit} — request blocked`,
+        );
+        return json(429, quotaExceededResponse(quota));
+      }
+    }
+
     const company = await getCompanyName(admin, organization_id);
     const userInfo = {
       email: user.email ?? null,
@@ -274,7 +302,7 @@ export function createAllySupportHandler(
         output_tokens: outputTokens,
         duration_ms: Date.now() - start,
         success: true,
-        quota_type: aiConfig.quotaType,
+        quota_type: quotaType,
       });
     } catch {
       console.error("[ally-support] Failed to log usage.");
