@@ -17,6 +17,8 @@ Stack: React 19 + TypeScript + Vite (frontend), Netlify Functions (backend), Sup
 ```bash
 npm run dev:netlify     # start dev server (Vite + Netlify Functions on port 8888) — always use this, not npm run dev
 npm run build           # production build
+npm run test:security   # security regression suite
+npm run test:unit       # calculation and aggregation rules
 npx tsc --noEmit        # type-check without building
 ```
 
@@ -66,6 +68,8 @@ supabase/
 
 tests/security/       Security regression tests for auth, tenant isolation,
                       secrets, URLs, uploads, logging, and dependencies
+tests/unit/           Calculation rules that must stay correct — pure modules
+                      only, so keep the arithmetic out of components
 ```
 
 ---

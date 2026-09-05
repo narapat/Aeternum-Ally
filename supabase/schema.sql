@@ -629,6 +629,51 @@ CREATE TABLE emission_entries (
   updated_at                  timestamptz NOT NULL DEFAULT now()
 );
 
+-- Migration 029: an estimate is an annualised figure from Carbon Quest; an
+-- actual is measured consumption for the stated period. Aggregation counts an
+-- estimate only for a source with no actuals that year.
+ALTER TABLE emission_entries
+  ADD COLUMN IF NOT EXISTS basis text NOT NULL DEFAULT 'actual';
+
+ALTER TABLE emission_entries
+  ADD CONSTRAINT emission_entries_basis_check
+  CHECK (basis IN ('estimate', 'actual'));
+
+-- A second entry for the same period is legitimate — a correction, an
+-- adjustment, a second invoice for one meter — so it is allowed. What it must
+-- carry is an explanation. The UI warns first; this trigger is what makes the
+-- rule hold for the spreadsheet importer and any future path.
+CREATE OR REPLACE FUNCTION public.require_note_on_overlapping_entry()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF coalesce(btrim(NEW.notes), '') = '' AND EXISTS (
+    SELECT 1
+    FROM public.emission_entries existing
+    WHERE existing.source_id = NEW.source_id
+      AND existing.basis     = NEW.basis
+      AND existing.id       <> NEW.id
+      AND daterange(existing.period_start, existing.period_end, '[]')
+       && daterange(NEW.period_start, NEW.period_end, '[]')
+  ) THEN
+    RAISE EXCEPTION
+      'Another entry already covers this period for this source. Add a note explaining why this one exists (for example: correction, adjustment, second invoice).'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER emission_entries_require_note_on_overlap
+  BEFORE INSERT OR UPDATE ON emission_entries
+  FOR EACH ROW
+  EXECUTE FUNCTION public.require_note_on_overlapping_entry();
+
+COMMENT ON COLUMN emission_entries.basis
+  IS 'estimate = annualised from a typical period (Carbon Quest); actual = measured for the stated period.';
+
 CREATE INDEX idx_emission_entries_org_period ON emission_entries (organization_id, period_start DESC);
 CREATE INDEX idx_emission_entries_source     ON emission_entries (source_id, period_start DESC);
 

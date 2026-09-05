@@ -8,6 +8,7 @@
     "dev:netlify": "netlify dev",
     "build": "vite build",
     "test:security": "node --experimental-strip-types --test tests/security/*.test.mjs",
+    "test:unit": "node --experimental-strip-types --test tests/unit/*.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
