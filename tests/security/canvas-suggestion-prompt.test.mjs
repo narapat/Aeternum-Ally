@@ -78,6 +78,56 @@ test("canvas suggestion prompt includes company context, block definition, canva
   assert.match(prompt, /Return ONLY a valid JSON array of strings/);
 });
 
+test("the prompt does not authorise speculative business-model elements", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(
+    new URL("../../netlify/functions/api.ts", import.meta.url),
+    "utf8",
+  );
+
+  // Regression: this line permitted unsupported elements so long as they were
+  // hedged. A string[] rendered as a canvas bullet cannot carry a hedge, so the
+  // speculation reached the canvas as if it were fact.
+  assert.doesNotMatch(source, /Strategic possibilities may be suggested/);
+
+  // Regression: the Revenue Streams definition invited invented monetization
+  // ("or could earn") in the same sentence that forbade it.
+  assert.doesNotMatch(SBMC_BLOCK_DEFINITIONS["Revenue Streams"], /could earn/);
+});
+
+test("every block prompt states the evidence gate and refuses block completion", () => {
+  for (const label of SBMC_BLOCKS) {
+    const prompt = buildCanvasSuggestionPrompt(profile, label, bmcData);
+
+    assert.match(prompt, /Plausibility is not evidence/, label);
+    assert.match(prompt, /requires assuming a new capability/, label);
+    assert.match(
+      prompt,
+      /Do not complete the block by adding what a company of this type would\s+typically have/,
+      label,
+    );
+    // Improving what exists must outrank proposing something new.
+    assert.match(prompt, /Improve, clarify, or consolidate existing items/, label);
+    // The definition must not read as a list of categories to fill.
+    assert.match(prompt, /not a checklist of categories to fill/, label);
+    // Returning little must be an acceptable outcome, not a failure.
+    assert.match(prompt, /A short list is not a\s+failure/, label);
+  }
+});
+
+test("grounding is pinned to supplied context, not model creativity", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(
+    new URL("../../netlify/functions/api.ts", import.meta.url),
+    "utf8",
+  );
+
+  // Provider default is 1.0, which rewards fluent completion of a familiar
+  // business-model shape over checking the supplied evidence.
+  assert.match(source, /const CANVAS_SUGGESTION_TEMPERATURE = 0\.2;/);
+  assert.match(source, /temperature: CANVAS_SUGGESTION_TEMPERATURE/);
+});
+
 test("canvas context normalization keeps the string array contract for valid values", () => {
   const normalized = normalizeCanvasContext({
     keyPartners: ["Partner A", 42, " Partner B "],
