@@ -65,8 +65,9 @@ const ACTION_COLORS: Record<string, string> = {
   generateTasks:                 "#fb923c",
 };
 
-// Platform soft limit shown in the quota bar (same default as api.ts)
-const PLATFORM_SOFT_LIMIT_DEFAULT = 100;
+// Fallback only for the moment before settings load; the real ceiling is
+// resolved server-side and returned as `monthly_call_limit`.
+const MONTHLY_LIMIT_FALLBACK = 100;
 
 const AIUsagePanel: React.FC<Props> = ({ organizationId, currentUserRole }) => {
   const canManage = currentUserRole === "Owner" || currentUserRole === "Admin";
@@ -92,7 +93,7 @@ const AIUsagePanel: React.FC<Props> = ({ organizationId, currentUserRole }) => {
   // ── Usage data ───────────────────────────────────────────────────
   const [usage, setUsage] = useState<AiUsageRow[]>([]);
   const [monthlyCallCount, setMonthlyCallCount] = useState<number>(0);
-  const [softQuotaMonthly, setSoftQuotaMonthly] = useState<number | null>(null);
+  const [monthlyCallLimit, setMonthlyCallLimit] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Fetch settings + recent usage + this month's count on mount
@@ -113,7 +114,7 @@ const AIUsagePanel: React.FC<Props> = ({ organizationId, currentUserRole }) => {
         setSavedUseBYOK(settings.use_byok);
         setByokProvider(settings.byok_provider ?? "gemini");
         setHasStoredKey(settings.has_byok_key);
-        setSoftQuotaMonthly(settings.soft_quota_monthly);
+        setMonthlyCallLimit(settings.monthly_call_limit);
       }
       setUsage(log);
       setMonthlyCallCount(monthCount);
@@ -324,13 +325,14 @@ const AIUsagePanel: React.FC<Props> = ({ organizationId, currentUserRole }) => {
               <Hash className="w-4 h-4 text-esg-600" /> Monthly call quota
             </h3>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Platform quota resets on the 1st of each month. Enable BYOK below to bypass it.
+              AI features pause when this is spent, and the allowance resets on the 1st.
+              Enable BYOK below to bypass it entirely.
             </p>
           </header>
 
           <QuotaBar
             used={monthlyCallCount}
-            limit={softQuotaMonthly ?? PLATFORM_SOFT_LIMIT_DEFAULT}
+            limit={monthlyCallLimit ?? MONTHLY_LIMIT_FALLBACK}
           />
         </section>
       )}
@@ -612,13 +614,13 @@ const QuotaBar: React.FC<{ used: number; limit: number }> = ({ used, limit }) =>
         }`}>
           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           {isOver
-            ? "Soft quota exceeded. AI calls are still allowed but you may want to enable BYOK or contact support."
-            : "Approaching monthly quota. Consider enabling BYOK to avoid interruptions."}
+            ? "Monthly quota reached. AI features are paused until the allowance resets on the 1st. Enable BYOK below to continue now, or contact support to raise the limit."
+            : "Approaching the monthly quota. Enable BYOK, or contact support to raise the limit, before AI features pause."}
         </div>
       )}
       <div className="flex justify-between items-center text-xs text-slate-600 dark:text-slate-400">
         <span>{used.toLocaleString()} calls used</span>
-        <span>{limit.toLocaleString()} soft limit</span>
+        <span>{limit.toLocaleString()} monthly limit</span>
       </div>
       <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
         <div
@@ -626,7 +628,7 @@ const QuotaBar: React.FC<{ used: number; limit: number }> = ({ used, limit }) =>
           style={{ width: `${pct}%` }}
         />
       </div>
-      <p className="text-xs text-slate-400">{pct}% of monthly soft limit used</p>
+      <p className="text-xs text-slate-400">{pct}% of the monthly limit used</p>
     </div>
   );
 };

@@ -53,6 +53,8 @@ netlify/functions/
   google-drive.ts     Authenticated Drive proxy; never returns OAuth tokens
   google-callback.ts  OAuth callback with hashed, expiring state
   evidence.ts         Tenant-aware evidence operations
+  _shared/organizationTier.js  Canonical organizations.tier resolver; fails closed to free
+  _shared/aiQuota.js           Monthly platform AI ceiling, grants, auto-burst
   invite.ts           Invitation CRUD + rate-limited public resend
   accept-invite.ts    Authenticated invite validation + member join
   ally-support.ts     Authenticated, tenant-bound support AI
@@ -150,6 +152,8 @@ Singleton tables (profile, canvas, SWOT) use `useOrgData` which auto-saves on st
 | `MATERIALITY_THRESHOLD` | `constants.ts` | `40` | Topics above this on either axis are material |
 | `DEFAULT_MODEL` | `netlify/functions/api.ts` | `"gemini-2.5-flash"` | Used when org has no AI settings row |
 | Invite expiry | `supabase/schema.sql` | `now() + interval '7 days'` | Hardcoded in DB default |
+| `MONTHLY_AI_CALL_LIMITS` | `netlify/functions/_shared/aiQuota.js` | free 100 / starter 500 / pro 2 000 / enterprise 10 000 | Enforced monthly platform AI ceiling; `organization_ai_settings.soft_quota_monthly` overrides it per org |
+| `AUTO_BURST_RATIO` | `netlify/functions/_shared/aiQuota.js` | `0.25` | One automatic top-up per org per month on first breach, so worst-case spend is 125% of plan rather than open-ended |
 
 ---
 
@@ -164,6 +168,8 @@ Singleton tables (profile, canvas, SWOT) use `useOrgData` which auto-saves on st
 - Public invite resend is generic, centrally rate-limited, and has a delivery cooldown.
 - Ally support authenticates the user and verifies organization membership before side effects.
 - Client error logs bind user and tenant identity in RLS; AI handlers do not log tenant output content.
+- Platform AI calls are capped per organization per month. Both AI entry points (`api.ts` and `ally-support.ts`) return 429 before any provider call once the ceiling is spent; BYOK tenants bypass the cap because they pay the provider directly.
+- Quota headroom can be added ad-hoc through `ai_quota_grants`, a service-role-only table of expiring, attributed top-ups. Effective ceiling is `standing limit + active grants`. One automatic burst per organization per month is allowed on first breach; a partial unique index, not application logic, is what enforces "once".
 
 ## Known gaps (track; do not introduce workarounds)
 

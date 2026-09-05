@@ -775,13 +775,13 @@ COMMENT ON TABLE notification_delivery_log IS 'Audit trail for all notification 
 
 ALTER TABLE ai_usage_log
   ADD COLUMN IF NOT EXISTS quota_type text
-    CHECK (quota_type IN ('platform_free', 'platform_pro', 'platform_enterprise', 'byok')),
+    CHECK (quota_type IN ('platform_free', 'platform_starter', 'platform_pro', 'platform_enterprise', 'byok')),
   ADD COLUMN IF NOT EXISTS metadata jsonb;
 
 CREATE INDEX IF NOT EXISTS idx_ai_usage_quota
   ON ai_usage_log (organization_id, quota_type, created_at);
 
-COMMENT ON COLUMN ai_usage_log.quota_type IS 'Track whether call used platform quota or user BYOK key';
+COMMENT ON COLUMN ai_usage_log.quota_type IS 'Allowance the call drew from: platform_<organizations.tier> or byok';
 COMMENT ON COLUMN ai_usage_log.metadata   IS 'Optional context: { linked_to_type, linked_to_id, prompt_version }';
 -- Migration 008: Persist DMA quality checks, strategic insights, and suggested tasks
 --
@@ -932,7 +932,7 @@ COMMENT ON COLUMN organization_ai_settings.byok_provider
 COMMENT ON COLUMN organization_ai_settings.byok_api_key
   IS 'User-supplied API key; stored encrypted. Never returned to the browser.';
 COMMENT ON COLUMN organization_ai_settings.soft_quota_monthly
-  IS 'Per-org monthly call soft limit override. NULL = server default (100 for free orgs).';
+  IS 'Enforced monthly platform AI call ceiling for this organization. NULL = tier default from netlify/functions/_shared/aiQuota.js. 0 suspends platform AI.';
 -- Migration 013: user_profiles table
 -- Stores per-user profile information (display name, phone, mobile, notes).
 -- Separate from auth.users so it can be extended without touching Supabase Auth.
@@ -1191,3 +1191,44 @@ COMMENT ON TABLE organization_oauth_states
   IS 'Server-only hashes for short-lived, single-use OAuth state parameters.';
 
 COMMIT;
+
+-- Migration 027: ad-hoc AI quota grants (expiring, service-role only)
+
+CREATE TABLE IF NOT EXISTS public.ai_quota_grants (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  additional_calls  int  NOT NULL CHECK (additional_calls > 0 AND additional_calls <= 1000000),
+  source            text NOT NULL DEFAULT 'admin' CHECK (source IN ('admin', 'auto_burst')),
+  reason            text CHECK (reason IS NULL OR length(reason) <= 500),
+  granted_by        text CHECK (granted_by IS NULL OR length(granted_by) <= 320),
+  -- First day of the UTC month the grant belongs to; drives the auto-burst
+  -- uniqueness guard below.
+  period_month      date NOT NULL,
+  expires_at        timestamptz NOT NULL,
+  created_at        timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_quota_grants_active
+  ON public.ai_quota_grants (organization_id, expires_at);
+
+-- At most one automatic burst per organization per month. A second concurrent
+-- request loses this race with a unique violation and is refused, which is the
+-- intended outcome.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_quota_grants_one_auto_burst
+  ON public.ai_quota_grants (organization_id, period_month)
+  WHERE source = 'auto_burst';
+
+ALTER TABLE public.ai_quota_grants ENABLE ROW LEVEL SECURITY;
+
+-- No policies: RLS with zero policies denies every browser role. Grants are
+-- written and read only by service-role functions.
+REVOKE ALL ON public.ai_quota_grants FROM PUBLIC;
+REVOKE ALL ON public.ai_quota_grants FROM anon;
+REVOKE ALL ON public.ai_quota_grants FROM authenticated;
+
+COMMENT ON TABLE public.ai_quota_grants
+  IS 'Temporary additions to an organization monthly AI allowance. Expiring, audited, service-role only.';
+COMMENT ON COLUMN public.ai_quota_grants.source
+  IS 'admin = granted by a platform admin; auto_burst = automatic one-off top-up on first breach in a month';
+COMMENT ON COLUMN public.ai_quota_grants.period_month
+  IS 'First day of the UTC month this grant belongs to; enforces one auto_burst per org per month';

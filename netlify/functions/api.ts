@@ -6,6 +6,12 @@ import {
 } from "./_shared/internalJobAuth.js";
 import { withAIRequestFence } from "./_shared/aiRequestFence.js";
 import { loadOrganizationAiConfig } from "./_shared/organizationAiConfig.js";
+import { loadOrganizationTier } from "./_shared/organizationTier.js";
+import {
+  authorizeAiCall,
+  platformQuotaType,
+  quotaExceededResponse,
+} from "./_shared/aiQuota.js";
 
 const apiKey = process.env.GEMINI_API_KEY;
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -129,28 +135,30 @@ const handler = async (event: any) => {
   } = aiConfig;
 
   // ------------------------------------------------------------------
-  // 4a. Soft quota check (platform calls only, BYOK bypasses)
+  // 4a. Monthly AI quota (platform calls only; BYOK bills the tenant)
   // ------------------------------------------------------------------
+  // The ceiling is the org's `soft_quota_monthly` override when set, otherwise
+  // the tier default. Exceeding it returns 429 before any provider call, so
+  // platform AI spend has an upper bound per tenant per month.
+  let effectiveQuotaType = quotaType;
   if (!useBYOK) {
-    const PLATFORM_SOFT_LIMIT = softQuotaMonthly ?? 100;
-    const monthStart = new Date();
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
+    const tier = await loadOrganizationTier(admin, organization_id);
+    effectiveQuotaType = platformQuotaType(tier);
 
-    const { count: monthlyCount } = await admin
-      .from("ai_usage_log")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", organization_id)
-      .eq("success", true)
-      .gte("created_at", monthStart.toISOString());
+    // Refusing is the last resort: this also spends the org's one automatic
+    // burst for the month before giving up.
+    const quota = await authorizeAiCall(
+      admin,
+      organization_id,
+      tier,
+      softQuotaMonthly,
+    );
 
-    const callsUsed = monthlyCount ?? 0;
-
-    // Soft limit: log a warning but do NOT block. Admins can raise via soft_quota_monthly.
-    if (callsUsed >= PLATFORM_SOFT_LIMIT) {
+    if (!quota.allowed) {
       console.warn(
-        `[quota] org=${organization_id} used=${callsUsed}/${PLATFORM_SOFT_LIMIT} — soft limit reached (proceeding anyway)`
+        `[quota] org=${organization_id} tier=${tier} used=${quota.used}/${quota.limit} — request blocked`,
       );
+      return json(429, quotaExceededResponse(quota));
     }
   }
 
@@ -225,7 +233,7 @@ const handler = async (event: any) => {
         error_message: success ? null : errorMessage,
         http_status: success ? null : upstreamStatus,
         estimated_cost_usd: success ? Number(estimateCost(model, inputTokens, outputTokens).toFixed(6)) : 0,
-        quota_type: quotaType,
+        quota_type: effectiveQuotaType,
       });
     }
   } catch (logErr) {

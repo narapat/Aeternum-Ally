@@ -11,13 +11,23 @@ export function canManageByok(role) {
   return role === "Owner" || role === "Admin";
 }
 
-export function toSafeByokMetadata(settings, hasSecret) {
+/**
+ * @param {any} settings
+ * @param {boolean} hasSecret
+ * @param {{ tier?: string, monthlyCallLimit?: number | null }} [quota]
+ *   Effective ceiling resolved server-side. The browser must not recompute it:
+ *   the limit depends on the org tier and any active grants, neither of which
+ *   the client can be trusted to combine correctly.
+ */
+export function toSafeByokMetadata(settings, hasSecret, quota) {
   return {
     model: settings?.model ?? "gemini-2.5-flash",
     use_byok: settings?.use_byok === true,
     byok_provider: settings?.byok_provider ?? null,
     has_byok_key: Boolean(hasSecret),
     soft_quota_monthly: settings?.soft_quota_monthly ?? null,
+    tier: quota?.tier ?? "free",
+    monthly_call_limit: quota?.monthlyCallLimit ?? null,
   };
 }
 

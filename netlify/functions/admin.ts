@@ -24,6 +24,14 @@
 import type { Handler } from '@netlify/functions';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { ORGANIZATION_TIERS, loadOrganizationTier } from './_shared/organizationTier.js';
+import {
+  loadActiveGrantTotal,
+  monthEndIso,
+  monthStartIso,
+  periodMonth,
+  resolveMonthlyCallLimit,
+} from './_shared/aiQuota.js';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -772,6 +780,127 @@ async function handleListCompanies(): Promise<object> {
 }
 
 // ---------------------------------------------------------------------------
+// Post-auth: set_company_tier
+// ---------------------------------------------------------------------------
+async function handleSetCompanyTier(body: any, actorEmail: string): Promise<object> {
+  const id   = (body.id   ?? '').trim();
+  const tier = (body.tier ?? '').trim();
+  if (!id)   throw Object.assign(new Error('id is required'), { status: 400 });
+  if (!(ORGANIZATION_TIERS as readonly string[]).includes(tier)) {
+    throw Object.assign(new Error('Invalid tier'), { status: 400 });
+  }
+
+  const sb = getAdminClient();
+  const { error } = await sb.from('organizations').update({ tier }).eq('id', id);
+  if (error) throw Object.assign(new Error(error.message), { status: 500 });
+
+  // Tier changes move AI and storage entitlements, so record who made the call.
+  console.info('[admin] set_company_tier:', id, '->', tier, 'by', actorEmail);
+  return { updated: true, id, tier };
+}
+
+// ---------------------------------------------------------------------------
+// Post-auth: org_ai_quota — where an organization stands this month
+// ---------------------------------------------------------------------------
+async function handleOrgAiQuota(body: any): Promise<object> {
+  const orgId = (body.organization_id ?? '').trim();
+  if (!orgId) throw Object.assign(new Error('organization_id is required'), { status: 400 });
+
+  const sb  = getAdminClient();
+  const now = new Date();
+
+  const [tier, settingsRes, usageRes, grantsRes] = await Promise.all([
+    loadOrganizationTier(sb, orgId),
+    sb.from('organization_ai_settings')
+      .select('soft_quota_monthly, use_byok')
+      .eq('organization_id', orgId).maybeSingle(),
+    sb.from('ai_usage_log')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId).eq('success', true)
+      .gte('created_at', monthStartIso(now)),
+    sb.from('ai_quota_grants')
+      .select('id, additional_calls, source, reason, granted_by, expires_at, created_at')
+      .eq('organization_id', orgId)
+      .gt('expires_at', now.toISOString())
+      .order('created_at', { ascending: false }),
+  ]);
+
+  const softQuotaMonthly = settingsRes.data?.soft_quota_monthly ?? null;
+  const baseLimit        = resolveMonthlyCallLimit(tier, softQuotaMonthly);
+  const grantedCalls     = await loadActiveGrantTotal(sb, orgId, now);
+
+  return {
+    organization_id:    orgId,
+    tier,
+    use_byok:           settingsRes.data?.use_byok === true,
+    soft_quota_monthly: softQuotaMonthly,
+    base_limit:         baseLimit,
+    granted_calls:      grantedCalls,
+    effective_limit:    baseLimit + grantedCalls,
+    used:               usageRes.count ?? 0,
+    resets_at:          monthEndIso(now),
+    grants:             grantsRes.data ?? [],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Post-auth: grant_ai_quota — ad-hoc top-up, expires at month end
+// ---------------------------------------------------------------------------
+async function handleGrantAiQuota(body: any, actorEmail: string): Promise<object> {
+  const orgId  = (body.organization_id ?? '').trim();
+  const calls  = Number(body.additional_calls);
+  const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : null;
+
+  if (!orgId) throw Object.assign(new Error('organization_id is required'), { status: 400 });
+  if (!Number.isInteger(calls) || calls < 1 || calls > 1_000_000) {
+    throw Object.assign(new Error('additional_calls must be a whole number between 1 and 1,000,000'), { status: 400 });
+  }
+
+  const sb  = getAdminClient();
+  const now = new Date();
+
+  const { data, error } = await sb.from('ai_quota_grants').insert({
+    organization_id:  orgId,
+    additional_calls: calls,
+    source:           'admin',
+    reason:           reason || null,
+    granted_by:       actorEmail,
+    period_month:     periodMonth(now),
+    expires_at:       monthEndIso(now),
+  }).select('id, additional_calls, expires_at').single();
+
+  if (error) throw Object.assign(new Error(error.message), { status: 500 });
+
+  console.info('[admin] grant_ai_quota:', orgId, '+', calls, 'by', actorEmail);
+  return { granted: true, ...data };
+}
+
+// ---------------------------------------------------------------------------
+// Post-auth: set_ai_quota_override — standing per-org ceiling
+// ---------------------------------------------------------------------------
+async function handleSetAiQuotaOverride(body: any, actorEmail: string): Promise<object> {
+  const orgId = (body.organization_id ?? '').trim();
+  if (!orgId) throw Object.assign(new Error('organization_id is required'), { status: 400 });
+
+  const raw = body.soft_quota_monthly;
+  // null clears the override and returns the org to its tier default.
+  const override = raw === null || raw === '' ? null : Number(raw);
+  if (override !== null && (!Number.isInteger(override) || override < 0 || override > 1_000_000)) {
+    throw Object.assign(new Error('soft_quota_monthly must be null or a whole number between 0 and 1,000,000'), { status: 400 });
+  }
+
+  const sb = getAdminClient();
+  const { error } = await sb.from('organization_ai_settings').upsert(
+    { organization_id: orgId, soft_quota_monthly: override },
+    { onConflict: 'organization_id' },
+  );
+  if (error) throw Object.assign(new Error(error.message), { status: 500 });
+
+  console.info('[admin] set_ai_quota_override:', orgId, '->', override, 'by', actorEmail);
+  return { updated: true, organization_id: orgId, soft_quota_monthly: override };
+}
+
+// ---------------------------------------------------------------------------
 // Post-auth: set_company_status
 // ---------------------------------------------------------------------------
 async function handleSetCompanyStatus(body: any): Promise<object> {
@@ -1119,6 +1248,10 @@ export const handler: Handler = async (event) => {
         case 'create_company':          result = await handleCreateCompany(body);              break;
         case 'list_companies':          result = await handleListCompanies();                   break;
         case 'set_company_status':      result = await handleSetCompanyStatus(body);            break;
+        case 'set_company_tier':        result = await handleSetCompanyTier(body, actorEmail);  break;
+        case 'org_ai_quota':            result = await handleOrgAiQuota(body);                  break;
+        case 'grant_ai_quota':          result = await handleGrantAiQuota(body, actorEmail);    break;
+        case 'set_ai_quota_override':   result = await handleSetAiQuotaOverride(body, actorEmail); break;
         case 'list_pending_users':      result = await handleListPendingUsers();                break;
         case 'assign_user_to_company':  result = await handleAssignUserToCompany(body);         break;
         case 'list_admins':        result = await handleListAdmins();                            break;

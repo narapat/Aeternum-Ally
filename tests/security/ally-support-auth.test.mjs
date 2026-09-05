@@ -29,7 +29,12 @@ function createQuery(result) {
   return query;
 }
 
-function createHarness({ authenticated = true, member = true } = {}) {
+function createHarness({
+  authenticated = true,
+  member = true,
+  tier = "free",
+  monthlyAiCalls = 0,
+} = {}) {
   const state = {
     aiCalls: 0,
     blobWrites: [],
@@ -61,13 +66,27 @@ function createHarness({ authenticated = true, member = true } = {}) {
       if (table === "company_profiles") {
         return createQuery({ data: { name: "Verified Company" }, error: null });
       }
-      if (table === "ai_usage_log") {
+      if (table === "organizations") {
+        return createQuery({ data: { tier }, error: null });
+      }
+      if (table === "ai_quota_grants") {
         return {
+          select: () => ({ eq: () => ({ gt: async () => ({ data: [], error: null }) }) }),
+          // The auto-burst attempt on a breach; "already used this month".
+          insert: async () => ({ error: { code: "23505" } }),
+        };
+      }
+      if (table === "ai_usage_log") {
+        const countQuery = {
+          select: () => countQuery,
+          eq: () => countQuery,
+          gte: async () => ({ count: monthlyAiCalls, error: null }),
           insert: async (value) => {
             state.inserts.push(value);
             return { error: null };
           },
         };
+        return countQuery;
       }
       throw new Error(`Unexpected table: ${table}`);
     },
@@ -195,6 +214,41 @@ test("Ally derives tenant identity from the verified session and membership", as
   assert.equal(state.inserts[0].organization_id, ORGANIZATION_ID);
   assert.equal(state.inserts[0].user_id, USER_ID);
   assert.equal(state.inserts[0].user_email, "verified@example.com");
+});
+
+test("Ally refuses to spend AI budget past the organization's monthly ceiling", async () => {
+  // soft_quota_monthly is 100 in the harness; 100 calls already logged.
+  const exhausted = createHarness({ monthlyAiCalls: 100 });
+  const blocked = await exhausted.handler({
+    httpMethod: "POST",
+    headers: { Authorization: "Bearer valid" },
+    body: VALID_BODY,
+  });
+
+  assert.equal(blocked.statusCode, 429);
+  assert.equal(exhausted.state.aiCalls, 0, "no provider call once the quota is spent");
+  assert.deepEqual(exhausted.state.blobWrites, [], "no conversation is stored");
+
+  const withinQuota = createHarness({ monthlyAiCalls: 99 });
+  const allowed = await withinQuota.handler({
+    httpMethod: "POST",
+    headers: { Authorization: "Bearer valid" },
+    body: VALID_BODY,
+  });
+
+  assert.equal(allowed.statusCode, 200);
+  assert.equal(withinQuota.state.aiCalls, 1);
+});
+
+test("Ally records the usage row against the organization's tier", async () => {
+  const { handler, state } = createHarness({ tier: "pro" });
+  await handler({
+    httpMethod: "POST",
+    headers: { Authorization: "Bearer valid" },
+    body: VALID_BODY,
+  });
+
+  assert.equal(state.inserts[0].quota_type, "platform_pro");
 });
 
 test("support email HTML escaping neutralizes caller markup", () => {

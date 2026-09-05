@@ -44,6 +44,20 @@ The Dashboard provides a real-time, high-level summary of the entire platform's 
 
 *Use the year dropdown in the top right of each chart card to view historical data.*
 
+### AI Quota
+
+Each organization has a monthly platform AI allowance set by its tier. When it is spent, AI features return an error until the allowance resets on the 1st — so this is the screen to reach for when a customer reports that AI has stopped working.
+
+Click **Quota** on any row of *Top Companies — this month* to see where that organization stands and to adjust it:
+
+- **Grant extra calls** — a one-off top-up for the current month, with a reason that is recorded against your admin email. It expires automatically when the allowance resets, so it cannot quietly become the customer's permanent plan. This is the fastest way to unblock someone.
+- **Standing monthly limit** — replaces the tier default every month, for a customer whose normal usage genuinely exceeds their plan. Leave it blank to return to the tier default. `0` suspends platform AI for that organization.
+- **Change the tier** instead (Company Management → Tier) when the customer has actually moved plans. That changes storage entitlements too.
+
+**Automatic top-ups.** The first time an organization crosses its ceiling in a month, the platform grants a one-off 25% top-up by itself and keeps serving, so nobody is cut off before a human has looked. It appears in the grant list with an `auto` badge and a note. Treat one as a prompt to decide: raise the standing limit, move the tier, or let it lapse. An organization only ever receives one automatic top-up per month; after that it is refused until you grant more.
+
+**Organizations using their own API key (BYOK)** are not subject to platform quota, and the panel says so.
+
 ---
 
 ## 3. Company Management
@@ -59,6 +73,7 @@ This module allows you to oversee all tenant organizations registered on the pla
 ### Managing Existing Companies
 - **Search & Sort:** Use the search bar to find specific companies, and click column headers to sort by Tier, Member Count, Creation Date, or Status.
 - **Detail View:** Click on any company name to view a detailed breakdown of their activity and specific platform statistics.
+- **Tier:** The tier shown in the Tier column is a dropdown. Changing it takes effect immediately and moves both the organization's monthly AI call allowance and its evidence storage quota, so you are asked to confirm. The change is recorded in the function log against your admin email.
 - **Status Toggle:** Use the **Deactivate / Reactivate** button to freeze or unfreeze an organization's access. Deactivating a company immediately revokes access for all its members.
 - **Data Export:** Click **Export** to download a comprehensive archive of the company's sustainability data (useful for manual backups or support requests).
 
