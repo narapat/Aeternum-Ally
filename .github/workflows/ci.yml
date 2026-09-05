@@ -1,0 +1,58 @@
+# Runs the verification steps AGENTS.md requires before every merge, so they
+# cannot be skipped by forgetting to run them locally.
+#
+#   npm run test:security   security regression suite
+#   npx tsc --noEmit        type check
+#   npm run build           production build
+#   npm audit --omit=dev    runtime dependency audit
+#
+# The audit is deliberately scoped with --omit=dev: the deferred `extract-zip`
+# advisory (#152) lives in Netlify local tooling and is tracked separately by
+# tests/security/netlify-tooling-dependencies.test.mjs, which fails if it ever
+# becomes reachable from a runtime path.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Tests, types, build, audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@v4
+
+      # Node 22: tests run through --experimental-strip-types.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Security regression tests
+        run: npm run test:security
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Production build
+        run: npm run build
+
+      - name: Runtime dependency audit
+        run: npm audit --omit=dev --audit-level=high
