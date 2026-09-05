@@ -74,6 +74,7 @@ This module allows you to oversee all tenant organizations registered on the pla
 - **Search & Sort:** Use the search bar to find specific companies, and click column headers to sort by Tier, Member Count, Creation Date, or Status.
 - **Detail View:** Click on any company name to view a detailed breakdown of their activity and specific platform statistics.
 - **Tier:** The tier shown in the Tier column is a dropdown. Changing it takes effect immediately and moves both the organization's monthly AI call allowance and its evidence storage quota, so you are asked to confirm. The change is recorded in the function log against your admin email.
+- **Last Active:** How recently anyone in the organization did something. It is the later of two signals: the most recent sign-in by any member, and the organization's most recent AI call. Neither alone is reliable — sessions refresh silently, so sign-in dates understate active users, while an organization doing data entry without AI never appears in usage logs. Sort by this column to find organizations that have gone quiet. `Never` means no sign-in or AI activity has been recorded at all.
 - **Status Toggle:** Use the **Deactivate / Reactivate** button to freeze or unfreeze an organization's access. Deactivating a company immediately revokes access for all its members.
 - **Data Export:** Click **Export** to download a comprehensive archive of the company's sustainability data (useful for manual backups or support requests).
 

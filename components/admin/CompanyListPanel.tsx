@@ -15,9 +15,11 @@ interface Company {
   is_active:    boolean;
   member_count: number;
   created_at:   string;
+  /** Later of: any member's last sign-in, or the org's most recent AI call. */
+  last_active_at: string | null;
 }
 
-type SortKey = 'name' | 'tier' | 'member_count' | 'created_at' | 'is_active';
+type SortKey = 'name' | 'tier' | 'member_count' | 'created_at' | 'last_active_at' | 'is_active';
 type SortDir = 'asc' | 'desc';
 type Tab     = 'companies' | 'pending';
 
@@ -277,6 +279,9 @@ const CompanyListPanel: React.FC<Props> = ({ adminToken }) => {
       else if (sort === 'tier')         v = (TIER_ORDER[a.tier] ?? 0) - (TIER_ORDER[b.tier] ?? 0);
       else if (sort === 'member_count') v = a.member_count - b.member_count;
       else if (sort === 'created_at')   v = a.created_at.localeCompare(b.created_at);
+      // Never-active sorts last ascending, so "who has gone quiet" is one click.
+      else if (sort === 'last_active_at')
+        v = (a.last_active_at ?? '').localeCompare(b.last_active_at ?? '');
       else if (sort === 'is_active')    v = (a.is_active === b.is_active ? 0 : a.is_active ? -1 : 1);
       return dir === 'asc' ? v : -v;
     });
@@ -285,6 +290,16 @@ const CompanyListPanel: React.FC<Props> = ({ adminToken }) => {
 
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  const formatRelative = (iso: string | null) => {
+    if (!iso) return 'Never';
+    const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+    if (days <= 0)  return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 30)  return `${days}d ago`;
+    if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+    return `${Math.floor(days / 365)}y ago`;
+  };
 
   const active   = companies.filter(c =>  c.is_active).length;
   const inactive = companies.filter(c => !c.is_active).length;
@@ -434,6 +449,7 @@ const CompanyListPanel: React.FC<Props> = ({ adminToken }) => {
                       <SortTh label="Company"  col="name"         sort={sort} dir={dir} onSort={handleSort} />
                       <SortTh label="Tier"     col="tier"         sort={sort} dir={dir} onSort={handleSort} className="hidden md:table-cell" />
                       <SortTh label="Members"  col="member_count" sort={sort} dir={dir} onSort={handleSort} className="hidden sm:table-cell" />
+                      <SortTh label="Last active" col="last_active_at" sort={sort} dir={dir} onSort={handleSort} className="hidden lg:table-cell" />
                       <SortTh label="Created"  col="created_at"   sort={sort} dir={dir} onSort={handleSort} className="hidden lg:table-cell" />
                       <SortTh label="Status"   col="is_active"    sort={sort} dir={dir} onSort={handleSort} className="text-center" />
                       <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Action</th>
@@ -472,6 +488,16 @@ const CompanyListPanel: React.FC<Props> = ({ adminToken }) => {
                             </select>
                           </td>
                           <td className="px-4 py-3.5 text-slate-500 dark:text-slate-400 hidden sm:table-cell">{company.member_count}</td>
+                          <td
+                            className={`px-4 py-3.5 hidden lg:table-cell whitespace-nowrap ${
+                              company.last_active_at ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 dark:text-slate-600 italic'
+                            }`}
+                            title={company.last_active_at
+                              ? `Latest of any member's sign-in and the organization's most recent AI call — ${formatDate(company.last_active_at)}`
+                              : 'No sign-in or AI activity recorded'}
+                          >
+                            {formatRelative(company.last_active_at)}
+                          </td>
                           <td className="px-4 py-3.5 text-slate-500 dark:text-slate-400 hidden lg:table-cell whitespace-nowrap">{formatDate(company.created_at)}</td>
                           <td className="px-4 py-3.5 text-center">
                             {company.is_active

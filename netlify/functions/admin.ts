@@ -743,15 +743,29 @@ async function handleAssignUserToCompany(body: any): Promise<object> {
 async function handleListCompanies(): Promise<object> {
   const sb = getAdminClient();
 
-  // Fetch orgs + company profiles (name) + member counts in parallel
-  const [orgsRes, profilesRes, membersRes] = await Promise.all([
+  // "Last active" combines two signals, because neither is sufficient alone:
+  //   - auth sign-in: authoritative, but Supabase refreshes sessions silently,
+  //     so a daily user who signed in weeks ago still reads as weeks stale.
+  //   - AI usage: reflects real work, but an org doing data entry without AI
+  //     never appears.
+  // The later of the two is the honest answer. The usage scan is bounded to
+  // recent rows; anything older than the window is already "inactive" for any
+  // practical purpose.
+  const ACTIVITY_SCAN_ROWS = 5000;
+
+  const [orgsRes, profilesRes, membersRes, usersRes, activityRes] = await Promise.all([
     sb.from('organizations')
       .select('id, tier, is_active, created_at')
       .order('created_at', { ascending: false }),
     sb.from('company_profiles')
       .select('organization_id, name'),
     sb.from('organization_members')
-      .select('organization_id'),
+      .select('organization_id, user_id'),
+    sb.auth.admin.listUsers({ perPage: 1000 }),
+    sb.from('ai_usage_log')
+      .select('organization_id, created_at')
+      .order('created_at', { ascending: false })
+      .limit(ACTIVITY_SCAN_ROWS),
   ]);
 
   if (orgsRes.error)  throw Object.assign(new Error(orgsRes.error.message),  { status: 500 });
@@ -767,6 +781,27 @@ async function handleListCompanies(): Promise<object> {
     memberCount[m.organization_id] = (memberCount[m.organization_id] ?? 0) + 1;
   }
 
+  // Latest sign-in per user, then rolled up to the organization.
+  const signInByUser: Record<string, string | null> = {};
+  for (const u of usersRes.data?.users ?? []) {
+    signInByUser[u.id] = u.last_sign_in_at ?? null;
+  }
+
+  const lastActive: Record<string, string | null> = {};
+  const keepLater = (orgId: string, when: string | null | undefined) => {
+    if (!when) return;
+    const current = lastActive[orgId];
+    if (!current || when > current) lastActive[orgId] = when;
+  };
+
+  for (const m of membersRes.data ?? []) {
+    keepLater(m.organization_id, signInByUser[m.user_id]);
+  }
+  // Rows arrive newest-first, so the first hit per org is already its latest.
+  for (const row of activityRes.data ?? []) {
+    keepLater(row.organization_id, row.created_at);
+  }
+
   const companies = (orgsRes.data ?? []).map((o: any) => ({
     id:           o.id,
     name:         nameMap[o.id] ?? '(unnamed)',
@@ -774,6 +809,7 @@ async function handleListCompanies(): Promise<object> {
     is_active:    o.is_active !== false,
     member_count: memberCount[o.id] ?? 0,
     created_at:   o.created_at,
+    last_active_at: lastActive[o.id] ?? null,
   }));
 
   return { companies };
