@@ -684,7 +684,16 @@ CREATE POLICY "members_crud_entries" ON emission_entries
 
 COMMENT ON TABLE  emission_entries                          IS 'Recurring GHG emission data entries';
 COMMENT ON COLUMN emission_entries.activity_data            IS 'Raw consumption figure (in the source unit)';
-COMMENT ON COLUMN emission_entries.calculated_emissions_kgco2e IS 'activity_data × emission_factor_value';
+-- Migration 030: entries snapshot the factor that produced them. factor_id is
+-- deliberately not a foreign key — the snapshot is the record, and correcting
+-- reference data must never rewrite history.
+ALTER TABLE emission_entries
+  ADD COLUMN IF NOT EXISTS factor_id              uuid,
+  ADD COLUMN IF NOT EXISTS factor_kgco2e_per_unit numeric(12, 6),
+  ADD COLUMN IF NOT EXISTS factor_source          text,
+  ADD COLUMN IF NOT EXISTS factor_year            int;
+
+COMMENT ON COLUMN emission_entries.calculated_emissions_kgco2e IS 'activity_data × factor_kgco2e_per_unit, snapshotted at save time';
 
 -- =============================================================
 -- 5. emission_factors  (shared reference data — RLS read-only for tenants)
@@ -704,6 +713,11 @@ CREATE TABLE emission_factors (
 
 CREATE INDEX idx_emission_factors_lookup
   ON emission_factors (fuel_type, unit, year DESC);
+
+-- Migration 030: the natural key. Without it the seed file's ON CONFLICT DO
+-- NOTHING had nothing to conflict against and duplicated every row on re-run.
+CREATE UNIQUE INDEX idx_emission_factors_natural_key
+  ON emission_factors (fuel_type, unit, source, year, coalesce(region, ''));
 
 -- Migration 028: reference data is readable by any signed-in user and written
 -- only by platform admins through service_role. There is deliberately no

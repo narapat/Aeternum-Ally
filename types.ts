@@ -265,6 +265,11 @@ export interface EmissionEntry {
   basis: EmissionBasis;
   activity_data: number;
   calculated_emissions_kgco2e: number;
+  /** The factor that produced the figure, snapshotted when it was saved. */
+  factor_id: string | null;
+  factor_kgco2e_per_unit: number | null;
+  factor_source: string | null;
+  factor_year: number | null;
   notes: string | null;
   created_by: string | null;
   created_at: string;
