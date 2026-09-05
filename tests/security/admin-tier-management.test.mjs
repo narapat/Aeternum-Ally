@@ -57,28 +57,43 @@ test("the tenant sees the ceiling the server will actually enforce", async () =>
   assert.equal(unknown.monthly_call_limit, null);
 });
 
-test("the limit is resolved server-side, not recomputed in the browser", async () => {
-  const [settingsFn, panel] = await Promise.all([
-    read("../../netlify/functions/byok-settings.ts"),
+test("the quota UI under test is the one the app actually mounts", async () => {
+  // Regression: the first version of this fix was applied to
+  // components/AIUsagePanel.tsx, which nothing imported. The tests passed and
+  // the screen users see stayed wrong. Assert reachability, not just content.
+  const app = await read("../../App.tsx");
+  assert.match(app, /import\s+SettingsDashboard\s+from\s+['"]\.\/components\/SettingsDashboard['"]/);
+  assert.match(app, /<SettingsDashboard/);
+
+  await assert.rejects(
     read("../../components/AIUsagePanel.tsx"),
+    /ENOENT/,
+    "the unmounted duplicate must stay deleted",
+  );
+});
+
+test("the limit is resolved server-side, not recomputed in the browser", async () => {
+  const [settingsFn, dashboard] = await Promise.all([
+    read("../../netlify/functions/byok-settings.ts"),
+    read("../../components/SettingsDashboard.tsx"),
   ]);
 
   assert.match(settingsFn, /loadOrganizationTier\(admin, organizationId\)/);
   assert.match(settingsFn, /resolveMonthlyCallLimit\(tier, settings\?\.soft_quota_monthly\)/);
 
-  assert.match(panel, /settings\.monthly_call_limit/);
-  // Regression: the panel used to show a hardcoded 100 to every organization,
-  // which is wrong for every tier above free.
-  assert.doesNotMatch(panel, /PLATFORM_SOFT_LIMIT_DEFAULT/);
-  assert.doesNotMatch(panel, /softQuotaMonthly \?\?/);
+  assert.match(dashboard, /monthly_call_limit/);
+  // Regression: the quota bar showed a hardcoded 100 to every organization,
+  // ignoring the tier, the per-org override and any active grant.
+  assert.doesNotMatch(dashboard, /PLATFORM_SOFT_LIMIT_DEFAULT/);
+  assert.doesNotMatch(dashboard, /softQuotaMonthly/);
 });
 
 test("the quota warning no longer promises calls that will be refused", async () => {
-  const panel = await read("../../components/AIUsagePanel.tsx");
+  const dashboard = await read("../../components/SettingsDashboard.tsx");
 
-  assert.doesNotMatch(panel, /AI calls are still allowed/);
-  assert.doesNotMatch(panel, /soft limit|soft quota/i);
-  assert.match(panel, /AI features are paused/);
+  assert.doesNotMatch(dashboard, /AI calls are still allowed/);
+  assert.doesNotMatch(dashboard, /soft limit|soft quota/i);
+  assert.match(dashboard, /AI features are paused/);
 });
 
 test("the admin console can select every tier the database accepts", async () => {
