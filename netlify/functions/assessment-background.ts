@@ -2,6 +2,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
 import { requireInternalJobAuth } from "./_shared/internalJobAuth.js";
 import { loadOrganizationAiConfig } from "./_shared/organizationAiConfig.js";
+import { buildCompanyContext } from "./_shared/companyContext.js";
 
 const apiKey = process.env.GEMINI_API_KEY;
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -126,17 +127,6 @@ const handler = async (event: any) => {
       console.warn("[assessment-background] Failed to parse AI JSON:", e);
       return fallback;
     }
-  }
-
-  function buildCompanyContext(p: any): string {
-    return [
-      `Company: ${p.name} (${p.industry}, ISIC: ${p.isicCode})`,
-      `Scale: ${p.employeeCount} employees, Revenue: ${p.revenueRange}`,
-      `Description: ${p.description}`,
-      `Mission: ${p.mission}`,
-      `Vision: ${p.vision}`,
-      `Key Products / Services: ${p.productsServices}`,
-    ].join('\n');
   }
 
   const joinField = (v: string | string[]): string =>

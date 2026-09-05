@@ -47,6 +47,7 @@ const DEFAULT_PROFILE: CompanyProfile = {
   contactEmail: '', contactPhone: '',
   employeeCount: '', revenueRange: '',
   description: '', mission: '', vision: '', productsServices: '',
+  structuredContext: [],
 };
 
 const DEFAULT_CANVAS: SustainabilityBusinessModel = {

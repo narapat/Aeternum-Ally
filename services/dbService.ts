@@ -317,6 +317,7 @@ export const fromDbProfile = (row: any): CompanyProfile => ({
   mission: row.mission ?? "",
   vision: row.vision ?? "",
   productsServices: row.products_services ?? "",
+  structuredContext: Array.isArray(row.structured_context) ? row.structured_context : [],
 });
 
 export const toDbProfile = (data: CompanyProfile) => ({
@@ -339,6 +340,7 @@ export const toDbProfile = (data: CompanyProfile) => ({
   mission: data.mission,
   vision: data.vision,
   products_services: data.productsServices,
+  structured_context: data.structuredContext ?? [],
 });
 
 // =================================================================

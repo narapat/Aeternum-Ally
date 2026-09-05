@@ -6,6 +6,7 @@ import {
 } from "./_shared/internalJobAuth.js";
 import { withAIRequestFence } from "./_shared/aiRequestFence.js";
 import { loadOrganizationAiConfig } from "./_shared/organizationAiConfig.js";
+import { buildCompanyContext } from "./_shared/companyContext.js";
 import { loadOrganizationTier } from "./_shared/organizationTier.js";
 import {
   authorizeAiCall,
@@ -370,17 +371,6 @@ Return an empty array [] if no items apply.
 `;
 
 // Build a consistent company context block from a structured profile object.
-function buildCompanyContext(profile: any): string {
-  return [
-    `Company: ${profile.name} (${profile.industry}, ISIC: ${profile.isicCode})`,
-    `Scale: ${profile.employeeCount} employees, Revenue: ${profile.revenueRange}`,
-    `Description: ${profile.description}`,
-    `Mission: ${profile.mission}`,
-    `Vision: ${profile.vision}`,
-    `Key Products / Services: ${profile.productsServices}`,
-  ].join('\n');
-}
-
 // Join a BMC field (string[] after migration) for use in AI prompts.
 const joinField = (v: string | string[]): string =>
   Array.isArray(v) ? v.join(", ") : (v ?? "");

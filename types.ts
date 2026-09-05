@@ -93,6 +93,51 @@ export interface OrgInvite {
   created_at: string;
 }
 
+/**
+ * Structured company facts shared by every AI feature.
+ *
+ * One shape covers all six categories because they differ only in what `name`
+ * and `role` mean — "Netlify / Application hosting" and "GHG Protocol /
+ * Methodology used" are the same record with different meanings. `category` is
+ * what keeps a referenced standard from becoming a partner; `status` is what
+ * keeps a plan from being reported as a current fact.
+ *
+ * Unknown is represented by absence: there is deliberately no "unknown" status,
+ * because a user should never have to invent an answer.
+ */
+export type CompanyContextCategory =
+  | 'business'
+  | 'operating'
+  | 'technology'
+  | 'commercial'
+  | 'ecosystem'
+  | 'standards';
+
+export type CompanyContextStatus =
+  | 'current'
+  | 'planned'
+  | 'exploring'
+  | 'not_established';
+
+/** Provenance, stored from the start so grounding stays auditable later. */
+export type CompanyContextSource =
+  | 'user'
+  | 'imported'
+  | 'system_derived'
+  | 'ai_suggested';
+
+export interface CompanyContextItem {
+  id: string;
+  category: CompanyContextCategory;
+  /** What it is: "Netlify", "Founder-led sales", "GHG Protocol". */
+  name: string;
+  /** What it does for the business: "Application hosting", "Methodology used". */
+  role: string;
+  status: CompanyContextStatus;
+  source: CompanyContextSource;
+  updatedAt: string;
+}
+
 export interface CompanyProfile {
   name: string;
   taxId: string; // Registration Number
@@ -115,6 +160,8 @@ export interface CompanyProfile {
   mission: string;
   vision: string;
   productsServices: string; // Comma separated list
+  /** Structured facts behind the simple questions; empty for older profiles. */
+  structuredContext: CompanyContextItem[];
 }
 
 export interface SustainabilityBusinessModel {
