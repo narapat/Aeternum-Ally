@@ -424,7 +424,7 @@ const SBMC_BLOCK_DEFINITIONS: Record<SBMCBlockLabel, string> = {
   "Channels": "The routes and touchpoints through which the company reaches customer segments for awareness, sales, delivery, service, or communication. Do not include relationship styles, customer types, or partner organizations unless they are explicitly a route to market.",
   "Customer Segments": "The distinct groups of customers, users, beneficiaries, or buyers the company serves or intends to serve. Do not include channels, relationships, partners, or generic stakeholder categories without support from the company context.",
   "Cost Structure": "The main economic cost drivers and operating expenses required to run the business model. Do not include environmental or social externalities here unless they are also explicit financial costs.",
-  "Revenue Streams": "The ways the company earns or could earn money from customers for delivered value, such as subscriptions, usage fees, licensing, services, or transactions. Do not invent monetization models unsupported by the company context.",
+  "Revenue Streams": "How the company earns money from customers for delivered value. Do not list costs, channels, or customer segments. Do not introduce a monetization model that the supplied context does not evidence.",
   "Eco-Social Costs": "Credible actual or potential negative environmental or social externalities arising from the company's technology, activities, operations, or business relationships. Do not confuse ordinary operating expenses with eco-social externalities.",
   "Eco-Social Benefits": "Positive environmental or social outcomes the company's products, services, or business model can support or enable. Do not guarantee outcomes, invent impacts, or imply unsupported causality.",
 };
@@ -487,19 +487,37 @@ function buildCanvasSuggestionPrompt(profile: any, fieldLabel: unknown, bmcData:
     Existing items in the requested block:
     ${currentBlockItems.length ? currentBlockItems.map(item => `- ${item}`).join("\n") : "- (empty)"}
 
-    Task:
-    Suggest concise content for the requested SBMC block only.
+    The definition above describes the boundary of the block — what belongs in it
+    rather than another block. It is not a checklist of categories to fill, and
+    naming a category there is not a reason to produce an item for it.
 
-    Grounding and classification rules:
+    Task:
+    Work from what is already known about this company. In order of preference:
+    1. Improve, clarify, or consolidate existing items in the requested block.
+    2. Identify elements that are missing but follow from the supplied company
+       context or from content already present elsewhere in the canvas.
+    Do not complete the block by adding what a company of this type would
+    typically have.
+
+    Grounding rules:
     - Treat only explicitly supplied company information and current canvas content as factual context.
+    - Plausibility is not evidence. That something is common among SaaS companies,
+      sustainability platforms, ESG consultancies, or technology companies is not a
+      reason to include it in this company's canvas.
     - Do not assume common industry practices, partnerships, channels, capabilities, customers, revenue models, teams, certifications, or operational practices already exist.
-    - Strategic possibilities may be suggested, but they must not be worded as established facts when unsupported.
+    - Before returning an item, ask whether it requires assuming a new capability,
+      team, partnership, customer relationship, channel, revenue model, asset,
+      proprietary technology, certification, intellectual property, data-usage
+      practice, or business activity. If that assumption is not supported by the
+      supplied company context or current canvas, do not return it.
     - Apply the requested SBMC block definition strictly.
     - Do not suggest an item if it primarily belongs to another SBMC block.
     - Avoid duplicate or semantically overlapping suggestions already present anywhere in the current canvas.
     - Avoid contradictions with existing canvas content.
-    - Prefer company-specific strategic suggestions over generic SaaS or sustainability-business statements.
-    - Prefer fewer high-quality suggestions rather than filling the block artificially.
+    - Prefer company-specific suggestions over generic SaaS or sustainability-business statements.
+    - Returning one or two well-grounded items, or none at all, is the correct
+      outcome when the supplied context supports no more. A short list is not a
+      failure; an unsupported list is.
 
     Sustainability claim guardrails:
     - For Eco-Social Benefits, describe outcomes the company can support or enable.
@@ -735,6 +753,9 @@ ${(qualityCheckContext.issues as any[]).map((i: any) =>
   };
 }
 
+/** Low, because canvas suggestions must stay tied to supplied evidence. */
+const CANVAS_SUGGESTION_TEMPERATURE = 0.2;
+
 async function generateCanvasSuggestion(
   ai: GoogleGenAI,
   model: string,
@@ -751,6 +772,10 @@ async function generateCanvasSuggestion(
         type: Type.ARRAY,
         items: { type: Type.STRING },
       },
+      // This task is grounded extraction, not ideation. The provider default
+      // (1.0) rewards fluent completion of a familiar business-model shape,
+      // which is what produced speculative items in dogfooding.
+      temperature: CANVAS_SUGGESTION_TEMPERATURE,
       ...noThinkingConfig(model),
     },
   });
