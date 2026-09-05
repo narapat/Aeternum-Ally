@@ -12,21 +12,26 @@
  * Storage bucket: 'evidence-files'
  * Create it in Supabase dashboard → Storage → New bucket → evidence-files (private).
  *
- * Quota limits (MB):
+ * Quota limits (MB), keyed by `organizations.tier`:
  *   free       → 0 (link-only, no direct upload)
+ *   starter    → 1 024 (1 GB)
  *   pro        → 10 240 (10 GB)
  *   enterprise → 102 400 (100 GB)
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { loadOrganizationTier } from './_shared/organizationTier.js';
 
 const SUPABASE_URL   = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const SERVICE_KEY    = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const BUCKET         = 'evidence-files';
 const MAX_MB         = 25;
 
+// One entry per tier in the `organizations.tier` CHECK constraint. An unknown
+// tier resolves to 0 MB, which blocks upload rather than granting free storage.
 const QUOTA_MAP: Record<string, number> = {
   free:       0,
+  starter:    1_024,
   pro:        10_240,
   enterprise: 102_400,
 };
@@ -248,14 +253,9 @@ async function isMember(admin: any, orgId: string, userId: string): Promise<bool
 }
 
 async function getOrgTier(admin: any, orgId: string): Promise<string> {
-  // Placeholder — when subscription management is added, query it here.
-  // For now: all orgs are 'free' (link-only). Set to 'pro' to unlock uploads.
-  const { data } = await admin
-    .from('organizations')
-    .select('subscription_tier')
-    .eq('id', orgId)
-    .maybeSingle();
-  return (data?.subscription_tier as string | null) ?? 'free';
+  // Reads the canonical `organizations.tier` column (migration 015), which
+  // platform admins set from the admin console. Fails closed to 'free'.
+  return loadOrganizationTier(admin, orgId);
 }
 
 async function getStorageQuota(
