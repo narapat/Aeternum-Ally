@@ -116,4 +116,6 @@ VALUES
   ('Wastewater Treatment','3', 'm3',    0.44,'IPCC 2021', 2021, 'Global'),
   ('Composting',          '3', 'tonne',  8.0,'IPCC 2021', 2021, 'Global')
 
-ON CONFLICT DO NOTHING;
+-- Requires the natural key from migration 030; without it this clause has
+-- nothing to conflict against and a re-run duplicates every row.
+ON CONFLICT (fuel_type, unit, source, year, coalesce(region, '')) DO NOTHING;
