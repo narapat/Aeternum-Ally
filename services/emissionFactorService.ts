@@ -13,29 +13,11 @@
 import { supabase } from '../lib/supabaseClient';
 import { EmissionFactor, EmissionSource, EmissionEntry, EmissionScope, EmissionBasis } from '../types';
 import { deleteEvidenceByEntity } from './evidenceService';
+import { selectBestFactor } from './emissionFactorSelection';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Region → country membership (lightweight client-side mapping)
 // ─────────────────────────────────────────────────────────────────────────────
-
-const REGION_MAP: Record<string, string[]> = {
-  EU: [
-    'Austria','Belgium','Bulgaria','Croatia','Cyprus','Czech Republic','Denmark',
-    'Estonia','Finland','France','Germany','Greece','Hungary','Ireland','Italy',
-    'Latvia','Lithuania','Luxembourg','Malta','Netherlands','Poland','Portugal',
-    'Romania','Slovakia','Slovenia','Spain','Sweden',
-  ],
-  ASEAN: [
-    'Brunei','Cambodia','Indonesia','Laos','Malaysia','Myanmar','Philippines',
-    'Singapore','Thailand','Timor-Leste','Vietnam',
-  ],
-};
-
-function countryToRegions(country: string): string[] {
-  return Object.entries(REGION_MAP)
-    .filter(([, members]) => members.some(m => m.toLowerCase() === country.toLowerCase()))
-    .map(([region]) => region);
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fetch helpers
@@ -91,30 +73,12 @@ export async function getBestEmissionFactor(
   fuelType: string,
   unit: string,
   organizationCountry: string,
+  reportingYear?: number,
 ): Promise<EmissionFactor | null> {
   const factors = await fetchEmissionFactorsForFuel(fuelType, unit);
-  if (factors.length === 0) return null;
-
-  const country = organizationCountry.trim().toLowerCase();
-
-  // 1. Exact country match (newest year first — already ordered)
-  const countryMatch = factors.find(f => (f.region ?? '').toLowerCase() === country);
-  if (countryMatch) return countryMatch;
-
-  // 2. Any region this country belongs to
-  const regions = countryToRegions(organizationCountry);
-  for (const region of regions) {
-    const regionMatch = factors.find(f => (f.region ?? '').toLowerCase() === region.toLowerCase());
-    if (regionMatch) return regionMatch;
-  }
-
-  // 3. Global fallback
-  const globalMatch = factors.find(f => (f.region ?? '').toLowerCase() === 'global');
-  if (globalMatch) return globalMatch;
-
-  // 4. Whatever is newest
-  return factors[0];
+  return selectBestFactor(factors, organizationCountry, reportingYear);
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Emission Sources CRUD
@@ -198,6 +162,13 @@ const fromDbEntry = (row: any): EmissionEntry => ({
   basis: (row.basis === 'estimate' ? 'estimate' : 'actual') as EmissionBasis,
   activity_data: Number(row.activity_data),
   calculated_emissions_kgco2e: Number(row.calculated_emissions_kgco2e),
+  factor_id: row.factor_id ?? null,
+  factor_kgco2e_per_unit:
+    row.factor_kgco2e_per_unit === null || row.factor_kgco2e_per_unit === undefined
+      ? null
+      : Number(row.factor_kgco2e_per_unit),
+  factor_source: row.factor_source ?? null,
+  factor_year: row.factor_year ?? null,
   notes: row.notes ?? null,
   created_by: row.created_by ?? null,
   created_at: row.created_at,
@@ -214,6 +185,47 @@ export async function fetchEmissionEntries(orgId: string): Promise<EmissionEntry
   return (data ?? []).map(fromDbEntry);
 }
 
+/**
+ * The derivation to store alongside a figure.
+ *
+ * Callers that already resolved a factor pass it through. Everything else —
+ * the quick-add modal, the spreadsheet importer — falls back to the factor
+ * currently on the source, so no save path can silently omit provenance.
+ */
+async function resolveFactorProvenance(
+  entry: Partial<EmissionEntry> & Pick<EmissionEntry, 'source_id'>,
+): Promise<{
+  factor_id: string | null;
+  factor_kgco2e_per_unit: number | null;
+  factor_source: string | null;
+  factor_year: number | null;
+}> {
+  if (entry.factor_kgco2e_per_unit !== null && entry.factor_kgco2e_per_unit !== undefined) {
+    return {
+      factor_id: entry.factor_id ?? null,
+      factor_kgco2e_per_unit: entry.factor_kgco2e_per_unit,
+      factor_source: entry.factor_source ?? null,
+      factor_year: entry.factor_year ?? null,
+    };
+  }
+
+  const { data } = await supabase
+    .from('emission_sources')
+    .select('emission_factor_value, emission_factor_source')
+    .eq('id', entry.source_id)
+    .maybeSingle();
+
+  return {
+    factor_id: entry.factor_id ?? null,
+    factor_kgco2e_per_unit:
+      data?.emission_factor_value === null || data?.emission_factor_value === undefined
+        ? null
+        : Number(data.emission_factor_value),
+    factor_source: entry.factor_source ?? data?.emission_factor_source ?? null,
+    factor_year: entry.factor_year ?? null,
+  };
+}
+
 export async function upsertEmissionEntry(
   orgId: string,
   entry: Partial<EmissionEntry> & Pick<EmissionEntry, 'source_id' | 'period_start' | 'period_end' | 'activity_data' | 'calculated_emissions_kgco2e'>,
@@ -228,6 +240,9 @@ export async function upsertEmissionEntry(
     basis: entry.basis ?? 'actual',
     activity_data: entry.activity_data,
     calculated_emissions_kgco2e: entry.calculated_emissions_kgco2e,
+    // Snapshot the derivation so the figure stays explainable even if the
+    // factor is later corrected on the source or in reference data.
+    ...(await resolveFactorProvenance(entry)),
     notes: entry.notes ?? null,
     created_by: userId,
     updated_at: new Date().toISOString(),
