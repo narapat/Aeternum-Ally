@@ -171,7 +171,7 @@ See [TECH_STACK.md - Known gaps](./Docs%20v1.1.0/TECH_STACK.md#known-gaps--harde
 
 - Dependabot alert `#112` for `extract-zip` remains in Netlify development tooling with no upstream patch; track under GitHub issue `#152`.
 - Prompt-injection trust boundaries and structured output validation are not yet systematic across every AI action.
-- Tailwind is still loaded from the CDN; build-time Tailwind and a restrictive CSP remain pending.
+- Tailwind compiles at build time and the app shell loads no third-party script; a restrictive CSP is still pending and is now unblocked.
 - Netlify Functions do not yet share one centralized origin/CORS policy. CORS is not authorization.
 - The database constrains AI model IDs, but `api.ts` does not repeat the allowlist at the function boundary.
 
