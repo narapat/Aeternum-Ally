@@ -1,4 +1,4 @@
-<!-- Version: 1.1.0 - Last updated: 2026-08-18 -->
+<!-- Version: 1.1.0 - Last updated: 2026-09-05 -->
 
 # Configuration Reference
 
@@ -81,9 +81,31 @@ Each organization can select a Gemini model and optionally use its own credentia
 | `model` | `text` | `"gemini-2.5-flash"` | Gemini model to use for this org's AI calls |
 | `use_byok` | `boolean` | `false` | Whether the server should use the organization's stored key |
 | `byok_provider` | `text` | `null` | Credential provider; currently only `gemini` is accepted by the function |
-| `soft_quota_monthly` | `integer` | `null` | Optional monthly call allowance override; the current quota is a soft warning, not a hard block |
+| `soft_quota_monthly` | `integer` | `null` | Standing monthly call ceiling for this organization. `null` uses the tier default below; `0` suspends platform AI. Despite the column name this is enforced, not advisory. |
 
 `organization_ai_secrets.byok_api_key` is not selectable by browser roles. The settings endpoint returns `has_byok_key`, never the key. Owners and Admins can configure/rotate it; other members can use AI according to organization settings without reading the credential.
+
+### Monthly AI allowance
+
+Platform AI calls are capped per organization per month. Exceeding the ceiling returns HTTP 429 before any provider call, from both `api.ts` and `ally-support.ts`. Organizations using their own key (BYOK) are exempt — they are billed by the provider directly.
+
+Defaults by `organizations.tier`, defined in `netlify/functions/_shared/aiQuota.js`:
+
+| Tier | Monthly platform AI calls |
+|---|---|
+| `free` | 100 |
+| `starter` | 500 |
+| `pro` | 2 000 |
+| `enterprise` | 10 000 |
+
+The effective ceiling is `standing limit + active grants`:
+
+- **Standing limit** — `soft_quota_monthly` when set, otherwise the tier default. A deliberate, indefinite decision about this customer.
+- **Grants** — rows in `ai_quota_grants` that expire when the allowance resets. Use these for one-off relief so a temporary exception does not become a permanent plan. The table is service-role only; grants are created from the admin console or by the automatic burst.
+
+The first time an organization crosses its ceiling in a month it receives one automatic top-up of `AUTO_BURST_RATIO` (25%) of its base limit and the call proceeds, so a customer is never hard-stopped before a human has looked. Worst-case monthly spend is therefore 125% of plan. A partial unique index on `(organization_id, period_month) WHERE source = 'auto_burst'` is what limits this to once per month.
+
+Adjust both from the admin console: **AI Usage → Quota**. See [ADMIN_MANUAL.md](./ADMIN_MANUAL.md#ai-quota).
 
 The database `CHECK` restricts `model` values. Repeating the allowlist at the function boundary remains defense-in-depth work; see [TECH_STACK.md](./TECH_STACK.md#known-gaps--hardening-backlog).
 

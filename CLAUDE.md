@@ -53,6 +53,8 @@ netlify/functions/
   google-drive.ts     Authenticated Drive proxy; never returns OAuth tokens
   google-callback.ts  OAuth callback with hashed, expiring state
   evidence.ts         Tenant-aware evidence operations
+  _shared/organizationTier.js  Canonical organizations.tier resolver; fails closed to free
+  _shared/aiQuota.js           Monthly platform AI ceiling, grants, auto-burst
   invite.ts           Invitation CRUD + rate-limited public resend
   accept-invite.ts    Authenticated invite validation + member join
   ally-support.ts     Authenticated, tenant-bound support AI
@@ -93,7 +95,10 @@ Member-readable org-scoped tables normally follow this policy shape:
 - INSERT/UPDATE/DELETE: `user_org_role(organization_id) IN ('Owner', 'Admin', 'Manager')`
 Use the helper functions rather than duplicating membership SQL.
 
-Server-only credential tables are exceptions. `organization_ai_secrets`, `organization_integrations`, and `organization_oauth_states` revoke browser grants and are accessed only through authenticated Netlify Functions using `service_role`.
+Server-only credential tables are exceptions. `organization_ai_secrets`, `organization_integrations`, `organization_oauth_states`, and `ai_quota_grants` revoke browser grants and are accessed only through authenticated Netlify Functions using `service_role`.
+
+### Entitlements and quota
+`organizations.tier` is the single source of truth for what a tenant is entitled to; resolve it through `_shared/organizationTier.js`, never by reading the column ad hoc, and never invent a second column for it. Platform AI calls are capped per organization per month by `_shared/aiQuota.js`; both AI entry points must go through `authorizeAiCall()` so the automatic burst is attempted before a tenant is refused. BYOK tenants are exempt because they pay the provider directly.
 
 ### Dark mode
 Toggle via `dark` class on `<html>`. Every UI component should have `dark:` Tailwind variants. Dark mode preference is stored in `localStorage` (per-device, not in DB).
@@ -143,6 +148,8 @@ The complete delivery workflow and security review requirements are maintained i
 | `MATERIALITY_THRESHOLD` | `constants.ts` | `40` | Topics above this on either axis are material |
 | `DEFAULT_MODEL` | `netlify/functions/api.ts` | `"gemini-2.5-flash"` | Used when org has no AI settings row |
 | Invite expiry | `supabase/schema.sql` | `now() + interval '7 days'` | Hardcoded in DB default |
+| `MONTHLY_AI_CALL_LIMITS` | `netlify/functions/_shared/aiQuota.js` | free 100 / starter 500 / pro 2 000 / enterprise 10 000 | Enforced monthly platform AI ceiling; `organization_ai_settings.soft_quota_monthly` overrides it per org |
+| `AUTO_BURST_RATIO` | `netlify/functions/_shared/aiQuota.js` | `0.25` | One automatic top-up per org per month on first breach; caps worst case at 125% of plan |
 
 ---
 

@@ -1,4 +1,4 @@
-<!-- Version: 1.1.0 - Last updated: 2026-08-18 -->
+<!-- Version: 1.1.0 - Last updated: 2026-09-05 -->
 
 # Architecture Overview
 
@@ -152,6 +152,11 @@ User clicks "Auto-Fill"
     → POST /.netlify/functions/api  (Bearer JWT in header)
       → api.ts validates JWT with Supabase
       → api.ts verifies organization membership and resolves server-side AI settings
+      → api.ts authorizes the call against the monthly AI ceiling
+          (tier default or standing override, plus active grants;
+           first breach of the month is absorbed by one automatic burst,
+           otherwise 429 is returned before any provider call.
+           BYOK organizations skip this step)
       → api.ts calls Google Gemini with prompt built from user data
       → Response streamed back as JSON
       → ai_usage_log row inserted (tokens, model, org_id)

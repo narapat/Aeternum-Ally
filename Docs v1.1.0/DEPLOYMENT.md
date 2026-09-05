@@ -1,4 +1,4 @@
-<!-- Version: 1.1.0 - Last updated: 2026-08-18 -->
+<!-- Version: 1.1.0 - Last updated: 2026-09-05 -->
 
 # Deployment Guide
 
@@ -162,8 +162,55 @@ Security migration sequence introduced in the August 2026 remediation:
 | `023_validate_evidence_external_urls.sql` | Add the external evidence HTTPS constraint |
 | `024_rate_limit_invite_resends.sql` | Add the service-role-only rate-limit table and atomic resend RPC |
 | `025_secure_error_log_inserts.sql` | Replace the client insert policy and revoke anonymous inserts |
+| `026_ai_quota_enforcement.sql` | Add `platform_starter` to the `ai_usage_log.quota_type` constraint and restate `soft_quota_monthly` as an enforced ceiling |
+| `027_ai_quota_grants.sql` | Create the service-role-only `ai_quota_grants` table and the one-auto-burst-per-month index |
 
 > ⚠️ Run schema migrations **before** merging the code PR if the new code depends on the schema change. Otherwise the deploy will fail at runtime.
+
+### Enabling AI quota enforcement (one-off)
+
+Before the release that enforces the monthly AI allowance, decide what happens to organizations that are *already* over it. Nothing blocked AI calls previously, so any organization above its tier default starts receiving HTTP 429 the moment the deploy goes live — the demo organization is the likely candidate.
+
+**1. Measure first.** This also tells you whether the tier defaults in `_shared/aiQuota.js` are set anywhere near real usage:
+
+```sql
+select o.id,
+       coalesce(cp.name, '(unnamed)') as company,
+       o.tier,
+       count(l.id) filter (where l.success) as calls_this_month
+from organizations o
+left join company_profiles cp on cp.organization_id = o.id
+left join ai_usage_log l on l.organization_id = o.id
+     and l.created_at >= date_trunc('month', now() at time zone 'utc')
+group by o.id, cp.name, o.tier
+order by calls_this_month desc;
+```
+
+**2. Seed a generous standing limit** for existing organizations, then tighten once you have watched a full month. Organizations that never opened AI settings have no row in `organization_ai_settings`, so this must insert rather than update:
+
+```sql
+insert into organization_ai_settings (organization_id, soft_quota_monthly)
+select id, 5000 from organizations
+on conflict (organization_id) do update
+  set soft_quota_monthly = coalesce(
+        organization_ai_settings.soft_quota_monthly,
+        excluded.soft_quota_monthly),
+      updated_at = now();
+```
+
+The `coalesce` leaves any deliberate existing value alone, so the statement stays safe to re-run.
+
+**3. Tighten later.** Clearing the override returns an organization to its tier default:
+
+```sql
+update organization_ai_settings
+set soft_quota_monthly = null, updated_at = now()
+where organization_id = '<org-uuid>';
+```
+
+From the release that adds the admin quota controls onward, do steps 2 and 3 from **AI Usage → Quota** in the admin console instead of by hand.
+
+The alternative to seeding is raising the `free` default in `netlify/functions/_shared/aiQuota.js` before the release. That is one line and needs no SQL, but it applies to every future signup too, so it is a pricing decision rather than a migration safeguard.
 
 #### Rollback procedure
 
