@@ -28,7 +28,7 @@ The browser talks to Supabase for RLS-protected application data and uses Netlif
 | Framework | **React 19** | Function components + hooks |
 | Build | **Vite 6** | Fast dev server, ES module output |
 | Language | **TypeScript 5.8** | Strict mode |
-| Styling | **Tailwind CSS** | Loaded via CDN in `index.html` (note: production-grade install pending — currently shows a console warning) |
+| Styling | **Tailwind CSS 3.4** | Compiled at build time via PostCSS; theme in `tailwind.config.js`, layers in `index.css`. The app shell loads no third-party script. |
 | Icons | **lucide-react** | |
 | Charts | **recharts** | KPI dashboards & materiality matrix |
 | File I/O | **read-excel-file**, **write-excel-file**, **papaparse** | Bounded XLSX/CSV import and export; XLSX import runs in a Web Worker |
@@ -223,6 +223,6 @@ These items remain after the August 2026 remediation cycle:
 |---|---|---|
 | **Unpatched `extract-zip` in Netlify development tooling** ([#152](https://github.com/narapat/Aeternum-Ally/issues/152)) | A malicious ZIP-based local function artifact could exploit symlink traversal. The remaining path is development-only and is not imported by application code. | Upgrade when Netlify ships a patched dependency; keep untrusted ZIP artifacts out of local tooling and retain the dependency regression test. |
 | **Prompt-injection controls are not systematic across every AI action** | A malicious tenant member may influence shared AI suggestions or report integrity through fields interpolated into prompts. | Define prompt trust boundaries, delimit untrusted fields, require structured output validation, and preserve human approval before writes. |
-| **Tailwind via CDN** in `index.html` | Runtime third-party script dependency and weaker CSP posture. | Move Tailwind to the build pipeline and deploy a restrictive CSP. |
+| **No Content-Security-Policy** | Without a policy there is no browser-side backstop against injected script. The prerequisite is done — the app shell now loads no remote script, and the only remote origins are the two Google Fonts hosts — so a restrictive policy is finally writable. | Add CSP response headers in `netlify.toml`, allowing `fonts.googleapis.com` and `fonts.gstatic.com` for styles and fonts only. |
 | **No centralized origin/CORS wrapper** | Function behavior can drift and cross-origin self-hosted deployments can fail inconsistently. CORS is not an authorization mechanism. | Add one shared origin policy while retaining per-route authentication, role, and tenant checks. |
 | **AI model allowlist is not repeated in the function** | The database `CHECK` currently enforces the allowed model IDs, but the function lacks an independent fail-closed check. | Validate the selected model against `MODEL_REGISTRY` before provider calls. |
