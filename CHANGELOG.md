@@ -7,6 +7,47 @@ This project does not yet use semantic versioning. Entries are dated.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **Evidence upload entitlement** — `evidence.ts` resolved the organization tier
+  from `organizations.subscription_tier`, a column that does not exist; migration
+  015 named it `tier`. Every organization therefore fell back to `free` (0 MB) and
+  direct upload returned 403 even for organizations a platform admin had set to
+  `pro` or `enterprise`. Tier resolution now goes through
+  `netlify/functions/_shared/organizationTier.js`, which reads the canonical column
+  and fails closed. The missing `starter` storage quota was added.
+
+### Added
+- **Enforced monthly AI quota** — the platform allowance was counted, logged as
+  "soft limit reached (proceeding anyway)", and then ignored, so platform AI spend
+  had no upper bound per tenant and `soft_quota_monthly` had no effect. Both AI
+  entry points (`api.ts`, `ally-support.ts`) now return HTTP 429 before any
+  provider call once the ceiling is spent. BYOK tenants are exempt.
+  `quota_type` is recorded as `platform_<tier>` rather than always `platform_free`.
+- **CI workflow** (`.github/workflows/ci.yml`) — runs the four verification steps
+  `AGENTS.md` requires (security tests, type check, build, runtime audit) on every
+  pull request and push to `main`.
+- **`ROADMAP.md`** — `CONTRIBUTING.md` referred contributors to a roadmap that did
+  not exist.
+
+### Changed
+- **Documentation links** — `README.md` and `CONTRIBUTING.md` linked into a `docs/`
+  directory that does not exist; the published documentation is in `Docs v1.1.0/`.
+  The stated Node prerequisite moved from 20+ to 22+, which is what
+  `npm run test:security` actually requires.
+- **AI Studio import map removed** from `index.html`. It pointed React, react-dom,
+  recharts, lucide-react and `@google/genai` at a third-party CDN. It was inert
+  after bundling, but it had to go before a restrictive CSP is possible.
+
+### Migrations to run (in order)
+
+| File | What it does |
+|---|---|
+| `026_ai_quota_enforcement.sql` | Adds `platform_starter` to the `ai_usage_log.quota_type` CHECK constraint (migration 015 added the tier; the constraint was never extended) and restates `soft_quota_monthly` as an enforced ceiling |
+
+---
+
 ## [1.1.0] — 2026-05-10
 
 ### Added
