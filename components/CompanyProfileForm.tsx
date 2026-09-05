@@ -326,6 +326,10 @@ const ContextGroup: React.FC<{
 }> = ({ group, items, onChange }) => {
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
+  // Chosen before the item exists. Creating everything as 'current' and asking
+  // the user to correct it afterwards records a plan as a present fact for as
+  // long as they do not notice — the failure this whole layer exists to stop.
+  const [status, setStatus] = useState<CompanyContextStatus>('current');
 
   const mine = items.filter(i => i.category === group.category);
   const others = items.filter(i => i.category !== group.category);
@@ -337,12 +341,13 @@ const ContextGroup: React.FC<{
       category: group.category,
       name: name.trim(),
       role: role.trim(),
-      status: 'current',
+      status,
       source: 'user',
       updatedAt: new Date().toISOString(),
     }]);
     setName('');
     setRole('');
+    setStatus('current');
   };
 
   const update = (id: string, patch: Partial<CompanyContextItem>) =>
@@ -404,6 +409,23 @@ const ContextGroup: React.FC<{
           placeholder={group.rolePlaceholder}
           className="flex-1 min-w-[160px] px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
         />
+        <div className="flex items-center gap-1" role="group" aria-label="Status for the item being added">
+          {STATUS_CHOICES.map(choice => (
+            <button
+              key={choice.value}
+              type="button"
+              aria-pressed={status === choice.value}
+              onClick={() => setStatus(choice.value)}
+              className={`px-2.5 py-2 rounded-lg text-xs font-medium transition-colors ${
+                status === choice.value
+                  ? 'bg-esg-600 text-white'
+                  : 'bg-white dark:bg-slate-950 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-600 hover:border-esg-400'
+              }`}
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
         <button
           onClick={add}
           disabled={!name.trim()}

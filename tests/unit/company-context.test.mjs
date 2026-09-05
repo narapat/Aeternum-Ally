@@ -157,3 +157,30 @@ test("malformed category, status or source is dropped deterministically", () => 
   assert.deepEqual(first.map(i => i.name), ["Netlify"]);
   assert.doesNotMatch(buildStructuredContextBlock(mixed), /Ghost/);
 });
+
+test("status is chosen before an item is created, not corrected afterwards", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(
+    new URL("../../components/CompanyProfileForm.tsx", import.meta.url),
+    "utf8",
+  );
+
+  const addFn = source.match(/const add = \(\) => \{[\s\S]*?\n  \};/)?.[0];
+  assert.ok(addFn, "the add handler must exist");
+
+  // Regression: every item was created as 'current' and the user had to notice
+  // the chips and correct it. Until they did, a plan was stored as a fact.
+  assert.doesNotMatch(addFn, /status: 'current'/);
+  assert.match(addFn, /\n\s*status,\n/, "add must use the selected status");
+
+  // The selector has to exist before the item does.
+  assert.match(source, /const \[status, setStatus\] = useState<CompanyContextStatus>\('current'\)/);
+  assert.match(
+    source,
+    /aria-label="Status for the item being added"/,
+    "the add row needs its own status control, not only the saved rows",
+  );
+
+  // And it must reset, so one Planned entry does not silently mark the next.
+  assert.match(addFn, /setStatus\('current'\)/);
+});
