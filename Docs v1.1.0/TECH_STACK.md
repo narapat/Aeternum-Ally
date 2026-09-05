@@ -1,4 +1,4 @@
-<!-- Version: 1.1.0 - Last updated: 2026-08-18 -->
+<!-- Version: 1.1.0 - Last updated: 2026-09-05 -->
 
 # Tech Stack & Deployment
 
@@ -94,8 +94,9 @@ swot_analyses              ─┤
 organization_ai_settings   ─┘
 
 organization_ai_secrets    ─┐  Service-role-only credentials/state
-organization_integrations  ─┤
-organization_oauth_states  ─┘
+organization_integrations  ─┤  (RLS enabled, no policies; no browser grants)
+organization_oauth_states  ─┤
+ai_quota_grants            ─┘
 
 assessments                ─┐  Many per org
 kpis                       ─┤  (org-scoped via FK + RLS)
@@ -138,6 +139,8 @@ Security-relevant migrations:
 - `023_validate_evidence_external_urls.sql` - database defense for external evidence URLs
 - `024_rate_limit_invite_resends.sql` - atomic invite-resend rate limit and delivery cooldown
 - `025_secure_error_log_inserts.sql` - bind client logs to the authenticated user and tenant
+- `026_ai_quota_enforcement.sql` - complete the `quota_type` constraint for the starter tier
+- `027_ai_quota_grants.sql` - service-role-only expiring quota grants; one automatic burst per org per month enforced by a partial unique index
 
 **When to run what:**
 

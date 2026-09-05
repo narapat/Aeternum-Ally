@@ -1,4 +1,4 @@
-<!-- Version: 1.1.0 — Last updated: 2026-05-09 -->
+<!-- Version: 1.1.0 — Last updated: 2026-09-05 -->
 
 # Functional Specification
 
@@ -337,8 +337,19 @@ Displays:
 - Feature / action type
 - Timestamp
 - Running total for the current billing period
+- Calls used against the organization's monthly ceiling, with warnings as it approaches and when it is reached
 
 Data sourced from `ai_usage_log` table, which is populated by `api.ts` on every Gemini call.
+
+### Monthly allowance
+
+Each organization has a monthly platform AI allowance determined by its tier, overridable per organization, and extendable by expiring grants. When it is spent, AI actions fail with a clear message rather than silently consuming platform budget; the allowance resets on the 1st.
+
+Two ways for an organization to continue immediately:
+1. **Bring Your Own Key** — configured in the same panel by an Owner or Admin. BYOK calls are not subject to platform quota.
+2. **Ask support to raise it** — a platform admin can grant additional calls for the current month or change the standing limit.
+
+The ceiling shown in the panel is resolved server-side, so it always matches what will actually be enforced. See [CONFIGURATION.md](./CONFIGURATION.md#monthly-ai-allowance) for the tier defaults and [ADMIN_MANUAL.md](./ADMIN_MANUAL.md#ai-quota) for the admin-side controls.
 
 ---
 

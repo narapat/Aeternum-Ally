@@ -1,4 +1,4 @@
-<!-- Version: 1.1.0 — Last updated: 2026-05-09 -->
+<!-- Version: 1.1.0 — Last updated: 2026-09-05 -->
 
 # AeternumAlly - Admin Portal Manual (v1.1.0)
 

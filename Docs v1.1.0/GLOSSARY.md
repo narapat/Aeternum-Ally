@@ -1,4 +1,4 @@
-<!-- Version: 1.1.0 — Last updated: 2026-05-09 -->
+<!-- Version: 1.1.0 — Last updated: 2026-09-05 -->
 
 # Glossary
 
@@ -122,6 +122,21 @@ Serverless functions deployed alongside the frontend on Netlify. In this project
 
 **Magic link**
 A one-time sign-in URL sent by email. Clicking it authenticates the user without a password. Supabase Auth manages magic-link generation and delivery.
+
+**Tier**
+An organization's billing/access level: `free`, `starter`, `pro`, or `enterprise`. Stored in `organizations.tier` and set by a platform admin. Determines the monthly AI allowance and the evidence storage quota.
+
+**BYOK — Bring Your Own Key**
+An organization supplying its own Gemini API key instead of using the platform's. BYOK calls are billed by the provider directly to that organization, so they are exempt from the platform's monthly allowance. The key is stored in a service-role-only table and is never returned to the browser.
+
+**Monthly allowance / quota**
+The number of platform-funded AI calls an organization may make per calendar month. Exceeding it returns an error rather than consuming further platform budget. Resets on the 1st.
+
+**Quota grant**
+A temporary addition to an organization's monthly allowance, recorded in `ai_quota_grants` with a reason and an expiry at the next reset. Distinct from the standing `soft_quota_monthly` override, which does not expire.
+
+**Auto-burst**
+The one automatic quota grant an organization receives the first time it crosses its ceiling in a month, so service is not interrupted before a platform admin can decide what to do. Limited to once per organization per month.
 
 **Invite token**
 A UUID that serves as both the primary key of the `organization_invites` row and the secret in the invitation email link. It is single-use: the `accept-invite` function deletes it after the invitee joins.

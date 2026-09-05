@@ -1,4 +1,4 @@
-<!-- Version: 1.1.0 — Last updated: 2026-05-09 -->
+<!-- Version: 1.1.0 — Last updated: 2026-09-05 -->
 # AeternumAlly - User Manual (v1.1.0)
 
 Welcome to AeternumAlly! This platform guides your organization through a structured sustainability reporting workflow, allowing you to generate a draft Sustainability Statement aligned with ESRS (European Sustainability Reporting Standards) and GRI standards, all without needing prior expertise.
@@ -257,7 +257,7 @@ To help you understand how AeternumAlly works in practice, here are two common s
 ## 9. Troubleshooting
 
 - **Login Link Expired:** Return to the login page and request a new link. Check your spam folder if it doesn't arrive.
-- **AI Features Unresponsive:** If using the live demo, the shared quota may be temporarily exhausted. If self-hosting, ensure your `GEMINI_API_KEY` is configured correctly in your environment variables.
+- **AI Features Unresponsive:** Check the **Monthly call quota** bar under Settings → AI. Each workspace has a monthly allowance, and AI features pause once it is spent until the allowance resets on the 1st. To continue immediately, an Owner or Admin can add your own Gemini API key (Settings → AI → Bring Your Own Key), which is not subject to the platform allowance — or contact support to have the limit raised. If you are using the live demo, the shared quota may also be temporarily exhausted. If self-hosting, ensure your `GEMINI_API_KEY` is configured correctly in your environment variables.
 - **Data Not Saving:** Look for the spinning save indicator in the top right. If an error persists, refresh the page.
 - **Empty Materiality Matrix:** Ensure you have completed at least one Double Materiality Assessment.
 - **Missing Sidebar Sections:** Some features are role-restricted. Consultants (Read-Only) will not see management or destructive actions. Contact your Workspace Owner if you need your role upgraded.
