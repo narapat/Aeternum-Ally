@@ -642,7 +642,7 @@ COMMENT ON COLUMN emission_entries.activity_data            IS 'Raw consumption 
 COMMENT ON COLUMN emission_entries.calculated_emissions_kgco2e IS 'activity_data × emission_factor_value';
 
 -- =============================================================
--- 5. emission_factors  (reference data — no RLS, read-only for users)
+-- 5. emission_factors  (shared reference data — RLS read-only for tenants)
 -- =============================================================
 
 CREATE TABLE emission_factors (
@@ -660,7 +660,24 @@ CREATE TABLE emission_factors (
 CREATE INDEX idx_emission_factors_lookup
   ON emission_factors (fuel_type, unit, year DESC);
 
-COMMENT ON TABLE  emission_factors IS 'Standard emission factors from IPCC / DEFRA / TGO (read-only reference)';
+-- Migration 028: reference data is readable by any signed-in user and written
+-- only by platform admins through service_role. There is deliberately no
+-- write policy; the grants below are defence in depth behind RLS.
+ALTER TABLE emission_factors ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "authenticated_read_emission_factors"
+  ON emission_factors
+  FOR SELECT
+  TO authenticated
+  USING (true);
+
+REVOKE ALL ON emission_factors FROM PUBLIC;
+REVOKE ALL ON emission_factors FROM anon;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+  ON emission_factors FROM authenticated;
+GRANT SELECT ON emission_factors TO authenticated;
+
+COMMENT ON TABLE  emission_factors IS 'Shared reference factors (IPCC / DEFRA / TGO / IEA). Readable by any signed-in user; written only by platform admins via service_role.';
 COMMENT ON COLUMN emission_factors.source IS 'e.g. IPCC, DEFRA, TGO';
 COMMENT ON COLUMN emission_factors.region IS 'e.g. Global, Thailand, EU — more specific wins at lookup time';
 
