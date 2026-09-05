@@ -40,7 +40,7 @@ function createAdminMock(rows) {
   };
 }
 
-function createEndpointAdminMock({ role = "Owner", hasSecret = true } = {}) {
+function createEndpointAdminMock({ role = "Owner", hasSecret = true, tier = "free" } = {}) {
   const calls = [];
   let storedSecret = hasSecret;
   let useByok = hasSecret;
@@ -105,6 +105,11 @@ function createEndpointAdminMock({ role = "Owner", hasSecret = true } = {}) {
               data: storedSecret ? { organization_id: ORG_ID } : null,
               error: null,
             };
+          }
+          // The endpoint resolves the tier so it can report the ceiling the
+          // server will enforce; the browser is never asked to compute it.
+          if (table === "organizations") {
+            return { data: { tier }, error: null };
           }
           throw new Error(`Unexpected table ${table}`);
         },
@@ -307,6 +312,23 @@ test("authenticated members receive safe metadata for their organization", async
     admin.calls.some((call) => call.table === "organization_ai_secrets"),
     true,
   );
+});
+
+test("metadata reports the ceiling the server will enforce for that tier", async () => {
+  const handlerFor = (tier) =>
+    createByokSettingsHandler(() => createEndpointAdminMock({ tier }));
+  const get = (handler) => handler(new Request(
+    `https://app.example.com/.netlify/functions/byok-settings?organization_id=${ORG_ID}`,
+    { headers: { Authorization: "Bearer member-token" } },
+  ));
+
+  // soft_quota_monthly is 100 in the mock, so the override wins on every tier.
+  const overridden = await (await get(handlerFor("pro"))).json();
+  assert.equal(overridden.tier, "pro");
+  assert.equal(overridden.monthly_call_limit, 100);
+
+  // The client must never be handed the raw column to interpret for itself.
+  assert.equal(typeof overridden.monthly_call_limit, "number");
 });
 
 test("non-members are rejected before the endpoint reads secret metadata", async () => {

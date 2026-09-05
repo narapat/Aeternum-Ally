@@ -24,6 +24,7 @@
 import type { Handler } from '@netlify/functions';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { ORGANIZATION_TIERS } from './_shared/organizationTier.js';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -774,6 +775,26 @@ async function handleListCompanies(): Promise<object> {
 // ---------------------------------------------------------------------------
 // Post-auth: set_company_status
 // ---------------------------------------------------------------------------
+async function handleSetCompanyTier(body: any, actorEmail: string): Promise<object> {
+  const id   = (body.id   ?? '').trim();
+  const tier = (body.tier ?? '').trim();
+  if (!id)   throw Object.assign(new Error('id is required'), { status: 400 });
+  if (!(ORGANIZATION_TIERS as readonly string[]).includes(tier)) {
+    throw Object.assign(new Error('Invalid tier'), { status: 400 });
+  }
+
+  const sb = getAdminClient();
+  const { error } = await sb.from('organizations').update({ tier }).eq('id', id);
+  if (error) throw Object.assign(new Error(error.message), { status: 500 });
+
+  // Tier changes move AI and storage entitlements, so record who made the call.
+  console.info('[admin] set_company_tier:', id, '->', tier, 'by', actorEmail);
+  return { updated: true, id, tier };
+}
+
+// ---------------------------------------------------------------------------
+// Post-auth: set_company_status
+// ---------------------------------------------------------------------------
 async function handleSetCompanyStatus(body: any): Promise<object> {
   const id        = (body.id        ?? '').trim();
   const is_active = body.is_active;
@@ -1119,6 +1140,7 @@ export const handler: Handler = async (event) => {
         case 'create_company':          result = await handleCreateCompany(body);              break;
         case 'list_companies':          result = await handleListCompanies();                   break;
         case 'set_company_status':      result = await handleSetCompanyStatus(body);            break;
+        case 'set_company_tier':        result = await handleSetCompanyTier(body, actorEmail);  break;
         case 'list_pending_users':      result = await handleListPendingUsers();                break;
         case 'assign_user_to_company':  result = await handleAssignUserToCompany(body);         break;
         case 'list_admins':        result = await handleListAdmins();                            break;

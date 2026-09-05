@@ -5,6 +5,8 @@ import {
   normalizeByokUpdate,
   toSafeByokMetadata,
 } from "./_shared/byokSecurity.js";
+import { loadOrganizationTier } from "./_shared/organizationTier.js";
+import { resolveMonthlyCallLimit } from "./_shared/aiQuota.js";
 
 const json = (status: number, body: object) =>
   new Response(JSON.stringify(body), {
@@ -29,6 +31,8 @@ function getAdminClient() {
 }
 
 async function loadSafeMetadata(admin: any, organizationId: string) {
+  const tier = await loadOrganizationTier(admin, organizationId);
+
   const [{ data: settings, error: settingsError }, { data: secret, error: secretError }] =
     await Promise.all([
       admin
@@ -46,7 +50,11 @@ async function loadSafeMetadata(admin: any, organizationId: string) {
   if (settingsError || secretError) {
     throw new Error("Could not load BYOK metadata.");
   }
-  return toSafeByokMetadata(settings, Boolean(secret));
+
+  return toSafeByokMetadata(settings, Boolean(secret), {
+    tier,
+    monthlyCallLimit: resolveMonthlyCallLimit(tier, settings?.soft_quota_monthly),
+  });
 }
 
 async function handleByokSettings(

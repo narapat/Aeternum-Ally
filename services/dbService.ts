@@ -158,7 +158,12 @@ export interface AiSettings {
   byok_provider: string | null;
   /** API key is NEVER returned from the server for security. Only a boolean `has_byok_key` is exposed. */
   has_byok_key: boolean;
+  /** Standing per-org override, or null when the tier default applies. */
   soft_quota_monthly: number | null;
+  /** Billing/access tier this organization is on. */
+  tier: string;
+  /** Effective monthly platform AI call ceiling, resolved server-side. */
+  monthly_call_limit: number | null;
 }
 
 const BYOK_SETTINGS_ENDPOINT = "/.netlify/functions/byok-settings";

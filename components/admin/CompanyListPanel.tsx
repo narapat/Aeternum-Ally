@@ -46,12 +46,6 @@ const TIER_STYLES: Record<string, string> = {
   pro:        'bg-violet-900/60 text-violet-300 border border-violet-700/50',
   enterprise: 'bg-amber-900/60 text-amber-300 border border-amber-700/50',
 };
-const TierBadge: React.FC<{ tier: string }> = ({ tier }) => (
-  <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${TIER_STYLES[tier] ?? TIER_STYLES.free}`}>
-    {tier}
-  </span>
-);
-
 // ── Sort header cell ──────────────────────────────────────────────────────────
 const SortTh: React.FC<{
   label: string; col: SortKey; sort: SortKey; dir: SortDir;
@@ -207,6 +201,7 @@ const CompanyListPanel: React.FC<Props> = ({ adminToken }) => {
   const [sort,         setSort]         = useState<SortKey>('created_at');
   const [dir,          setDir]          = useState<SortDir>('desc');
   const [toggling,     setToggling]     = useState<string | null>(null);
+  const [tierSaving,   setTierSaving]   = useState<string | null>(null);
   const [actionMsg,    setActionMsg]    = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [createModal,  setCreateModal]  = useState<{ open: boolean; prefillEmail: string }>({ open: false, prefillEmail: '' });
   const [exportModal,  setExportModal]  = useState<{ open: boolean; id: string; name: string }>({ open: false, id: '', name: '' });
@@ -240,6 +235,26 @@ const CompanyListPanel: React.FC<Props> = ({ adminToken }) => {
       setActionMsg({ type: 'error', text: err?.message ?? 'Failed to update status' });
     } finally {
       setToggling(null);
+    }
+  };
+
+  const handleTierChange = async (company: Company, tier: string) => {
+    if (tier === company.tier) return;
+    if (!window.confirm(
+      `Move "${company.name}" from ${company.tier} to ${tier}?\n\n`
+      + `This changes the organization's monthly AI allowance and evidence storage quota immediately.`
+    )) return;
+
+    setTierSaving(company.id);
+    setActionMsg(null);
+    try {
+      await callAdmin('set_company_tier', adminToken, { id: company.id, tier });
+      setActionMsg({ type: 'success', text: `"${company.name}" moved to ${tier}.` });
+      await load();
+    } catch (err: any) {
+      setActionMsg({ type: 'error', text: err?.message ?? 'Failed to update tier' });
+    } finally {
+      setTierSaving(null);
     }
   };
 
@@ -442,7 +457,20 @@ const CompanyListPanel: React.FC<Props> = ({ adminToken }) => {
                               </span>
                             </button>
                           </td>
-                          <td className="px-4 py-3.5 hidden md:table-cell"><TierBadge tier={company.tier} /></td>
+                          <td className="px-4 py-3.5 hidden md:table-cell">
+                            <select
+                              value={company.tier}
+                              disabled={tierSaving === company.id}
+                              onChange={e => handleTierChange(company, e.target.value)}
+                              aria-label={`Tier for ${company.name}`}
+                              title="Change tier — adjusts AI and storage entitlements"
+                              className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize border-0 cursor-pointer disabled:opacity-50 disabled:cursor-wait focus:ring-2 focus:ring-esg-500 ${TIER_STYLES[company.tier] ?? TIER_STYLES.free}`}
+                            >
+                              {TIERS.map(t => (
+                                <option key={t} value={t} className="capitalize bg-white dark:bg-slate-800 text-slate-800 dark:text-white">{t}</option>
+                              ))}
+                            </select>
+                          </td>
                           <td className="px-4 py-3.5 text-slate-500 dark:text-slate-400 hidden sm:table-cell">{company.member_count}</td>
                           <td className="px-4 py-3.5 text-slate-500 dark:text-slate-400 hidden lg:table-cell whitespace-nowrap">{formatDate(company.created_at)}</td>
                           <td className="px-4 py-3.5 text-center">
