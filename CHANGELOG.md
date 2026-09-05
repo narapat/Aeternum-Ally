@@ -10,6 +10,14 @@ This project does not yet use semantic versioning. Entries are dated.
 ## [Unreleased]
 
 ### Fixed
+- **Organization tier was write-once** — a tier could be chosen when a company was
+  created and never changed; nothing wrote `organizations.tier` again. Platform admins
+  can now change it from the company list (`set_company_tier`), which moves both the AI
+  allowance and the evidence storage quota.
+- **Tenant AI panel showed a limit that did not exist** — the quota bar displayed a
+  hardcoded 100 to every organization regardless of tier, called it a "soft limit", and
+  told anyone over it that "AI calls are still allowed". The panel now shows the ceiling
+  the server will actually enforce, resolved server-side.
 - **Evidence upload entitlement** — `evidence.ts` resolved the organization tier
   from `organizations.subscription_tier`, a column that does not exist; migration
   015 named it `tier`. Every organization therefore fell back to `free` (0 MB) and
@@ -28,6 +36,13 @@ This project does not yet use semantic versioning. Entries are dated.
 - **CI workflow** (`.github/workflows/ci.yml`) — runs the four verification steps
   `AGENTS.md` requires (security tests, type check, build, runtime audit) on every
   pull request and push to `main`.
+- **Ad-hoc AI quota grants** (`ai_quota_grants`) — expiring, attributed top-ups that a
+  platform admin can add from **AI Usage → Quota** without changing an organization's
+  standing plan. The effective ceiling is `standing limit + active grants`.
+- **Automatic first-breach burst** — the first time an organization crosses its ceiling
+  in a month it receives one automatic 25% top-up and the call proceeds, so service is
+  not interrupted before a human can look. Worst case is 125% of plan; "once per month"
+  is enforced by a partial unique index, not application logic.
 - **`ROADMAP.md`** — `CONTRIBUTING.md` referred contributors to a roadmap that did
   not exist.
 
@@ -45,6 +60,11 @@ This project does not yet use semantic versioning. Entries are dated.
 | File | What it does |
 |---|---|
 | `026_ai_quota_enforcement.sql` | Adds `platform_starter` to the `ai_usage_log.quota_type` CHECK constraint (migration 015 added the tier; the constraint was never extended) and restates `soft_quota_monthly` as an enforced ceiling |
+| `027_ai_quota_grants.sql` | Creates the service-role-only `ai_quota_grants` table and the one-auto-burst-per-organization-per-month index |
+
+> Before deploying quota enforcement, follow **Enabling AI quota enforcement** in
+> [`Docs v1.1.0/DEPLOYMENT.md`](./Docs%20v1.1.0/DEPLOYMENT.md). Organizations already over
+> their tier default start receiving HTTP 429 on the first deploy otherwise.
 
 ---
 
