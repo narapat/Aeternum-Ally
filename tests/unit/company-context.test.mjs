@@ -184,3 +184,46 @@ test("status is chosen before an item is created, not corrected afterwards", asy
   // And it must reset, so one Planned entry does not silently mark the next.
   assert.match(addFn, /setStatus\('current'\)/);
 });
+
+test("business context coverage is reported without restating the overall score", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const dashboard = await readFile(
+    new URL("../../components/DataCompletenessDashboard.tsx", import.meta.url),
+    "utf8",
+  );
+
+  // The existing headline number must keep its exact formula. Folding context
+  // coverage in would rebalance the weights and move every organization's
+  // score overnight, for a measure that was only added to explain AI grounding.
+  assert.match(
+    dashboard,
+    /const overallScore = Math\.round\(\(bmcPercent \* 0\.4\) \+ \(swotPercent \* 0\.2\) \+ \(assessmentPercent \* 0\.4\)\);/,
+  );
+  assert.doesNotMatch(dashboard, /overallScore[^\n]*contextPercent/);
+
+  // Coverage counts areas answered, not items entered: there is no correct
+  // number of partners, so counting items would penalise a small company for
+  // being small.
+  assert.match(dashboard, /answeredAreas\.length \/ CONTEXT_AREAS\.length/);
+  assert.doesNotMatch(dashboard, /contextItems\.length \/ /);
+
+  // A gap has to say what filling it buys, not merely that it is a gap.
+  assert.match(dashboard, /would improve \$\{missingAreas\[0\]\.helps\}/);
+});
+
+test("each How We Work question folds away once answered", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const form = await readFile(
+    new URL("../../components/CompanyProfileForm.tsx", import.meta.url),
+    "utf8",
+  );
+
+  // Open when there is still something to answer, folded when there is not.
+  assert.match(form, /useState\(mine\.length === 0\)/);
+  assert.match(form, /aria-expanded=\{open\}/);
+
+  // A folded question must still show whether it was answered, otherwise
+  // collapsing hides the state instead of the clutter.
+  assert.match(form, /'Not answered yet'/);
+  assert.match(form, /\$\{mine\.length\} added/);
+});

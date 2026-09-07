@@ -9,7 +9,7 @@ import {
 import { INDUSTRY_SECTORS, ISIC_CODES_GROUPED, COUNTRIES } from '../constants';
 import {
   Building2, MapPin, Globe, Hash, Users, Wallet, Target, Layers, BookOpen,
-  Settings, Mail, Phone, AlertCircle, ArrowRight, Workflow, Plus, X,
+  Settings, Mail, Phone, AlertCircle, ArrowRight, Workflow, Plus, X, ChevronDown,
 } from 'lucide-react';
 import SaveIndicator from './SaveIndicator';
 import type { SaveStatus } from '../hooks/useOrgData';
@@ -348,6 +348,11 @@ const ContextGroup: React.FC<{
   const mine = items.filter(i => i.category === group.category);
   const others = items.filter(i => i.category !== group.category);
 
+  // Open what still needs an answer, fold away what is done. Six questions
+  // expanded at once is the wall of inputs that made this feel heavy; six
+  // collapsed ones hide the fact that there is anything to do.
+  const [open, setOpen] = useState(mine.length === 0);
+
   const add = () => {
     if (!name.trim()) return;
     onChange([...others, ...mine, {
@@ -371,9 +376,41 @@ const ContextGroup: React.FC<{
   const remove = (id: string) => onChange([...others, ...mine.filter(i => i.id !== id)]);
 
   return (
-    <section className="py-5 border-b border-slate-100 dark:border-slate-700 last:border-0">
-      <h3 className="text-sm font-semibold text-slate-800 dark:text-white">{group.question}</h3>
-      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 mb-3">{group.helper}</p>
+    <section className="border-b border-slate-100 dark:border-slate-700 last:border-0">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        aria-expanded={open}
+        className="w-full flex items-start gap-3 py-4 text-left group"
+      >
+        <ChevronDown
+          className={`w-4 h-4 mt-0.5 flex-shrink-0 text-slate-400 transition-transform ${open ? '' : '-rotate-90'}`}
+        />
+        <span className="flex-1">
+          <span className="block text-sm font-semibold text-slate-800 dark:text-white">
+            {group.question}
+          </span>
+          {/* Collapsed rows still have to be readable, or folding them just
+              hides whether the question was answered. */}
+          {!open && (
+            <span className="block text-xs text-slate-500 dark:text-slate-400 mt-1 truncate">
+              {mine.length === 0
+                ? 'Not answered yet'
+                : mine.map(i => i.name).join(', ')}
+            </span>
+          )}
+        </span>
+        <span className={`flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded-full ${
+          mine.length === 0
+            ? 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+            : 'bg-esg-100 dark:bg-esg-900/40 text-esg-700 dark:text-esg-300'
+        }`}>
+          {mine.length === 0 ? 'None' : `${mine.length} added`}
+        </span>
+      </button>
+
+      <div className={open ? 'pb-5' : 'hidden'}>
+      <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">{group.helper}</p>
 
       {mine.length > 0 && (
         <ul className="space-y-2 mb-3">
@@ -475,6 +512,7 @@ const ContextGroup: React.FC<{
         >
           <Plus className="w-4 h-4" /> Add
         </button>
+      </div>
       </div>
     </section>
   );

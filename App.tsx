@@ -495,6 +495,7 @@ const App: React.FC = () => {
 
                 {view === 'overview' && (
                   <DataCompletenessDashboard
+                    profile={profile.data}
                     bmcData={canvas.data}
                     swotData={swot.data}
                     assessments={assessments}
