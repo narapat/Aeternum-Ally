@@ -1,10 +1,25 @@
 
 import React from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
-import { SustainabilityBusinessModel, SwotAnalysis, AssessmentData, Task } from '../types';
-import { CheckCircle, Circle, AlertCircle, ArrowRight, Layout, Target, FileText, ListChecks } from 'lucide-react';
+import { SustainabilityBusinessModel, SwotAnalysis, AssessmentData, Task, CompanyProfile } from '../types';
+import { CheckCircle, Circle, AlertCircle, ArrowRight, Layout, Target, FileText, ListChecks, Workflow } from 'lucide-react';
+
+/**
+ * The six areas of How We Work. Coverage is measured as areas answered, not
+ * items entered: there is no correct number of partners or tools, so counting
+ * items would tell a two-person company it is incomplete for being small.
+ */
+const CONTEXT_AREAS: { category: string; label: string; helps: string }[] = [
+  { category: 'business',   label: 'Business and customers', helps: 'Customer Segments' },
+  { category: 'operating',  label: 'How the work gets done', helps: 'Key Activities and Key Resources' },
+  { category: 'technology', label: 'Tools and platforms',    helps: 'Key Partners and Key Resources' },
+  { category: 'commercial', label: 'Payment and reach',      helps: 'Revenue Streams and Channels' },
+  { category: 'ecosystem',  label: 'Outside organizations',  helps: 'Key Partners' },
+  { category: 'standards',  label: 'Standards followed',     helps: 'reporting and materiality' },
+];
 
 interface Props {
+  profile: CompanyProfile;
   bmcData: SustainabilityBusinessModel;
   swotData: SwotAnalysis;
   assessments: AssessmentData[];
@@ -13,7 +28,7 @@ interface Props {
   currentMemberId?: string | null;
 }
 
-const DataCompletenessDashboard: React.FC<Props> = ({ bmcData, swotData, assessments, onNavigate, tasks, currentMemberId }) => {
+const DataCompletenessDashboard: React.FC<Props> = ({ profile, bmcData, swotData, assessments, onNavigate, tasks, currentMemberId }) => {
   
   // --- Calculation Logic ---
 
@@ -47,6 +62,18 @@ const DataCompletenessDashboard: React.FC<Props> = ({ bmcData, swotData, assessm
 
   // 4. Overall Score
   const overallScore = Math.round((bmcPercent * 0.4) + (swotPercent * 0.2) + (assessmentPercent * 0.4));
+
+  // 4. Business context coverage — reported alongside the score above, not
+  //    folded into it, so adding this measure does not restate every
+  //    organization's headline number.
+  const contextItems = profile?.structuredContext ?? [];
+  const answeredAreas = CONTEXT_AREAS.filter(
+    area => contextItems.some(item => item.category === area.category),
+  );
+  const missingAreas = CONTEXT_AREAS.filter(
+    area => !contextItems.some(item => item.category === area.category),
+  );
+  const contextPercent = Math.round((answeredAreas.length / CONTEXT_AREAS.length) * 100);
 
   // Chart Data
   const gaugeData = [
@@ -125,6 +152,44 @@ const DataCompletenessDashboard: React.FC<Props> = ({ bmcData, swotData, assessm
                 onClick={() => onNavigate('swot')}
                 colorClass="bg-amber-500"
             />
+
+            {/* Business context — what the AI features are grounded on */}
+            <div className="sm:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+              <div className="flex items-start justify-between gap-4 mb-3">
+                <div className="flex items-center gap-3">
+                  <Workflow className="w-5 h-5 text-esg-600 flex-shrink-0" />
+                  <div>
+                    <h3 className="font-bold text-slate-800 dark:text-white">Business Context</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {answeredAreas.length}/{CONTEXT_AREAS.length} areas answered
+                    </p>
+                  </div>
+                </div>
+                <span className="text-2xl font-extrabold text-slate-800 dark:text-white tabular-nums">
+                  {contextPercent}%
+                </span>
+              </div>
+
+              <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-3">
+                <div className="h-full bg-esg-500 transition-all duration-1000" style={{ width: `${contextPercent}%` }} />
+              </div>
+
+              {/* Say what filling a gap actually buys, rather than only that
+                  something is missing. */}
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                {missingAreas.length === 0
+                  ? 'Every area has an answer. AI suggestions are grounded in what you have stated rather than in industry norms.'
+                  : `Adding ${missingAreas[0].label.toLowerCase()} would improve ${missingAreas[0].helps}.`}
+              </p>
+
+              <button
+                onClick={() => onNavigate('profile')}
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-esg-700 dark:text-esg-400 hover:underline"
+              >
+                {missingAreas.length === 0 ? 'Review business context' : 'Answer a few more questions'}
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
 
             {/* Assessment Status */}
             <div className="sm:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
