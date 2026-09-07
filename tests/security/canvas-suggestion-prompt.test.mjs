@@ -170,3 +170,26 @@ test("company strategic report SBMC context omits empty blocks and caps long inp
   assert.doesNotMatch(context, /Three/);
   assert.doesNotMatch(context, /Channels/);
 });
+
+test("a non-current context item cannot be suggested as a current canvas fact", () => {
+  // Dogfooding: "SaaS subscription" was marked Planned in the company profile
+  // and Revenue Streams still returned "SaaS subscription fees". The model was
+  // told not to describe a plan as current, but naming it in a present-tense
+  // block is the misrepresentation — nothing in the wording was wrong, so the
+  // rule never bit.
+  for (const label of SBMC_BLOCKS) {
+    const prompt = buildCanvasSuggestionPrompt(profile, label, bmcData);
+
+    assert.match(prompt, /A canvas block asserts what the company does today/, label);
+    assert.match(prompt, /carry that\s+marker in the text itself/, label);
+    assert.match(prompt, /Never return such an item unmarked/, label);
+
+    // All three non-current statuses, not just Planned.
+    for (const status of ["Planned", "Exploring", "Not established"]) {
+      assert.ok(
+        prompt.includes(status),
+        `${label} prompt must name ${status}`,
+      );
+    }
+  }
+});

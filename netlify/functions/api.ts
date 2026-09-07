@@ -500,6 +500,11 @@ function buildCanvasSuggestionPrompt(profile: any, fieldLabel: unknown, bmcData:
       proprietary technology, certification, intellectual property, data-usage
       practice, or business activity. If that assumption is not supported by the
       supplied company context or current canvas, do not return it.
+    - A canvas block asserts what the company does today, so an item placed in one
+      reads as current no matter how it is worded. If a suggestion comes from a
+      context item marked Planned, Exploring or Not established, carry that
+      marker in the text itself — for example "Subscription fees (planned)" or
+      "Reseller network (exploring)". Never return such an item unmarked.
     - Apply the requested SBMC block definition strictly.
     - Do not suggest an item if it primarily belongs to another SBMC block.
     - Avoid duplicate or semantically overlapping suggestions already present anywhere in the current canvas.
