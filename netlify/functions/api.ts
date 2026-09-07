@@ -751,6 +751,13 @@ ${(qualityCheckContext.issues as any[]).map((i: any) =>
 /** Low, because canvas suggestions must stay tied to supplied evidence. */
 const CANVAS_SUGGESTION_TEMPERATURE = 0.2;
 
+/**
+ * SWOT is judgement rather than extraction, so it needs a little more room than
+ * the canvas — but not the provider default of 1.0, which rewards fluent
+ * strategy-speak over factors the supplied evidence actually supports.
+ */
+const SWOT_TEMPERATURE = 0.3;
+
 async function generateCanvasSuggestion(
   ai: GoogleGenAI,
   model: string,
@@ -809,6 +816,23 @@ async function generateSwotInternal(
     - Eco-Social Benefits: ${joinField(bmcData.ecoSocialBenefits)}
     - Eco-Social Costs: ${joinField(bmcData.ecoSocialCosts)}
 
+    Grounding rules:
+    - Every factor must trace to something in the company context or the canvas
+      above. Name the thing it comes from where it helps.
+    - Plausibility is not evidence. A strength common to SaaS companies,
+      sustainability platforms or consultancies is not this company's strength
+      unless the supplied content shows it.
+    - Do not invent capabilities, teams, customers, funding, market position,
+      technology, or track record that the supplied content does not show.
+    - An item marked "(planned)" or "(exploring)" is not yet a strength. It is
+      an intention, and treating it as an existing advantage is the most common
+      way this analysis goes wrong.
+    - Something the company explicitly does not have — marked "Not established",
+      or missing where the business model needs it — is legitimate evidence for
+      a weakness. Say what is absent rather than inventing a problem.
+    - Prefer fewer well-supported factors over a balanced-looking list. An empty
+      array is the correct answer when the supplied content shows nothing.
+
     CRITICAL: Return ONLY a JSON object with keys "strengths" and "weaknesses".
     Each value must be an array of short, distinct strings (one factor per item, under 15 words each).
   `;
@@ -825,6 +849,7 @@ async function generateSwotInternal(
           weaknesses: { type: Type.ARRAY, items: { type: Type.STRING } },
         },
       },
+      temperature: SWOT_TEMPERATURE,
     },
   });
 
@@ -832,6 +857,27 @@ async function generateSwotInternal(
     result: parseAIJson(response.text, { strengths: [], weaknesses: [] }),
     ...extractTokens(response),
   };
+}
+
+/**
+ * Turn a search-grounded bulleted answer into SWOT factors.
+ *
+ * Google Search grounding cannot be combined with JSON schema mode, so the
+ * model answers in prose and this has to recover the list. Headings and
+ * lead-ins were previously kept and stored as factors of their own.
+ */
+export function parseSwotExternalLines(text: unknown): string[] {
+  return String(text ?? "")
+    .split("\n")
+    .map(line => line.replace(/^[\s•\-\*–\d\.]+/, "").replace(/\*+/g, "").trim())
+    .filter(line =>
+      line.length > 0
+      && !line.startsWith("---")
+      && !line.startsWith("#")
+      // A trailing colon marks a heading or a lead-in ("Key opportunities:").
+      && !line.endsWith(":")
+      // Drop separators and stray punctuation left by a wrapped line.
+      && /[a-zA-Z]/.test(line));
 }
 
 async function generateSwotExternal(
@@ -850,20 +896,32 @@ async function generateSwotExternal(
     - New regulations (especially sustainability/ESG)
     - Technological shifts
 
-    Provide the answer as a bulleted list. Cite sources if possible.
+    Grounding rules:
+    - Search tells you about the world, not about this company. Describe the
+      market, regulation or technology shift, and say why it matters to a
+      company of this profile.
+    - Do not state anything about this company's own capabilities, customers,
+      partnerships, plans or position that the company context above does not
+      show. A search result is not evidence about them.
+    - Do not present an opportunity as one the company is already pursuing, or a
+      threat as one it is already exposed to, unless the company context says so.
+    - Where a factor rests on a specific development, name the source inline in
+      the same line, for example "... (Reuters, March 2026)". A separate list of
+      references does not survive into the result.
+    - Prefer fewer well-sourced factors over a long speculative list.
+
+    Return one factor per line as a plain bulleted list, each under 25 words.
+    No headings, no introduction, no closing summary.
   `;
 
   // Google Search grounding is incompatible with JSON schema mode; parse text manually.
   const response = await ai.models.generateContent({
     model,
     contents: prompt,
-    config: { tools: [{ googleSearch: {} }] },
+    config: { tools: [{ googleSearch: {} }], temperature: SWOT_TEMPERATURE },
   });
 
-  const items = (response.text || "")
-    .split("\n")
-    .map((line: string) => line.replace(/^[\s•\-\*–\d\.]+/, "").replace(/\*+/g, "").trim())
-    .filter((line: string) => line.length > 0 && !line.startsWith("---") && !line.startsWith("#"));
+  const items = parseSwotExternalLines(response.text);
 
   return {
     result: items,
